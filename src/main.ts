@@ -3,6 +3,7 @@ import {
   UnprocessableEntityException,
   ValidationPipe,
 } from '@nestjs/common';
+import 'dotenv/config';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -31,4 +32,7 @@ async function bootstrap() {
   const port = configService.get<number>('APP_PORT') ?? 3000;
   await app.listen(port);
 }
-bootstrap();
+void bootstrap().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
