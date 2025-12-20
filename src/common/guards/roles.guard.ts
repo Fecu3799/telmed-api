@@ -17,6 +17,7 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
+    // Request user is injected by the JWT guard/strategy.
     const request = context.switchToHttp().getRequest();
     const user = request.user as Actor | undefined;
 

@@ -15,6 +15,7 @@ export class AccessTokenStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: JwtAccessPayload) {
+    // Expose minimal actor data to guards/controllers.
     return { id: payload.sub, role: payload.role };
   }
 }

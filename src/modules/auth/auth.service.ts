@@ -46,7 +46,9 @@ export class AuthService {
         });
 
         const sessionId = randomUUID();
+        // Access and refresh tokens are issued together for the new session.
         const tokens = await this.buildTokens(user.id, user.role, sessionId);
+        // Store only the refresh token hash to avoid leaking tokens at rest.
         const refreshTokenHash = await argon2.hash(tokens.refreshToken);
 
         const expiresAt = this.getRefreshExpiresAt();
@@ -99,7 +101,9 @@ export class AuthService {
     }
 
     const sessionId = randomUUID();
+    // JWTs are short-lived for access and long-lived for refresh.
     const tokens = await this.buildTokens(user.id, user.role, sessionId);
+    // Keep refresh token hashed in the session table.
     const refreshTokenHash = await argon2.hash(tokens.refreshToken);
 
     await this.prisma.session.create({
@@ -153,6 +157,7 @@ export class AuthService {
     }
 
     const nextSessionId = randomUUID();
+    // Refresh rotation revokes the current session and creates a new one.
     const tokens = await this.buildTokens(
       session.userId,
       session.user.role,
@@ -208,6 +213,7 @@ export class AuthService {
     await this.prisma.session.update({
       where: { id: session.id },
       data: {
+        // Mark the session as revoked to prevent future refreshes.
         status: SessionStatus.revoked,
         revokedAt: new Date(),
       },
