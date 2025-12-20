@@ -66,6 +66,16 @@ Backend (API-only) para una plataforma de telemedicina donde:
 docker compose up -d
 docker ps
 
+---
+
+## Tests e2e
+
+Para ejecutar `npm run test:e2e`, configurar una base de datos separada:
+
+- Crear `.env.test` con `DATABASE_URL_TEST=postgresql://...`
+- Los tests usan `DATABASE_URL_TEST` si existe (fallback a `DATABASE_URL`)
+
+
 
 
 

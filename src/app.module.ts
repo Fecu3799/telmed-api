@@ -7,6 +7,7 @@ import { envSchema } from './infra/config/env.schema';
 import { PrismaModule } from './infra/prisma/prisma.module';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -31,12 +32,16 @@ import { AppService } from './app.service';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         throttlers: [{ name: 'default', ttl: 60_000, limit: 60 }],
-        storage: new ThrottlerStorageRedisService(
-          configService.getOrThrow<string>('REDIS_URL'),
-        ),
+        storage:
+          configService.get<string>('APP_ENV') === 'test'
+            ? undefined
+            : new ThrottlerStorageRedisService(
+                configService.getOrThrow<string>('REDIS_URL'),
+              ),
       }),
     }),
     AuthModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

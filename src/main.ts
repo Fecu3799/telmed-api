@@ -31,7 +31,7 @@ async function bootstrap() {
 
   // Swagger lives at /api/docs and documents the prefixed routes.
   const config = new DocumentBuilder()
-    .setTitle('Telmed API')
+    .setTitle('TelmedDelSur - API')
     .setDescription('API backend para plataforma de telemedicina (MVP)')
     .setVersion('1.0')
     .addServer('/api/v1')
