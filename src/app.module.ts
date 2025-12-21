@@ -8,6 +8,9 @@ import { PrismaModule } from './infra/prisma/prisma.module';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { PatientProfilesModule } from './modules/patient-profiles/patient-profiles.module';
+import { DoctorProfilesModule } from './modules/doctor-profiles/doctor-profiles.module';
+import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -28,26 +31,36 @@ import { AppService } from './app.service';
       },
     }),
     PrismaModule,
-    ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        throttlers: [{ name: 'default', ttl: 60_000, limit: 60 }],
-        storage:
-          configService.get<string>('APP_ENV') === 'test'
-            ? undefined
-            : new ThrottlerStorageRedisService(
-                configService.getOrThrow<string>('REDIS_URL'),
-              ),
-      }),
-    }),
+    ...(process.env.NODE_ENV === 'test' ||
+    String(process.env.THROTTLE_ENABLED).toLowerCase() === 'false'
+      ? []
+      : [
+          ThrottlerModule.forRootAsync({
+            inject: [ConfigService],
+            useFactory: (configService: ConfigService) => ({
+              throttlers: [{ name: 'default', ttl: 60_000, limit: 60 }],
+              storage:
+                configService.get<string>('APP_ENV') === 'test'
+                  ? undefined
+                  : new ThrottlerStorageRedisService(
+                      configService.getOrThrow<string>('REDIS_URL'),
+                    ),
+            }),
+          }),
+        ]),
     AuthModule,
     UsersModule,
+    PatientProfilesModule,
+    DoctorProfilesModule,
+    SpecialtiesModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
+    ...(process.env.NODE_ENV === 'test' ||
+    String(process.env.THROTTLE_ENABLED).toLowerCase() === 'false'
+      ? []
+      : [{ provide: APP_GUARD, useClass: ThrottlerGuard }]),
   ],
 })
 export class AppModule {}

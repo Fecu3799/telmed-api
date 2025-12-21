@@ -17,6 +17,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let detail = 'Unexpected error';
     let errors: Record<string, string[]> | string[] | undefined;
+    let extensions: Record<string, unknown> | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -38,6 +39,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         if (responseBody.errors) {
           errors = responseBody.errors as Record<string, string[]>;
         }
+
+        if (responseBody.extensions) {
+          extensions = responseBody.extensions as Record<string, unknown>;
+        }
       }
     }
 
@@ -51,6 +56,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
     if (errors) {
       body.errors = errors;
+    }
+
+    if (extensions) {
+      body.extensions = extensions;
     }
 
     response.status(status).json(body);

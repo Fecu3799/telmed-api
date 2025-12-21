@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -17,6 +17,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { Actor } from '../../common/types/actor.type';
 import { AuthService } from './auth.service';
+import { AuthMeDto } from './docs/auth-me.dto';
 import { AuthResponseDto } from './docs/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
@@ -80,5 +81,23 @@ export class AuthController {
   async logout(@Body() dto: LogoutDto, @CurrentUser() actor: Actor) {
     await this.authService.logout(dto.refreshToken, actor.id);
     return { success: true };
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Return current authenticated actor' })
+  @ApiOkResponse({ type: AuthMeDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  getMe(@CurrentUser() actor: Actor, @Req() req: RequestWithActor) {
+    const response: Record<string, unknown> = { ...actor };
+    if (
+      process.env.NODE_ENV === 'test' ||
+      String(process.env.DEBUG_AUTH).toLowerCase() === 'true'
+    ) {
+      response.rawUserKeys = req.user ? Object.keys(req.user) : [];
+    }
+    return response;
   }
 }

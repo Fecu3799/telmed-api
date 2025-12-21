@@ -6,6 +6,96 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id             String          @id @default(uuid())
+  email          String          @unique
+  passwordHash   String          @map("password_hash")
+  role           UserRole
+  status         UserStatus      @default(active)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  displayName    String?         @map("display_name")
+  doctorProfile  DoctorProfile?
+  patientProfile PatientProfile?
+  sessions       Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String        @id @default(uuid())
+  userId           String        @map("user_id")
+  refreshTokenHash String        @map("refresh_token_hash")
+  status           SessionStatus @default(active)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  lastUsedAt       DateTime?     @map("last_used_at")
+  revokedAt        DateTime?     @map("revoked_at")
+  ip               String?
+  userAgent        String?       @map("user_agent")
+  expiresAt        DateTime      @map("expires_at")
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model PatientProfile {
+  userId    String   @id @map("user_id")
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  phone     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("patient_profiles")
+}
+
+model DoctorProfile {
+  userId             String                    @id @map("user_id")
+  bio                String?
+  currency           String                    @default("ARS")
+  isActive           Boolean                   @default(true) @map("is_active")
+  verificationStatus DoctorVerificationStatus  @default(unverified) @map("verification_status")
+  createdAt          DateTime                  @default(now()) @map("created_at")
+  updatedAt          DateTime                  @updatedAt @map("updated_at")
+  location           Unsupported("geography")? @map("location")
+  priceCents         Int                       @map("price_cents")
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialties        DoctorSpecialty[]
+
+  @@map("doctor_profiles")
+}
+
+model Specialty {
+  id      String            @id @default(uuid())
+  name    String            @unique
+  isActive Boolean          @default(true) @map("is_active")
+  doctors DoctorSpecialty[]
+
+  @@map("specialties")
+}
+
+model DoctorSpecialty {
+  doctorUserId String        @map("doctor_user_id")
+  specialtyId  String        @map("specialty_id")
+  doctor       DoctorProfile @relation(fields: [doctorUserId], references: [userId], onDelete: Cascade)
+  specialty    Specialty     @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
+
+  @@id([doctorUserId, specialtyId])
+  @@index([specialtyId])
+  @@map("doctor_specialties")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+}
+
 enum UserRole {
   patient
   doctor
@@ -28,98 +118,4 @@ enum DoctorVerificationStatus {
   pending
   verified
   rejected
-}
-
-model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  role         UserRole
-  status       UserStatus @default(active)
-  displayName  String?  @map("display_name")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  patientProfile PatientProfile?
-  doctorProfile  DoctorProfile?
-  sessions       Session[]
-
-  @@map("users")
-}
-
-model Session {
-  id               String        @id @default(uuid())
-  userId           String        @map("user_id")
-  refreshTokenHash String        @map("refresh_token_hash")
-  status           SessionStatus @default(active)
-
-  createdAt  DateTime  @default(now()) @map("created_at")
-  expiresAt  DateTime  @map("expires_at")
-  lastUsedAt DateTime? @map("last_used_at")
-  revokedAt  DateTime? @map("revoked_at")
-  ip         String?
-  userAgent  String?   @map("user_agent")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("sessions")
-}
-
-model PatientProfile {
-  userId    String @id @map("user_id")
-  firstName String @map("first_name")
-  lastName  String @map("last_name")
-  phone     String?
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("patient_profiles")
-}
-
-model DoctorProfile {
-  userId      String @id @map("user_id")
-  displayName String @map("display_name")
-  bio         String?
-
-  price Int    @map("price")
-  currency   String @default("ARS")
-
-  isActive            Boolean @default(true) @map("is_active")
-  verificationStatus  DoctorVerificationStatus @default(unverified) @map("verification_status")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  location Unsupported("geography(Point,4326)")? @map("location")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  specialties DoctorSpecialty[]
-
-  @@map("doctor_profiles")
-}
-
-model Specialty {
-  id   String @id @default(uuid())
-  name String @unique
-
-  doctors DoctorSpecialty[]
-
-  @@map("specialties")
-}
-
-model DoctorSpecialty {
-  doctorUserId String @map("doctor_user_id")
-  specialtyId  String @map("specialty_id")
-
-  doctor    DoctorProfile @relation(fields: [doctorUserId], references: [userId], onDelete: Cascade)
-  specialty Specialty     @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
-
-  @@id([doctorUserId, specialtyId])
-  @@index([specialtyId])
-  @@map("doctor_specialties")
 }

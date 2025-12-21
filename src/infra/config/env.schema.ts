@@ -14,6 +14,22 @@ export const envSchema = z.object({
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive(),
 
   REDIS_URL: z.string().min(1),
+  THROTTLE_ENABLED: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return true;
+      }
+      return String(value).toLowerCase() !== 'false';
+    }, z.boolean())
+    .default(true),
+  DEBUG_AUTH: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return false;
+      }
+      return String(value).toLowerCase() === 'true';
+    }, z.boolean())
+    .default(false),
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;

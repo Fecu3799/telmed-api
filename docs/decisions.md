@@ -1,0 +1,15 @@
+# Decisions
+
+- dinero: priceCents es interno (Int). La UI puede mostrar pesos sin decimales.
+- displayName vive en User para evitar duplicacion entre perfiles.
+- PostGIS/Unsupported: migraciones SQL manuales, no depender de migrate dev autogenerando location.
+- auth: JWT access+refresh con sessions en DB y rate limiting con Redis.
+- seed admin: se crea via `npm run db:seed` usando `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` (idempotente, no se loguea la password).
+- PrismaClient + adapter-pg required:
+  - En scripts no usamos `new PrismaClient()` directo, sino el adapter-pg.
+  - Snippet:
+    ```ts
+    import { createPrismaWithPgAdapter } from 'src/infra/prisma/prisma-adapter.factory';
+
+    const { prisma, disconnect } = createPrismaWithPgAdapter(process.env.DATABASE_URL!);
+    ```

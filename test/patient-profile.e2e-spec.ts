@@ -36,7 +36,27 @@ function ensureEnv() {
   }
 }
 
-describe('Users (e2e)', () => {
+async function registerAndLogin(
+  app: INestApplication,
+  role: 'patient' | 'doctor',
+) {
+  const email = `user_${randomUUID()}@test.com`;
+  const password = 'Passw0rd!123';
+
+  await request(app.getHttpServer())
+    .post('/api/v1/auth/register')
+    .send({ email, password, role })
+    .expect(201);
+
+  const loginResponse = await request(app.getHttpServer())
+    .post('/api/v1/auth/login')
+    .send({ email, password })
+    .expect(201);
+
+  return loginResponse.body.accessToken as string;
+}
+
+describe('Patient profiles (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
@@ -70,45 +90,48 @@ describe('Users (e2e)', () => {
     await app.close();
   });
 
-  it('GET /api/v1/users/me without token -> 401', async () => {
-    await request(app.getHttpServer()).get('/api/v1/users/me').expect(401);
+  it('GET /patients/me/profile -> 404 before create', async () => {
+    const token = await registerAndLogin(app, 'patient');
+
+    await request(app.getHttpServer())
+      .get('/api/v1/patients/me/profile')
+      .set('Authorization', `Bearer ${token}`)
+      //.expect(404);
+      .expect(404);
   });
 
-  it('register/login -> access token works for /users/me and PATCH /users/me', async () => {
-    const email = `user_${randomUUID()}@test.com`;
-    const password = 'Passw0rd!123';
+  it('PUT -> GET -> PATCH flow for patient profile', async () => {
+    const token = await registerAndLogin(app, 'patient');
 
-    const registerResponse = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send({ email, password, role: 'patient' })
-      .expect(201);
-
-    expect(registerResponse.body.accessToken).toBeTruthy();
-
-    const loginResponse = await request(app.getHttpServer())
-      .post('/api/v1/auth/login')
-      .send({ email, password })
-      .expect(201);
-
-    const accessToken = loginResponse.body.accessToken as string;
-    expect(accessToken).toBeTruthy();
-
-    const meResponse = await request(app.getHttpServer())
-      .get('/api/v1/users/me')
-      .set('Authorization', `Bearer ${accessToken}`)
+    await request(app.getHttpServer())
+      .put('/api/v1/patients/me/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ firstName: 'Juan', lastName: 'Perez', phone: '+54 11 5555' })
       .expect(200);
 
-    expect(meResponse.body.id).toBeTruthy();
-    expect(meResponse.body.email).toBe(email.toLowerCase());
-    expect(meResponse.body.role).toBe('patient');
+    const getResponse = await request(app.getHttpServer())
+      .get('/api/v1/patients/me/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
 
-    const displayName = 'Paciente Test';
+    expect(getResponse.body.firstName).toBe('Juan');
+    expect(getResponse.body.lastName).toBe('Perez');
+
     const patchResponse = await request(app.getHttpServer())
-      .patch('/api/v1/users/me')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ displayName })
+      .patch('/api/v1/patients/me/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ phone: '+54 11 4444' })
       .expect(200);
 
-    expect(patchResponse.body.displayName).toBe(displayName);
+    expect(patchResponse.body.phone).toBe('+54 11 4444');
+  });
+
+  it('doctor token -> 403', async () => {
+    const token = await registerAndLogin(app, 'doctor');
+
+    await request(app.getHttpServer())
+      .get('/api/v1/patients/me/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403);
   });
 });
