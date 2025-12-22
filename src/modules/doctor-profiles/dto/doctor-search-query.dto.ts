@@ -8,12 +8,15 @@ import {
   IsString,
   IsUUID,
   Min,
+  MinLength,
 } from 'class-validator';
+import { DoctorVerificationStatus } from '@prisma/client';
 
 export class DoctorSearchQueryDto {
   @ApiPropertyOptional({ example: 'cardio' })
   @IsOptional()
   @IsString()
+  @MinLength(2)
   q?: string;
 
   @ApiPropertyOptional({ example: -34.6037 })
@@ -47,10 +50,10 @@ export class DoctorSearchQueryDto {
   @Min(0)
   maxPriceCents?: number;
 
-  @ApiPropertyOptional({ example: 'distance', enum: ['distance', 'price', 'name'] })
+  @ApiPropertyOptional({ example: 'relevance', enum: ['relevance', 'distance', 'price_asc', 'price_desc', 'name_asc', 'name_desc'] })
   @IsOptional()
-  @IsEnum(['distance', 'price', 'name'] as const)
-  sort?: 'distance' | 'price' | 'name';
+  @IsEnum(['relevance', 'distance', 'price_asc', 'price_desc', 'name_asc', 'name_desc'] as const)
+  sort?: 'relevance' | 'distance' | 'price_asc' | 'price_desc' | 'name_asc' | 'name_desc';
 
   @ApiPropertyOptional({ example: 50 })
   @IsOptional()
@@ -59,10 +62,13 @@ export class DoctorSearchQueryDto {
   @Min(1)
   limit?: number;
 
-  @ApiPropertyOptional({ example: 0 })
+  @ApiPropertyOptional({ example: 'eyJzb3J0IjoicmVsZXZhbmNlIiwibGFzdElkIjoiLi4uIn0' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  offset?: number;
+  @IsString()
+  cursor?: string;
+
+  @ApiPropertyOptional({ example: 'verified', enum: DoctorVerificationStatus })
+  @IsOptional()
+  @IsEnum(DoctorVerificationStatus)
+  verificationStatus?: DoctorVerificationStatus;
 }

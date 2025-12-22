@@ -30,6 +30,14 @@ export const envSchema = z.object({
       return String(value).toLowerCase() === 'true';
     }, z.boolean())
     .default(false),
+  DEBUG_SEARCH: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return false;
+      }
+      return String(value).toLowerCase() === 'true';
+    }, z.boolean())
+    .default(false),
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;

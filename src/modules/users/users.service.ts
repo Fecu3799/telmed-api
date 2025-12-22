@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 
@@ -29,7 +33,7 @@ export class UsersService {
 
   async updateMe(userId: string, dto: UpdateMeDto) {
     if (dto.displayName === undefined) {
-      return this.getMe(userId);
+      throw new UnprocessableEntityException('displayName is required');
     }
 
     const user = await this.prisma.user.update({

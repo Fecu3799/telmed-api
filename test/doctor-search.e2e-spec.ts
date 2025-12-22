@@ -191,4 +191,125 @@ describe('Doctor search (e2e)', () => {
     expect(ids).toEqual(expect.arrayContaining([doctorA.id]));
     expect(ids).not.toEqual(expect.arrayContaining([doctorB.id]));
   });
+
+  it('paginates with cursor for relevance search', async () => {
+    const doctorA = await prisma.user.create({
+      data: {
+        email: `doc_pg_a_${randomUUID()}@test.com`,
+        passwordHash: 'hash',
+        role: 'doctor',
+        displayName: 'Dr. Alpha',
+      },
+    });
+    const doctorB = await prisma.user.create({
+      data: {
+        email: `doc_pg_b_${randomUUID()}@test.com`,
+        passwordHash: 'hash',
+        role: 'doctor',
+      },
+    });
+    const doctorC = await prisma.user.create({
+      data: {
+        email: `doc_pg_c_${randomUUID()}@test.com`,
+        passwordHash: 'hash',
+        role: 'doctor',
+      },
+    });
+
+    await prisma.doctorProfile.create({
+      data: {
+        userId: doctorA.id,
+        priceCents: 120000,
+        currency: 'ARS',
+        firstName: 'Ana',
+        lastName: 'Alpha',
+      },
+    });
+    await prisma.doctorProfile.create({
+      data: {
+        userId: doctorB.id,
+        priceCents: 110000,
+        currency: 'ARS',
+        firstName: 'Alpha',
+        lastName: 'Beta',
+      },
+    });
+    await prisma.doctorProfile.create({
+      data: {
+        userId: doctorC.id,
+        priceCents: 100000,
+        currency: 'ARS',
+        firstName: 'Gamma',
+        lastName: 'Alpha',
+      },
+    });
+
+    const firstPage = await request(app.getHttpServer())
+      .get('/api/v1/doctors/search')
+      .query({ q: 'Alpha', limit: 2 })
+      .expect(200);
+
+    expect(firstPage.body.items.length).toBe(2);
+    expect(firstPage.body.pageInfo.nextCursor).toBeTruthy();
+
+    const secondPage = await request(app.getHttpServer())
+      .get('/api/v1/doctors/search')
+      .query({ q: 'Alpha', limit: 2, cursor: firstPage.body.pageInfo.nextCursor })
+      .expect(200);
+
+    const firstIds = new Set(
+      firstPage.body.items.map((item: { doctorUserId: string }) => item.doctorUserId),
+    );
+    const secondIds = new Set(
+      secondPage.body.items.map((item: { doctorUserId: string }) => item.doctorUserId),
+    );
+
+    for (const id of secondIds) {
+      expect(firstIds.has(id)).toBe(false);
+    }
+    expect(firstIds.size + secondIds.size).toBe(3);
+  });
+
+  it('sorts by price_desc', async () => {
+    const doctorA = await prisma.user.create({
+      data: {
+        email: `doc_sort_a_${randomUUID()}@test.com`,
+        passwordHash: 'hash',
+        role: 'doctor',
+      },
+    });
+    const doctorB = await prisma.user.create({
+      data: {
+        email: `doc_sort_b_${randomUUID()}@test.com`,
+        passwordHash: 'hash',
+        role: 'doctor',
+      },
+    });
+
+    await prisma.doctorProfile.create({
+      data: {
+        userId: doctorA.id,
+        priceCents: 50000,
+        currency: 'ARS',
+        firstName: 'Ana',
+        lastName: 'Perez',
+      },
+    });
+    await prisma.doctorProfile.create({
+      data: {
+        userId: doctorB.id,
+        priceCents: 200000,
+        currency: 'ARS',
+        firstName: 'Bea',
+        lastName: 'Perez',
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/doctors/search')
+      .query({ sort: 'price_desc', limit: 2 })
+      .expect(200);
+
+    expect(response.body.items[0].doctorUserId).toBe(doctorB.id);
+  });
 });

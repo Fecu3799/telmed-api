@@ -52,8 +52,10 @@ export class DoctorSearchResponseDto {
   @ApiProperty({ type: [DoctorSearchItemDto] })
   items!: DoctorSearchItemDto[];
 
-  @ApiProperty({ example: 0 })
-  offset!: number;
+  @ApiProperty({
+    example: { nextCursor: 'eyJzb3J0IjoicmVsZXZhbmNlIiwibGFzdElkIjoiLi4uIn0' },
+  })
+  pageInfo!: { nextCursor: string | null };
 
   @ApiProperty({ example: 50 })
   limit!: number;
