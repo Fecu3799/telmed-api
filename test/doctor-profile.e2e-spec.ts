@@ -110,6 +110,8 @@ describe('Doctor profiles (e2e)', () => {
       .put('/api/v1/doctors/me/profile')
       .set('Authorization', `Bearer ${token}`)
       .send({
+        firstName: 'Maria',
+        lastName: 'Gonzalez',
         priceCents: 150000,
         bio: 'Cardiologo',
         location: { lat: 0, lng: 0 },
@@ -138,7 +140,7 @@ describe('Doctor profiles (e2e)', () => {
     await request(app.getHttpServer())
       .put('/api/v1/doctors/me/profile')
       .set('Authorization', `Bearer ${token}`)
-      .send({ priceCents: 100000 })
+      .send({ priceCents: 100000, firstName: 'Ana', lastName: 'Perez' })
       .expect(200);
 
     const specialtyA = await prisma.specialty.create({

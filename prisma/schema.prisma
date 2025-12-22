@@ -53,6 +53,8 @@ model PatientProfile {
 
 model DoctorProfile {
   userId             String                    @id @map("user_id")
+  firstName          String?                   @map("first_name")
+  lastName           String?                   @map("last_name")
   bio                String?
   currency           String                    @default("ARS")
   isActive           Boolean                   @default(true) @map("is_active")

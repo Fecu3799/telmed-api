@@ -12,6 +12,12 @@ export class DoctorProfileDto {
   @ApiProperty({ example: 'b9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   userId!: string;
 
+  @ApiPropertyOptional({ example: 'Maria' })
+  firstName?: string | null;
+
+  @ApiPropertyOptional({ example: 'Gonzalez' })
+  lastName?: string | null;
+
   @ApiPropertyOptional({ example: 'Cardiologo con 10 anos de experiencia.' })
   bio?: string | null;
 

@@ -35,11 +35,15 @@ export class DoctorProfilesService {
       where: { userId },
       create: {
         userId,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
         bio: dto.bio ?? null,
         priceCents: dto.priceCents,
         currency: dto.currency ?? 'ARS',
       },
       update: {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
         bio: dto.bio ?? null,
         priceCents: dto.priceCents,
         currency: dto.currency ?? 'ARS',
@@ -72,10 +76,18 @@ export class DoctorProfilesService {
       bio?: string | null;
       priceCents?: number;
       currency?: string;
+      firstName?: string;
+      lastName?: string;
     } = {};
 
     if (dto.bio !== undefined) {
       data.bio = dto.bio;
+    }
+    if (dto.firstName !== undefined) {
+      data.firstName = dto.firstName;
+    }
+    if (dto.lastName !== undefined) {
+      data.lastName = dto.lastName;
     }
     if (dto.priceCents !== undefined) {
       data.priceCents = dto.priceCents;
