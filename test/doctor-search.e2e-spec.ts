@@ -254,14 +254,22 @@ describe('Doctor search (e2e)', () => {
 
     const secondPage = await request(app.getHttpServer())
       .get('/api/v1/doctors/search')
-      .query({ q: 'Alpha', limit: 2, cursor: firstPage.body.pageInfo.nextCursor })
+      .query({
+        q: 'Alpha',
+        limit: 2,
+        cursor: firstPage.body.pageInfo.nextCursor,
+      })
       .expect(200);
 
     const firstIds = new Set(
-      firstPage.body.items.map((item: { doctorUserId: string }) => item.doctorUserId),
+      firstPage.body.items.map(
+        (item: { doctorUserId: string }) => item.doctorUserId,
+      ),
     );
     const secondIds = new Set(
-      secondPage.body.items.map((item: { doctorUserId: string }) => item.doctorUserId),
+      secondPage.body.items.map(
+        (item: { doctorUserId: string }) => item.doctorUserId,
+      ),
     );
 
     for (const id of secondIds) {

@@ -8,7 +8,10 @@ export class AuthMeDto {
   @ApiProperty({ example: 'doctor', enum: UserRole })
   role!: UserRole;
 
-  @ApiProperty({ example: 'b9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a', required: false })
+  @ApiProperty({
+    example: 'b9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+    required: false,
+  })
   sessionId?: string;
 
   @ApiProperty({ example: ['id', 'role'], required: false })

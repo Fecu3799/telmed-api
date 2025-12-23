@@ -8,8 +8,15 @@
 - PrismaClient + adapter-pg required:
   - En scripts no usamos `new PrismaClient()` directo, sino el adapter-pg.
   - Snippet:
+
     ```ts
     import { createPrismaWithPgAdapter } from 'src/infra/prisma/prisma-adapter.factory';
 
-    const { prisma, disconnect } = createPrismaWithPgAdapter(process.env.DATABASE_URL!);
+    const { prisma, disconnect } = createPrismaWithPgAdapter(
+      process.env.DATABASE_URL!,
+    );
     ```
+
+## Deuda técnica
+
+- LegacyRouteConverter warning por wildcard; se aborda cuando migremos middleware routing a patrones named params / upgrades.

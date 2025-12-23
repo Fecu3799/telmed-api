@@ -23,7 +23,8 @@ export class DoctorSearchController {
   @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async search(@Query() query: DoctorSearchQueryDto, @Req() req: Request) {
-    const traceId = req.header('x-trace-id') ?? req.header('x-request-id') ?? undefined;
+    const traceId =
+      req.header('x-trace-id') ?? req.header('x-request-id') ?? undefined;
     return this.searchService.search(query, traceId);
   }
 }

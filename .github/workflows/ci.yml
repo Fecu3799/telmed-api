@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: med
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U app -d med"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      NODE_ENV: test
+      APP_ENV: test
+      APP_PORT: 0
+      THROTTLE_ENABLED: false
+      DATABASE_URL: postgresql://app:app@localhost:5432/med?schema=public
+      DATABASE_URL_TEST: postgresql://app:app@localhost:5432/med?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: test_access_secret_123456
+      JWT_REFRESH_SECRET: test_refresh_secret_123456
+      JWT_ACCESS_TTL_SECONDS: 900
+      JWT_REFRESH_TTL_SECONDS: 2592000
+      SLOW_QUERY_MS: 200
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Prisma migrate deploy
+        run: npx prisma migrate deploy
+
+      - name: Build
+        run: npm run build
+
+      - name: Integrity
+        run: npm run test:integrity
+
+      - name: E2E
+        run: npm run test:e2e

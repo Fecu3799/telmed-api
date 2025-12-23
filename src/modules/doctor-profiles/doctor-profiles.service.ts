@@ -98,7 +98,9 @@ export class DoctorProfilesService {
 
     const profile =
       Object.keys(data).length === 0
-        ? await this.prisma.doctorProfile.findUniqueOrThrow({ where: { userId } })
+        ? await this.prisma.doctorProfile.findUniqueOrThrow({
+            where: { userId },
+          })
         : await this.prisma.doctorProfile.update({
             where: { userId },
             data,

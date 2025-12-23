@@ -50,10 +50,33 @@ export class DoctorSearchQueryDto {
   @Min(0)
   maxPriceCents?: number;
 
-  @ApiPropertyOptional({ example: 'relevance', enum: ['relevance', 'distance', 'price_asc', 'price_desc', 'name_asc', 'name_desc'] })
+  @ApiPropertyOptional({
+    example: 'relevance',
+    enum: [
+      'relevance',
+      'distance',
+      'price_asc',
+      'price_desc',
+      'name_asc',
+      'name_desc',
+    ],
+  })
   @IsOptional()
-  @IsEnum(['relevance', 'distance', 'price_asc', 'price_desc', 'name_asc', 'name_desc'] as const)
-  sort?: 'relevance' | 'distance' | 'price_asc' | 'price_desc' | 'name_asc' | 'name_desc';
+  @IsEnum([
+    'relevance',
+    'distance',
+    'price_asc',
+    'price_desc',
+    'name_asc',
+    'name_desc',
+  ] as const)
+  sort?:
+    | 'relevance'
+    | 'distance'
+    | 'price_asc'
+    | 'price_desc'
+    | 'name_asc'
+    | 'name_desc';
 
   @ApiPropertyOptional({ example: 50 })
   @IsOptional()
@@ -62,7 +85,9 @@ export class DoctorSearchQueryDto {
   @Min(1)
   limit?: number;
 
-  @ApiPropertyOptional({ example: 'eyJzb3J0IjoicmVsZXZhbmNlIiwibGFzdElkIjoiLi4uIn0' })
+  @ApiPropertyOptional({
+    example: 'eyJzb3J0IjoicmVsZXZhbmNlIiwibGFzdElkIjoiLi4uIn0',
+  })
   @IsOptional()
   @IsString()
   cursor?: string;

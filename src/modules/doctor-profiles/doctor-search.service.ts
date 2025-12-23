@@ -55,8 +55,7 @@ export class DoctorSearchService {
     const like = trimmedQ ? `%${trimmedQ}%` : null;
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
     const sort =
-      query.sort ??
-      (hasGeo ? 'distance' : like ? 'relevance' : 'name_asc');
+      query.sort ?? (hasGeo ? 'distance' : like ? 'relevance' : 'name_asc');
 
     if (sort === 'distance' && !hasGeo) {
       throw new UnprocessableEntityException(

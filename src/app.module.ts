@@ -1,16 +1,16 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { envSchema } from './infra/config/env.schema';
 import { PrismaModule } from './infra/prisma/prisma.module';
-import { RolesGuard } from './common/guards/roles.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PatientProfilesModule } from './modules/patient-profiles/patient-profiles.module';
 import { DoctorProfilesModule } from './modules/doctor-profiles/doctor-profiles.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
+import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -63,4 +63,8 @@ import { AppService } from './app.service';
       : [{ provide: APP_GUARD, useClass: ThrottlerGuard }]),
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TraceIdMiddleware).forRoutes('*');
+  }
+}

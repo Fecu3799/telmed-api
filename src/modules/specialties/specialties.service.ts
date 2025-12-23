@@ -51,7 +51,9 @@ export class SpecialtiesService {
     }
 
     if (Object.keys(data).length === 0) {
-      const existing = await this.prisma.specialty.findUnique({ where: { id } });
+      const existing = await this.prisma.specialty.findUnique({
+        where: { id },
+      });
       if (!existing) {
         throw new NotFoundException('Specialty not found');
       }
@@ -78,7 +80,10 @@ export class SpecialtiesService {
         data: { isActive: false },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
         throw new NotFoundException('Specialty not found');
       }
       throw error;
@@ -87,7 +92,8 @@ export class SpecialtiesService {
 
   private isUniqueConstraintError(error: unknown): boolean {
     return (
-      error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
     );
   }
 }

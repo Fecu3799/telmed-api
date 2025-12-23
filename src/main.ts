@@ -7,6 +7,7 @@ import 'dotenv/config';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { HttpLoggingInterceptor } from './common/interceptors/http-logging.interceptor';
 import { ProblemDetailsFilter } from './common/filters/problem-details.filter';
 import { mapValidationErrors } from './common/utils/validation-errors';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -15,6 +16,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new ProblemDetailsFilter());
+  app.useGlobalInterceptors(new HttpLoggingInterceptor());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

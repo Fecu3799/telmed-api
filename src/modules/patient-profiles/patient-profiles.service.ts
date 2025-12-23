@@ -63,7 +63,9 @@ export class PatientProfilesService {
     }
 
     if (Object.keys(data).length === 0) {
-      return this.prisma.patientProfile.findUniqueOrThrow({ where: { userId } });
+      return this.prisma.patientProfile.findUniqueOrThrow({
+        where: { userId },
+      });
     }
 
     return this.prisma.patientProfile.update({

@@ -42,7 +42,9 @@ export class RolesGuard implements CanActivate {
     const normalized = requiredRoles.map((role: unknown) =>
       String(role).toLowerCase(),
     );
-    const actorRole = roleCandidate ? String(roleCandidate).toLowerCase() : null;
+    const actorRole = roleCandidate
+      ? String(roleCandidate).toLowerCase()
+      : null;
 
     const allowed = actorRole ? normalized.includes(actorRole) : false;
     if (allowed) {
@@ -50,7 +52,12 @@ export class RolesGuard implements CanActivate {
     }
 
     if (!actorRole) {
-      this.throwUnauthorizedIfDebug(request, requiredRoles, actorRole, candidatePathsChecked);
+      this.throwUnauthorizedIfDebug(
+        request,
+        requiredRoles,
+        actorRole,
+        candidatePathsChecked,
+      );
     }
 
     if (this.isDebugAuthEnabled()) {
