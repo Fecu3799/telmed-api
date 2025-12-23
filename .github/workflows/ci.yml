@@ -9,67 +9,56 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     services:
-      db:
+      postgres:
         image: postgis/postgis:16-3.4
         env:
-          POSTGRES_USER: app
-          POSTGRES_PASSWORD: app
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: med
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U app -d med"
+          --health-cmd="pg_isready -U postgres -d med"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=10
+          --health-retries=5
+
       redis:
-        image: redis:7
+        image: redis:7-alpine
         ports:
           - 6379:6379
         options: >-
           --health-cmd="redis-cli ping"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=10
+          --health-retries=5
 
     env:
-      NODE_ENV: test
-      APP_ENV: test
-      APP_PORT: 0
-      THROTTLE_ENABLED: false
-      DATABASE_URL: postgresql://app:app@localhost:5432/med?schema=public
-      SHADOW_DATABASE_URL: postgresql://app:app@localhost:5432/med_shadow?schema=public
-      DATABASE_URL_TEST: postgresql://app:app@localhost:5432/med?schema=public
-      REDIS_URL: redis://localhost:6379
-      JWT_ACCESS_SECRET: test_access_secret_123456
-      JWT_REFRESH_SECRET: test_refresh_secret_123456
-      JWT_ACCESS_TTL_SECONDS: 900
-      JWT_REFRESH_TTL_SECONDS: 2592000
-      SLOW_QUERY_MS: 200
+      APP_PORT: '3000'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/med?schema=public'
+      SHADOW_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/med_shadow?schema=public'
+      REDIS_URL: 'redis://localhost:6379'
+      # + los secrets que use tu auth (JWT_SECRET, REFRESH_SECRET, etc.)
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install
-        run: npm ci
+      - run: npm ci
 
       - name: Create shadow database
-        env:
-          PGPASSWORD: app
-        run: psql -h localhost -U app -d postgres -c "CREATE DATABASE med_shadow;"
+        run: |
+          psql "$DATABASE_URL" -c "CREATE DATABASE med_shadow;" || true
 
       - name: Prisma generate
         run: npx prisma generate
 
-      - name: Prisma migrate deploy
+      - name: Migrate deploy
         run: npx prisma migrate deploy
 
       - name: Build
