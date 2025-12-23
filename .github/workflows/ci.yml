@@ -15,7 +15,7 @@ jobs:
         image: postgis/postgis:16-3.4
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: med
         ports:
           - 5432:5432
@@ -39,8 +39,8 @@ jobs:
       APP_PORT: '3000'
       NODE_ENV: test
 
-      DATABASE_URL: 'postgresql://postgres:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/med?schema=public'
-      SHADOW_DATABASE_URL: 'postgresql://postgres:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/med_shadow?schema=public'
+      DATABASE_URL: 'postgresql://postgres:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/med?schema=public'
+      SHADOW_DATABASE_URL: 'postgresql://postgres:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/med_shadow?schema=public'
 
       JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
       JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
@@ -65,7 +65,7 @@ jobs:
 
       - name: Create shadow database
         env:
-          PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           psql -h localhost -U postgres -d postgres -c "CREATE DATABASE med_shadow;" || true
 
