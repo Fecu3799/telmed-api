@@ -15,7 +15,7 @@ jobs:
         image: postgis/postgis:16-3.4
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
           POSTGRES_DB: med
         ports:
           - 5432:5432
@@ -37,23 +37,37 @@ jobs:
 
     env:
       APP_PORT: '3000'
-      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/med?schema=public'
-      SHADOW_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/med_shadow?schema=public'
+      NODE_ENV: test
+
+      DATABASE_URL: 'postgresql://postgres:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/med?schema=public'
+      SHADOW_DATABASE_URL: 'postgresql://postgres:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/med_shadow?schema=public'
+
+      JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+      JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+      JWT_ACCESS_TTL_SECONDS: '900'
+      JWT_REFRESH_TTL_SECONDS: '2592000'
+
       REDIS_URL: 'redis://localhost:6379'
-      # + los secrets que use tu auth (JWT_SECRET, REFRESH_SECRET, etc.)
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Create shadow database
+        env:
+          PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
         run: |
-          psql "$DATABASE_URL" -c "CREATE DATABASE med_shadow;" || true
+          psql -h localhost -U postgres -d postgres -c "CREATE DATABASE med_shadow;" || true
 
       - name: Prisma generate
         run: npx prisma generate
