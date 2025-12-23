@@ -39,6 +39,7 @@ jobs:
       APP_PORT: 0
       THROTTLE_ENABLED: false
       DATABASE_URL: postgresql://app:app@localhost:5432/med?schema=public
+      SHADOW_DATABASE_URL: postgresql://app:app@localhost:5432/med_shadow?schema=public
       DATABASE_URL_TEST: postgresql://app:app@localhost:5432/med?schema=public
       REDIS_URL: redis://localhost:6379
       JWT_ACCESS_SECRET: test_access_secret_123456
@@ -59,6 +60,11 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Create shadow database
+        env:
+          PGPASSWORD: app
+        run: psql -h localhost -U app -d postgres -c "CREATE DATABASE med_shadow;"
 
       - name: Prisma generate
         run: npx prisma generate
