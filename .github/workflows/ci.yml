@@ -14,13 +14,13 @@ jobs:
       postgres:
         image: postgis/postgis:16-3.4
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_pw
           POSTGRES_DB: med
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U postgres -d med"
+          --health-cmd="pg_isready -U ci_user -d med"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -37,10 +37,13 @@ jobs:
 
     env:
       APP_PORT: '3000'
+      APP_ENV: test
       NODE_ENV: test
+      THROTTLE_ENABLED: 'false'
 
-      DATABASE_URL: 'postgresql://postgres:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/med?schema=public'
-      SHADOW_DATABASE_URL: 'postgresql://postgres:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/med_shadow?schema=public'
+      DATABASE_URL: 'postgresql://ci_user:ci_pw@localhost:5432/med?schema=public'
+      SHADOW_DATABASE_URL: 'postgresql://ci_user:ci_pw@localhost:5432/med_shadow?schema=public'
+      DATABASE_URL_TEST: 'postgresql://ci_user:ci_pw@localhost:5432/med?schema=public'
 
       JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
       JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
@@ -65,9 +68,9 @@ jobs:
 
       - name: Create shadow database
         env:
-          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PGPASSWORD: ci_pw
         run: |
-          psql -h localhost -U postgres -d postgres -c "CREATE DATABASE med_shadow;" || true
+          psql -h localhost -U ci_user -d postgres -c "CREATE DATABASE med_shadow;" || true
 
       - name: Prisma generate
         run: npx prisma generate

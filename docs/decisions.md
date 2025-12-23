@@ -20,3 +20,14 @@
 ## Deuda técnica
 
 - LegacyRouteConverter warning por wildcard; se aborda cuando migremos middleware routing a patrones named params / upgrades.
+
+## CI
+
+- Secrets requeridos en GitHub Actions:
+  - `JWT_ACCESS_SECRET`
+  - `JWT_REFRESH_SECRET`
+- Variables internas del workflow (solo CI):
+  - `DATABASE_URL`, `DATABASE_URL_TEST`, `SHADOW_DATABASE_URL`
+  - `REDIS_URL`, `APP_ENV`, `NODE_ENV`, `THROTTLE_ENABLED`
+- Nota GitGuardian:
+  - El usuario/password de Postgres en CI no es prod; marcar el alerta como resolved/ignored en GitGuardian si es necesario.
