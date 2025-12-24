@@ -47,6 +47,7 @@ model PatientProfile {
   firstName String   @map("first_name")
   lastName  String   @map("last_name")
   phone     String?
+  appointments Appointment[]
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -68,6 +69,7 @@ model DoctorProfile {
   priceCents         Int                       @map("price_cents")
   user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   specialties        DoctorSpecialty[]
+  appointments       Appointment[]
 
   @@map("doctor_profiles")
 }
@@ -130,6 +132,12 @@ enum DoctorAvailabilityExceptionType {
   custom
 }
 
+enum AppointmentStatus {
+  scheduled
+  cancelled
+  completed
+}
+
 model DoctorAvailabilityRule {
   id        String  @id @default(uuid())
   userId    String  @map("user_id")
@@ -176,4 +184,22 @@ model DoctorSchedulingConfig {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("doctor_scheduling_configs")
+}
+
+model Appointment {
+  id                 String            @id @default(uuid())
+  doctorUserId       String            @map("doctor_user_id")
+  patientUserId      String            @map("patient_user_id")
+  startAt            DateTime          @map("start_at")
+  endAt              DateTime          @map("end_at")
+  status             AppointmentStatus @default(scheduled)
+  createdAt          DateTime          @default(now()) @map("created_at")
+  cancelledAt        DateTime?         @map("cancelled_at")
+  cancellationReason String?           @map("cancellation_reason")
+  doctor             DoctorProfile     @relation(fields: [doctorUserId], references: [userId], onDelete: Cascade)
+  patient            PatientProfile    @relation(fields: [patientUserId], references: [userId], onDelete: Cascade)
+
+  @@index([doctorUserId, startAt])
+  @@index([patientUserId, startAt])
+  @@map("appointments")
 }

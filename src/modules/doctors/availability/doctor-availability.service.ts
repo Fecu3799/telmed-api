@@ -327,12 +327,33 @@ export class DoctorAvailabilityService {
     return date;
   }
 
-  private getSchedulingConfig(userId: string) {
+  async getSchedulingConfig(userId: string) {
     return this.prisma.doctorSchedulingConfig
       .findUnique({
         where: { userId },
       })
       .then((config) => config ?? { ...DEFAULT_CONFIG, userId });
+  }
+
+  async assertSlotAvailable(
+    doctorUserId: string,
+    startAt: Date,
+    endAt: Date,
+  ) {
+    const availability = await this.getPublicAvailability(doctorUserId, {
+      from: startAt.toISOString(),
+      to: endAt.toISOString(),
+    });
+
+    const startIso = startAt.toISOString();
+    const endIso = endAt.toISOString();
+    const matches = availability.items.some(
+      (slot) => slot.startAt === startIso && slot.endAt === endIso,
+    );
+
+    if (!matches) {
+      throw new UnprocessableEntityException('Slot not available');
+    }
   }
 
   private formatDateInTimeZone(date: Date, timeZone: string) {

@@ -10,6 +10,7 @@ import { UsersModule } from './modules/users/users.module';
 import { PatientProfilesModule } from './modules/patient-profiles/patient-profiles.module';
 import { DoctorsModule } from './modules/doctors/doctors.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
+import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -53,6 +54,7 @@ import { AppService } from './app.service';
     PatientProfilesModule,
     DoctorsModule,
     SpecialtiesModule,
+    AppointmentsModule,
   ],
   controllers: [AppController],
   providers: [
