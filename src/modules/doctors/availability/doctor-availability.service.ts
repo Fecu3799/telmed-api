@@ -335,11 +335,7 @@ export class DoctorAvailabilityService {
       .then((config) => config ?? { ...DEFAULT_CONFIG, userId });
   }
 
-  async assertSlotAvailable(
-    doctorUserId: string,
-    startAt: Date,
-    endAt: Date,
-  ) {
+  async assertSlotAvailable(doctorUserId: string, startAt: Date, endAt: Date) {
     const availability = await this.getPublicAvailability(doctorUserId, {
       from: startAt.toISOString(),
       to: endAt.toISOString(),

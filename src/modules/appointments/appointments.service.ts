@@ -63,9 +63,8 @@ export class AppointmentsService {
       throw new NotFoundException('Patient not found');
     }
 
-    const config = await this.availabilityService.getSchedulingConfig(
-      doctorUserId,
-    );
+    const config =
+      await this.availabilityService.getSchedulingConfig(doctorUserId);
     const endAt = new Date(
       startAt.getTime() + config.slotDurationMinutes * 60 * 1000,
     );
@@ -102,10 +101,7 @@ export class AppointmentsService {
     });
   }
 
-  async listPatientAppointments(
-    actor: Actor,
-    query: ListAppointmentsQueryDto,
-  ) {
+  async listPatientAppointments(actor: Actor, query: ListAppointmentsQueryDto) {
     const { from, to } = this.parseRange(query.from, query.to);
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
 
@@ -127,10 +123,7 @@ export class AppointmentsService {
     return this.buildPage(items, total, page, limit);
   }
 
-  async listDoctorAppointments(
-    actor: Actor,
-    query: ListAppointmentsQueryDto,
-  ) {
+  async listDoctorAppointments(actor: Actor, query: ListAppointmentsQueryDto) {
     const { from, to } = this.parseRange(query.from, query.to);
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
 
@@ -175,11 +168,7 @@ export class AppointmentsService {
     return this.buildPage(items, total, page, limit);
   }
 
-  async cancelAppointment(
-    actor: Actor,
-    id: string,
-    dto: CancelAppointmentDto,
-  ) {
+  async cancelAppointment(actor: Actor, id: string, dto: CancelAppointmentDto) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
     });
@@ -232,12 +221,7 @@ export class AppointmentsService {
     return { page: resolvedPage, limit: resolvedLimit, skip };
   }
 
-  private buildPage<T>(
-    items: T[],
-    total: number,
-    page: number,
-    limit: number,
-  ) {
+  private buildPage<T>(items: T[], total: number, page: number, limit: number) {
     const totalPages = Math.max(1, Math.ceil(total / limit));
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;

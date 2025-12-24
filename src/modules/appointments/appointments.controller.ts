@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -46,10 +54,7 @@ export class AppointmentsController {
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async create(
-    @CurrentUser() actor: Actor,
-    @Body() dto: CreateAppointmentDto,
-  ) {
+  async create(@CurrentUser() actor: Actor, @Body() dto: CreateAppointmentDto) {
     return this.appointmentsService.createAppointment(actor, dto);
   }
 
