@@ -18,6 +18,9 @@ model User {
   doctorProfile  DoctorProfile?
   patientProfile PatientProfile?
   sessions       Session[]
+  availabilityRules DoctorAvailabilityRule[]
+  availabilityExceptions DoctorAvailabilityException[]
+  schedulingConfig DoctorSchedulingConfig?
 
   @@map("users")
 }
@@ -120,4 +123,57 @@ enum DoctorVerificationStatus {
   pending
   verified
   rejected
+}
+
+enum DoctorAvailabilityExceptionType {
+  closed
+  custom
+}
+
+model DoctorAvailabilityRule {
+  id        String  @id @default(uuid())
+  userId    String  @map("user_id")
+  dayOfWeek Int     @map("day_of_week")
+  startTime String  @map("start_time")
+  endTime   String  @map("end_time")
+  isActive  Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("doctor_availability_rules")
+}
+
+model DoctorAvailabilityException {
+  id            String                        @id @default(uuid())
+  userId        String                        @map("user_id")
+  date          DateTime                      @db.Date @map("date")
+  type          DoctorAvailabilityExceptionType
+  customWindows Json?                         @map("custom_windows")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("doctor_availability_exceptions")
+}
+
+model DoctorSchedulingConfig {
+  userId              String  @id @map("user_id")
+  slotDurationMinutes Int     @default(60) @map("slot_duration_minutes")
+  leadTimeHours       Int     @default(24) @map("lead_time_hours")
+  horizonDays         Int     @default(60) @map("horizon_days")
+  timezone            String  @default("America/Argentina/Buenos_Aires")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_scheduling_configs")
 }

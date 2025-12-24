@@ -8,7 +8,7 @@ import { PrismaModule } from './infra/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PatientProfilesModule } from './modules/patient-profiles/patient-profiles.module';
-import { DoctorProfilesModule } from './modules/doctor-profiles/doctor-profiles.module';
+import { DoctorsModule } from './modules/doctors/doctors.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
 import { AppController } from './app.controller';
@@ -51,7 +51,7 @@ import { AppService } from './app.service';
     AuthModule,
     UsersModule,
     PatientProfilesModule,
-    DoctorProfilesModule,
+    DoctorsModule,
     SpecialtiesModule,
   ],
   controllers: [AppController],

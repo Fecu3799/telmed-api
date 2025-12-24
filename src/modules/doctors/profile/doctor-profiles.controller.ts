@@ -11,12 +11,12 @@ import {
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
-import { ProblemDetailsDto } from '../../common/docs/problem-details.dto';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import type { Actor } from '../../common/types/actor.type';
+import { ProblemDetailsDto } from '../../../common/docs/problem-details.dto';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import type { Actor } from '../../../common/types/actor.type';
 import { DoctorProfileDto } from './docs/doctor-profile.dto';
 import { DoctorSpecialtiesResponseDto } from './docs/doctor-specialty.dto';
 import { DoctorProfilePatchDto } from './dto/doctor-profile-patch.dto';

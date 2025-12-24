@@ -4,8 +4,8 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { decodeCursor, encodeCursor } from '../../common/utils/cursor';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { decodeCursor, encodeCursor } from '../../../common/utils/cursor';
 import { DoctorSearchQueryDto } from './dto/doctor-search-query.dto';
 
 type SearchSort =

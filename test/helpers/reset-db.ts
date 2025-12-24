@@ -2,6 +2,9 @@ import { PrismaClient } from '@prisma/client';
 
 export async function resetDb(prisma: PrismaClient) {
   await prisma.doctorSpecialty.deleteMany();
+  await prisma.doctorAvailabilityRule.deleteMany();
+  await prisma.doctorAvailabilityException.deleteMany();
+  await prisma.doctorSchedulingConfig.deleteMany();
   await prisma.doctorProfile.deleteMany();
   await prisma.patientProfile.deleteMany();
   await prisma.session.deleteMany();

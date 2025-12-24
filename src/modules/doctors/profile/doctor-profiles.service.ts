@@ -4,7 +4,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../../infra/prisma/prisma.service';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { DoctorProfilePatchDto } from './dto/doctor-profile-patch.dto';
 import { DoctorProfilePutDto } from './dto/doctor-profile-put.dto';
 import { DoctorSpecialtiesPutDto } from './dto/doctor-specialties-put.dto';

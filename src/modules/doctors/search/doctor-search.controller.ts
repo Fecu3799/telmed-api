@@ -7,7 +7,7 @@ import {
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { ProblemDetailsDto } from '../../common/docs/problem-details.dto';
+import { ProblemDetailsDto } from '../../../common/docs/problem-details.dto';
 import { DoctorSearchResponseDto } from './docs/doctor-search.dto';
 import { DoctorSearchQueryDto } from './dto/doctor-search-query.dto';
 import { DoctorSearchService } from './doctor-search.service';
