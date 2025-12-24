@@ -16,6 +16,30 @@
       process.env.DATABASE_URL!,
     );
     ```
+- availability/scheduling:
+  - reglas semanales: dayOfWeek (0-6) + startTime/endTime en formato "HH:mm".
+  - excepciones por fecha: type closed o custom; customWindows reemplaza completamente el dia.
+  - slotDurationMinutes fijo en 60 (preparado para ser configurable a futuro).
+  - leadTimeHours 24 y horizonDays 60 para limites de consulta de disponibilidad.
+  - timezone por doctor en DoctorSchedulingConfig (default America/Argentina/Buenos_Aires).
+  - endpoint publico devuelve slots en UTC (ISO), calculados segun la timezone del doctor.
+  - validaciones reglas:
+    - dayOfWeek int 0..6.
+    - startTime/endTime con regex HH:mm, start < end.
+    - sin solapamientos por dia (solo reglas activas).
+  - validaciones excepciones:
+    - date formato YYYY-MM-DD.
+    - type enum closed|custom.
+    - closed no permite customWindows.
+    - custom requiere customWindows no vacio.
+    - ventanas con HH:mm, start < end, sin solapamientos.
+  - validaciones disponibilidad publica:
+    - from/to ISO, from < to.
+    - from >= ahora + leadTimeHours.
+    - to <= ahora + horizonDays.
+  - recomendaciones frontend:
+    - al armar reglas/ventanas, usar multiples de 60 minutos.
+    - en queries publicas, usar timestamps con hora (no solo fecha) para evitar fallas por lead time.
 
 ## Deuda técnica
 
