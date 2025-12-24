@@ -124,7 +124,10 @@ export class DoctorAvailabilityService {
     }
   }
 
-  async getPublicAvailability(doctorUserId: string, query: PublicAvailabilityQueryDto) {
+  async getPublicAvailability(
+    doctorUserId: string,
+    query: PublicAvailabilityQueryDto,
+  ) {
     const doctor = await this.prisma.user.findUnique({
       where: { id: doctorUserId },
       select: { id: true, role: true, status: true },
@@ -143,8 +146,12 @@ export class DoctorAvailabilityService {
     }
 
     const now = new Date();
-    const minStart = new Date(now.getTime() + config.leadTimeHours * 3600 * 1000);
-    const maxEnd = new Date(now.getTime() + config.horizonDays * 24 * 3600 * 1000);
+    const minStart = new Date(
+      now.getTime() + config.leadTimeHours * 3600 * 1000,
+    );
+    const maxEnd = new Date(
+      now.getTime() + config.horizonDays * 24 * 3600 * 1000,
+    );
 
     if (from < minStart || to > maxEnd) {
       throw new UnprocessableEntityException('from/to outside allowed range');
@@ -176,7 +183,7 @@ export class DoctorAvailabilityService {
       rulesByDay.set(rule.dayOfWeek, list);
     }
 
-    const exceptionByDate = new Map<string, typeof exceptions[number]>();
+    const exceptionByDate = new Map<string, (typeof exceptions)[number]>();
     for (const exception of exceptions) {
       const dateKey = this.formatDate(exception.date);
       exceptionByDate.set(dateKey, exception);
@@ -190,7 +197,10 @@ export class DoctorAvailabilityService {
     const slots: { startAt: string; endAt: string }[] = [];
     for (const dateStr of dateRange) {
       const exception = exceptionByDate.get(dateStr);
-      if (exception && exception.type === DoctorAvailabilityExceptionType.closed) {
+      if (
+        exception &&
+        exception.type === DoctorAvailabilityExceptionType.closed
+      ) {
         continue;
       }
 
@@ -229,7 +239,10 @@ export class DoctorAvailabilityService {
       | undefined,
     ruleWindows: AvailabilityRuleInputDto[],
   ): AvailabilityWindowDto[] {
-    if (exception && exception.type === DoctorAvailabilityExceptionType.custom) {
+    if (
+      exception &&
+      exception.type === DoctorAvailabilityExceptionType.custom
+    ) {
       const custom = exception.customWindows as AvailabilityWindowDto[] | null;
       return custom ?? [];
     }
@@ -252,17 +265,21 @@ export class DoctorAvailabilityService {
 
     for (const list of grouped.values()) {
       const active = list.filter((rule) => rule.isActive ?? true);
-      this.ensureNoOverlap(active.map((rule) => ({
-        startTime: rule.startTime,
-        endTime: rule.endTime,
-      })));
+      this.ensureNoOverlap(
+        active.map((rule) => ({
+          startTime: rule.startTime,
+          endTime: rule.endTime,
+        })),
+      );
     }
   }
 
   private validateWindows(windows: AvailabilityWindowDto[]) {
     for (const window of windows) {
       if (!this.isValidTimeRange(window.startTime, window.endTime)) {
-        throw new UnprocessableEntityException('Invalid custom window time range');
+        throw new UnprocessableEntityException(
+          'Invalid custom window time range',
+        );
       }
     }
     this.ensureNoOverlap(windows);
@@ -312,9 +329,11 @@ export class DoctorAvailabilityService {
   }
 
   private getSchedulingConfig(userId: string) {
-    return this.prisma.doctorSchedulingConfig.findUnique({
-      where: { userId },
-    }).then((config) => config ?? { ...DEFAULT_CONFIG, userId });
+    return this.prisma.doctorSchedulingConfig
+      .findUnique({
+        where: { userId },
+      })
+      .then((config) => config ?? { ...DEFAULT_CONFIG, userId });
   }
 
   private formatDateInTimeZone(date: Date, timeZone: string) {
@@ -379,7 +398,10 @@ export class DoctorAvailabilityService {
       const endUtc = this.zonedTimeToUtc(dateStr, endTime, config.timezone);
 
       if (startUtc >= from && endUtc <= to && startUtc >= minStart) {
-        slots.push({ startAt: startUtc.toISOString(), endAt: endUtc.toISOString() });
+        slots.push({
+          startAt: startUtc.toISOString(),
+          endAt: endUtc.toISOString(),
+        });
       }
 
       cursor += slotMinutes;

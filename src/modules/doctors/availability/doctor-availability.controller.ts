@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -29,7 +39,9 @@ import { DoctorAvailabilityService } from './doctor-availability.service';
 @ApiTags('doctors')
 @Controller('doctors')
 export class DoctorAvailabilityController {
-  constructor(private readonly availabilityService: DoctorAvailabilityService) {}
+  constructor(
+    private readonly availabilityService: DoctorAvailabilityService,
+  ) {}
 
   @Get('me/availability-rules')
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -1,6 +1,7 @@
 # Backlog
 
 ## MVP+
+
 - Perfiles completos (doctor/patient) con datos basicos y onboarding
 - Especialidades (CRUD admin) y asociacion doctor-especialidad
 - Search por especialidad, precio y cercania (PostGIS)
@@ -10,6 +11,7 @@
 - Endpoints admin para gestionar perfiles (crear/editar/bloquear)
 
 ## V1
+
 - Ratings y reviews
 - Notificaciones (email/SMS/WhatsApp)
 - Teleconsulta con proveedores externos (Zoom/Meet)
@@ -18,6 +20,7 @@
 - Observabilidad (logs, metrics, tracing)
 
 ## V2/Futuro
+
 - Historia clinica completa y adjuntos
 - E-commerce (servicios, paquetes)
 - Multi-sede y equipos medicos

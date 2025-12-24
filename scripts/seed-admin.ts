@@ -17,7 +17,9 @@ const email = getEnv('SEED_ADMIN_EMAIL').toLowerCase();
 const password = getEnv('SEED_ADMIN_PASSWORD');
 
 async function main() {
-  const { prisma, disconnect } = createPrismaWithPgAdapter(getEnv('DATABASE_URL'));
+  const { prisma, disconnect } = createPrismaWithPgAdapter(
+    getEnv('DATABASE_URL'),
+  );
 
   try {
     const existing = await prisma.user.findUnique({ where: { email } });
