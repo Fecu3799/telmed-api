@@ -1,9 +1,10 @@
 import {
   HttpStatus,
-  INestApplication,
   UnprocessableEntityException,
   ValidationPipe,
 } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import type { Server } from 'http';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'crypto';
 import request from 'supertest';
@@ -38,6 +39,10 @@ function ensureEnv() {
   }
 }
 
+function httpServer(app: INestApplication): Server {
+  return app.getHttpServer() as unknown as Server;
+}
+
 async function registerAndLogin(
   app: INestApplication,
   role: 'patient' | 'doctor',
@@ -45,12 +50,12 @@ async function registerAndLogin(
   const email = `user_${randomUUID()}@test.com`;
   const password = 'Passw0rd!123';
 
-  await request(app.getHttpServer())
+  await request(httpServer(app))
     .post('/api/v1/auth/register')
     .send({ email, password, role })
     .expect(201);
 
-  const loginResponse = await request(app.getHttpServer())
+  const loginResponse = await request(httpServer(app))
     .post('/api/v1/auth/login')
     .send({ email, password })
     .expect(201);
