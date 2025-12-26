@@ -25,6 +25,11 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Project docs
+
+- Frontend API Contract (Scheduling): `docs/frontend/README.md`
+- Architecture Decisions: `docs/decisions/`
+
 ## Project setup
 
 ```bash
