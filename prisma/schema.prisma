@@ -144,6 +144,14 @@ enum ConsultationStatus {
   closed
 }
 
+enum ConsultationQueueStatus {
+  queued
+  accepted
+  cancelled
+  rejected
+  expired
+}
+
 model DoctorAvailabilityRule {
   id        String  @id @default(uuid())
   userId    String  @map("user_id")
@@ -228,4 +236,27 @@ model Consultation {
   @@index([doctorUserId, createdAt])
   @@index([patientUserId, createdAt])
   @@map("consultations")
+}
+
+model ConsultationQueueItem {
+  id            String                 @id @default(uuid())
+  status        ConsultationQueueStatus @default(queued)
+  doctorUserId  String                 @map("doctor_user_id")
+  patientUserId String                 @map("patient_user_id")
+  appointmentId String?                @unique @map("appointment_id")
+  queuedAt      DateTime               @default(now()) @map("queued_at")
+  acceptedAt    DateTime?              @map("accepted_at")
+  cancelledAt   DateTime?              @map("cancelled_at")
+  rejectedAt    DateTime?              @map("rejected_at")
+  expiresAt     DateTime?              @map("expires_at")
+  createdBy     String                 @map("created_by")
+  acceptedBy    String?                @map("accepted_by")
+  cancelledBy   String?                @map("cancelled_by")
+  reason        String?
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  @@index([doctorUserId, status])
+  @@index([patientUserId, status])
+  @@map("consultation_queue_items")
 }

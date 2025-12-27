@@ -58,6 +58,10 @@ Problem Details example:
 }
 ```
 
+## Consultation queue
+
+- Waiting room contract: `docs/frontend/consultation-queue.md`
+
 ## Examples
 
 ### PUT /patients/me/profile

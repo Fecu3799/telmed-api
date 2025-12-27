@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 
 export async function resetDb(prisma: PrismaClient) {
+  await prisma.consultationQueueItem.deleteMany();
   await prisma.consultation.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.doctorSpecialty.deleteMany();
