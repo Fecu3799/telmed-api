@@ -77,7 +77,12 @@ export class ConsultationQueueService {
       const existing = await this.prisma.consultationQueueItem.findFirst({
         where: {
           appointmentId: dto.appointmentId,
-          status: { in: [ConsultationQueueStatus.queued, ConsultationQueueStatus.accepted] },
+          status: {
+            in: [
+              ConsultationQueueStatus.queued,
+              ConsultationQueueStatus.accepted,
+            ],
+          },
         },
         select: { id: true },
       });
@@ -90,7 +95,12 @@ export class ConsultationQueueService {
         where: {
           doctorUserId,
           patientUserId,
-          status: { in: [ConsultationQueueStatus.queued, ConsultationQueueStatus.accepted] },
+          status: {
+            in: [
+              ConsultationQueueStatus.queued,
+              ConsultationQueueStatus.accepted,
+            ],
+          },
         },
         select: { id: true },
       });
@@ -189,7 +199,9 @@ export class ConsultationQueueService {
   }
 
   startFromQueue(actor: Actor, queueId: string) {
-    throw new NotImplementedException('Consultation start from queue not implemented');
+    throw new NotImplementedException(
+      'Consultation start from queue not implemented',
+    );
   }
 
   finalizeConsultation(

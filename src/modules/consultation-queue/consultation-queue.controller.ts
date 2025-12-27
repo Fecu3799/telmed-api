@@ -139,7 +139,7 @@ export class ConsultationQueueController {
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async startFromQueue(
+  startFromQueue(
     @CurrentUser() actor: Actor,
     @Param('queueId') queueId: string,
   ) {
@@ -159,7 +159,7 @@ export class ConsultationQueueController {
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async finalize(
+  finalize(
     @CurrentUser() actor: Actor,
     @Param('id') consultationId: string,
     @Body() dto: FinalizeConsultationDto,
