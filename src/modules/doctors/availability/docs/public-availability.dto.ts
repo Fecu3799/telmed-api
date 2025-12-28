@@ -15,7 +15,7 @@ export class PublicAvailabilityResponseDto {
   @ApiProperty({
     example: {
       timezone: 'America/Argentina/Buenos_Aires',
-      slotDurationMinutes: 60,
+      slotDurationMinutes: 20,
       leadTimeHours: 24,
       horizonDays: 60,
     },

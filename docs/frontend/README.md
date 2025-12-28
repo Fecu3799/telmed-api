@@ -19,7 +19,7 @@
   - `from` and `to` are ISO UTC and required.
 
 ## Business rules
-- `slotMinutes = 60` (fixed today; configurable in future).
+- `slotMinutes = 20` (fixed today; configurable in future).
 - `leadTime = 24h`.
 - `horizon = 60d`.
 - No overlap for a doctor at the same time: 409 Conflict.
@@ -183,13 +183,13 @@ GET /api/v1/doctors/d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a/availability?from=2025-
 Response 200:
 ```json
 {
-  "items": [
+    "items": [
     { "startAt": "2025-01-05T09:00:00.000Z", "endAt": "2025-01-05T10:00:00.000Z" },
     { "startAt": "2025-01-05T10:00:00.000Z", "endAt": "2025-01-05T11:00:00.000Z" }
   ],
   "meta": {
     "timezone": "America/Argentina/Buenos_Aires",
-    "slotDurationMinutes": 60,
+    "slotDurationMinutes": 20,
     "leadTimeHours": 24,
     "horizonDays": 60
   }

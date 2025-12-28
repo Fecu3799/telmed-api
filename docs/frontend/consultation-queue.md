@@ -17,17 +17,35 @@
 - admin: override total.
 
 ## Business rules
-1) Un solo queue activo por appointmentId si existe, o por (patientUserId, doctorUserId) si no hay appointment.
-2) Si existe appointmentId: permitir queue solo dentro de [startAt - X, startAt + Y].
-   - defaults: X=10min, Y=30min (documentado, no implementado).
+1) Un solo queue activo por appointmentId si existe, o por (patientUserId, doctorUserId) si no hay appointment (urgencia).
+2) Si existe appointmentId: permitir queue solo dentro de [startAt - 15min, startAt + 15min].
+   - defaults: 15min/15min (documentado, no implementado).
 3) TTL queue: expiresAt = queuedAt + 15min (default, configurable a futuro).
 4) Doctor/admin pueden aceptar/rechazar; patient puede cancelar; admin override total.
 5) Auditoria minima: createdBy, acceptedBy, cancelledBy; reason obligatorio en acciones manuales (reject/cancel por admin/doctor).
+6) Expiracion: si status=queued y now >= expiresAt, el item se considera expired.
+   - accept/cancel deben responder 409 con detail \"Queue entry expired\".
+7) Ventana por appointmentId: si existe, validar `now` dentro de `[startAt - 15min, startAt + 15min]`.
+   - fuera de ventana => 422 con detail \"Waiting room not available for this appointment time\".
+
+## Queue ordering
+- Si existe appointmentId: ordenar por appointment.startAt asc y desempatar por queuedAt asc.
+- Si no hay appointmentId: ordenar por queuedAt asc.
+- El doctor puede aceptar manualmente cualquiera, pero el orden por defecto debe ser consistente.
+
+## Waiting-room window (appointment-linked)
+- Si existe appointmentId: permitir crear queue solo si `now` esta en `[startAt - 15min, startAt + 15min]`.
+- Fuera de ventana: responder 422 con `detail` claro (\"Waiting room not available for this appointment time\").
+- Esta ventana prevalece sobre el TTL cuando hay appointmentId.
+
+## Appointment after window
+- Estado propuesto: `missed` / `no_show` / `expired` (pendiente de decision).
+- Acciones: doctor/admin puede habilitar excepcion o reprogramar.
 
 ## API Contract (v1)
 
 ### POST /api/v1/consultations/queue
-Status: 201 (creado), 409 si ya existe queue activa.
+Status: 201 (creado), 409 si ya existe queue activa, 422 si fuera de ventana.
 Request:
 ```json
 {
@@ -36,6 +54,9 @@ Request:
   "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc"
 }
 ```
+Notas:
+- `appointmentId` es opcional para consultas de urgencia.
+- Si `appointmentId` existe, se valida la ventana ±15min.
 Response 201:
 ```json
 {
@@ -165,3 +186,20 @@ Problem Details example:
 
 ## Happy path UI
 Patient crea queue, doctor acepta, doctor inicia, doctor finaliza. Admin puede intervenir en cualquier paso.
+### GET /api/v1/consultations/queue
+Status: 200.
+Response 200:
+```json
+[
+  {
+    "id": "q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
+    "status": "queued",
+    "queuedAt": "2025-01-05T13:50:00.000Z",
+    "expiresAt": "2025-01-05T14:05:00.000Z",
+    "appointmentId": "e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
+    "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
+    "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
+    "createdBy": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc"
+  }
+]
+```

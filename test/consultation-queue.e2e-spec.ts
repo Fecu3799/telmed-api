@@ -244,4 +244,159 @@ describe('Consultation queue (e2e)', () => {
       .send({ doctorUserId })
       .expect(404);
   });
+
+  it('enforces waiting-room window for appointment queues', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    await createDoctorProfile(app, doctor.accessToken);
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patient.accessToken);
+    const patientUserId = await getUserId(app, patient.accessToken);
+
+    const soon = new Date(Date.now() + 10 * 60 * 1000);
+    const early = new Date(Date.now() + 20 * 60 * 1000);
+    const late = new Date(Date.now() - 20 * 60 * 1000);
+
+    const appointmentOk = await prisma.appointment.create({
+      data: {
+        doctorUserId,
+        patientUserId,
+        startAt: soon,
+        endAt: new Date(soon.getTime() + 20 * 60 * 1000),
+      },
+    });
+
+    await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointmentOk.id })
+      .expect(201);
+
+    const appointmentEarly = await prisma.appointment.create({
+      data: {
+        doctorUserId,
+        patientUserId,
+        startAt: early,
+        endAt: new Date(early.getTime() + 20 * 60 * 1000),
+      },
+    });
+
+    await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointmentEarly.id })
+      .expect(422);
+
+    const appointmentLate = await prisma.appointment.create({
+      data: {
+        doctorUserId,
+        patientUserId,
+        startAt: late,
+        endAt: new Date(late.getTime() + 20 * 60 * 1000),
+      },
+    });
+
+    await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointmentLate.id })
+      .expect(422);
+  });
+
+  it('orders queue by appointment startAt then queuedAt', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    await createDoctorProfile(app, doctor.accessToken);
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+
+    const patientA = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patientA.accessToken);
+    const patientAId = await getUserId(app, patientA.accessToken);
+
+    const patientB = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patientB.accessToken);
+    const patientBId = await getUserId(app, patientB.accessToken);
+
+    const start1 = new Date(Date.now() + 5 * 60 * 1000);
+    const start2 = new Date(Date.now() + 10 * 60 * 1000);
+
+    const appointment1 = await prisma.appointment.create({
+      data: {
+        doctorUserId,
+        patientUserId: patientAId,
+        startAt: start1,
+        endAt: new Date(start1.getTime() + 20 * 60 * 1000),
+      },
+    });
+
+    const appointment2 = await prisma.appointment.create({
+      data: {
+        doctorUserId,
+        patientUserId: patientBId,
+        startAt: start2,
+        endAt: new Date(start2.getTime() + 20 * 60 * 1000),
+      },
+    });
+
+    await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patientA.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointment1.id })
+      .expect(201);
+
+    await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patientB.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointment2.id })
+      .expect(201);
+
+    const listResponse = await request(httpServer(app))
+      .get('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+
+    expect(listResponse.body).toHaveLength(2);
+    expect(listResponse.body[0].appointmentId).toBe(appointment1.id);
+    expect(listResponse.body[1].appointmentId).toBe(appointment2.id);
+  });
+
+  it('marks queue as expired and blocks accept/cancel', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    await createDoctorProfile(app, doctor.accessToken);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patient.accessToken);
+
+    const createResponse = await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId })
+      .expect(201);
+
+    const queueId = createResponse.body.id as string;
+
+    await prisma.consultationQueueItem.update({
+      where: { id: queueId },
+      data: { expiresAt: new Date(Date.now() - 60 * 1000) },
+    });
+
+    const getResponse = await request(httpServer(app))
+      .get(`/api/v1/consultations/queue/${queueId}`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(200);
+
+    expect(getResponse.body.status).toBe('expired');
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/accept`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(409);
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/cancel`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ reason: 'No puedo asistir' })
+      .expect(409);
+  });
 });

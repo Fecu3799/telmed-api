@@ -121,7 +121,7 @@ describe('Doctor availability (e2e)', () => {
       where: { userId: doctorUserId },
       create: {
         userId: doctorUserId,
-        slotDurationMinutes: 60,
+        slotDurationMinutes: 20,
         leadTimeHours: 24,
         horizonDays: 60,
         timezone: 'UTC',

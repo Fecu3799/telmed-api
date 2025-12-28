@@ -74,6 +74,18 @@ export class ConsultationQueueService {
         throw new ConflictException('Appointment not scheduled');
       }
 
+      const now = new Date();
+      const startAt = appointment.startAt;
+
+      const windowStart = new Date(startAt.getTime() - 15 * 60 * 1000);
+      const windowEnd = new Date(startAt.getTime() + 15 * 60 * 1000);
+
+      if (now < windowStart || now > windowEnd) {
+        throw new UnprocessableEntityException(
+          'Waiting room not available for this appointment time',
+        );
+      }
+
       const existing = await this.prisma.consultationQueueItem.findFirst({
         where: {
           appointmentId: dto.appointmentId,
@@ -110,6 +122,9 @@ export class ConsultationQueueService {
       }
     }
 
+    const queuedAt = new Date();
+    const expiresAt = new Date(queuedAt.getTime() + 15 * 60 * 1000);
+
     return this.prisma.consultationQueueItem.create({
       data: {
         status: ConsultationQueueStatus.queued,
@@ -117,6 +132,8 @@ export class ConsultationQueueService {
         patientUserId,
         appointmentId: dto.appointmentId ?? null,
         createdBy: actor.id,
+        queuedAt,
+        expiresAt,
       },
     });
   }
@@ -140,11 +157,23 @@ export class ConsultationQueueService {
       }
     }
 
+    if (this.isExpired(queue)) {
+      const updated = await this.prisma.consultationQueueItem.update({
+        where: { id },
+        data: { status: ConsultationQueueStatus.expired },
+      });
+      return updated;
+    }
+
     return queue;
   }
 
   async acceptQueue(actor: Actor, queueId: string) {
     const queue = await this.getQueueById(actor, queueId);
+
+    if (this.isExpired(queue)) {
+      throw new ConflictException('Queue entry expired');
+    }
 
     if (queue.status !== ConsultationQueueStatus.queued) {
       throw new ConflictException('Queue status invalid');
@@ -163,6 +192,10 @@ export class ConsultationQueueService {
   async rejectQueue(actor: Actor, queueId: string, dto: RejectQueueDto) {
     const queue = await this.getQueueById(actor, queueId);
 
+    if (this.isExpired(queue)) {
+      throw new ConflictException('Queue entry expired');
+    }
+
     if (queue.status !== ConsultationQueueStatus.queued) {
       throw new ConflictException('Queue status invalid');
     }
@@ -179,6 +212,10 @@ export class ConsultationQueueService {
 
   async cancelQueue(actor: Actor, queueId: string, dto: CancelQueueDto) {
     const queue = await this.getQueueById(actor, queueId);
+
+    if (this.isExpired(queue)) {
+      throw new ConflictException('Queue entry expired');
+    }
 
     if (
       queue.status !== ConsultationQueueStatus.queued &&
@@ -198,17 +235,71 @@ export class ConsultationQueueService {
     });
   }
 
-  startFromQueue(actor: Actor, queueId: string) {
+  // consultation-queue.service.ts (dentro de la clase)
+  async listQueueForAdmin() {
+    return this.prisma.consultationQueueItem.findMany({
+      where: {
+        status: ConsultationQueueStatus.queued,
+        appointmentId: { not: null }, // si la FK la dejaste opcional
+      },
+      include: {
+        appointment: true, // esto requiere que la relación exista en schema.prisma
+      },
+      orderBy: [
+        { appointment: { startAt: 'asc' } },
+        { queuedAt: 'asc' }, // si no existe, cambiá a createdAt
+        { createdAt: 'asc' },
+      ],
+    });
+  }
+
+  async listQueueForDoctor(actor: Actor) {
+    return this.prisma.consultationQueueItem.findMany({
+      where: {
+        status: ConsultationQueueStatus.queued,
+        appointmentId: { not: null },
+        appointment: {
+          // AJUSTAR al nombre real del campo en Appointment:
+          doctorUserId: actor.id,
+          // si en tu schema es doctorUserId o doctorProfileId, reemplazar acá
+        },
+      },
+      include: { appointment: true },
+      orderBy: [
+        { appointment: { startAt: 'asc' } },
+        { queuedAt: 'asc' },
+        { createdAt: 'asc' },
+      ],
+    });
+  }
+
+  startFromQueue(_actor: Actor, _queueId: string) {
     throw new NotImplementedException(
       'Consultation start from queue not implemented',
     );
   }
 
   finalizeConsultation(
-    actor: Actor,
-    consultationId: string,
-    dto: FinalizeConsultationDto,
+    _actor: Actor,
+    _consultationId: string,
+    _dto: FinalizeConsultationDto,
   ) {
     throw new NotImplementedException('Consultation finalize not implemented');
+  }
+
+  private isExpired(queue: {
+    status: ConsultationQueueStatus;
+    expiresAt: Date | null;
+  }) {
+    if (queue.status === ConsultationQueueStatus.expired) {
+      return true;
+    }
+    if (!queue.expiresAt) {
+      return false;
+    }
+    return (
+      queue.status === ConsultationQueueStatus.queued &&
+      queue.expiresAt.getTime() <= Date.now()
+    );
   }
 }

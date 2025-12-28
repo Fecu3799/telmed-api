@@ -18,7 +18,7 @@ import { AvailabilityWindowDto } from './dto/availability-window.dto';
 
 const DEFAULT_CONFIG: DoctorSchedulingConfig = {
   userId: '',
-  slotDurationMinutes: 60,
+  slotDurationMinutes: 20,
   leadTimeHours: 24,
   horizonDays: 60,
   timezone: 'America/Argentina/Buenos_Aires',

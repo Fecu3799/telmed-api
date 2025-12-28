@@ -128,6 +128,22 @@ export class ConsultationQueueController {
     return this.consultationQueueService.cancelQueue(actor, queueId, dto);
   }
 
+  @Get('consultations/queue')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor, UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List queue items (doctor/admin)' })
+  @ApiOkResponse({ type: [ConsultationQueueItemDto] })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  listQueue(@CurrentUser() actor: Actor) {
+    if (actor.role === UserRole.admin) {
+      return this.consultationQueueService.listQueueForAdmin();
+    }
+    return this.consultationQueueService.listQueueForDoctor(actor);
+  }
+
   @Post('consultations/from-queue/:queueId/start')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)
