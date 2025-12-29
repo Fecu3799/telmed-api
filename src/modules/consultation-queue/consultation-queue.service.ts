@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -13,6 +14,7 @@ import {
 } from '@prisma/client';
 import type { Actor } from '../../common/types/actor.type';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { CLOCK, type Clock } from '../../common/clock/clock';
 import { CancelQueueDto } from './dto/cancel-queue.dto';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
@@ -20,7 +22,10 @@ import { RejectQueueDto } from './dto/reject-queue.dto';
 
 @Injectable()
 export class ConsultationQueueService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
 
   async createQueue(actor: Actor, dto: CreateQueueDto) {
     let doctorUserId = dto.doctorUserId;
@@ -74,7 +79,7 @@ export class ConsultationQueueService {
         throw new ConflictException('Appointment not scheduled');
       }
 
-      const now = new Date();
+      const now = this.clock.now();
       const startAt = appointment.startAt;
 
       const windowStart = new Date(startAt.getTime() - 15 * 60 * 1000);
@@ -122,7 +127,7 @@ export class ConsultationQueueService {
       }
     }
 
-    const queuedAt = new Date();
+    const queuedAt = this.clock.now();
     const expiresAt = new Date(queuedAt.getTime() + 15 * 60 * 1000);
 
     return this.prisma.consultationQueueItem.create({
@@ -183,7 +188,7 @@ export class ConsultationQueueService {
       where: { id: queueId },
       data: {
         status: ConsultationQueueStatus.accepted,
-        acceptedAt: new Date(),
+        acceptedAt: this.clock.now(),
         acceptedBy: actor.id,
       },
     });
@@ -204,7 +209,7 @@ export class ConsultationQueueService {
       where: { id: queueId },
       data: {
         status: ConsultationQueueStatus.rejected,
-        rejectedAt: new Date(),
+        rejectedAt: this.clock.now(),
         reason: dto.reason ?? null,
       },
     });
@@ -228,7 +233,7 @@ export class ConsultationQueueService {
       where: { id: queueId },
       data: {
         status: ConsultationQueueStatus.cancelled,
-        cancelledAt: new Date(),
+        cancelledAt: this.clock.now(),
         cancelledBy: actor.id,
         reason: dto.reason ?? null,
       },
@@ -299,7 +304,7 @@ export class ConsultationQueueService {
     }
     return (
       queue.status === ConsultationQueueStatus.queued &&
-      queue.expiresAt.getTime() <= Date.now()
+      queue.expiresAt.getTime() <= this.clock.now().getTime()
     );
   }
 }

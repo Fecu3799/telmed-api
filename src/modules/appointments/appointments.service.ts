@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -8,6 +9,7 @@ import {
 import { AppointmentStatus, UserRole } from '@prisma/client';
 import { DoctorAvailabilityService } from '../doctors/availability/doctor-availability.service';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { CLOCK, type Clock } from '../../common/clock/clock';
 import type { Actor } from '../../common/types/actor.type';
 import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
@@ -22,6 +24,7 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly availabilityService: DoctorAvailabilityService,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   async createAppointment(actor: Actor, dto: CreateAppointmentDto) {
@@ -191,7 +194,7 @@ export class AppointmentsService {
       where: { id },
       data: {
         status: AppointmentStatus.cancelled,
-        cancelledAt: new Date(),
+        cancelledAt: this.clock.now(),
         cancellationReason: dto.reason ?? null,
       },
     });

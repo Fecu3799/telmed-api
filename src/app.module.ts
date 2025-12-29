@@ -13,6 +13,7 @@ import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { ConsultationQueueModule } from './modules/consultation-queue/consultation-queue.module';
 import { ConsultationsModule } from './modules/consultations/consultations.module';
+import { ClockModule } from './common/clock/clock.module';
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -34,6 +35,7 @@ import { AppService } from './app.service';
       },
     }),
     PrismaModule,
+    ClockModule,
     ...(process.env.NODE_ENV === 'test' ||
     String(process.env.THROTTLE_ENABLED).toLowerCase() === 'false'
       ? []

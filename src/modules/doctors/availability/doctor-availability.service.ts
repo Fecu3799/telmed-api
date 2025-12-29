@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -9,6 +10,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { CLOCK, type Clock } from '../../../common/clock/clock';
 import { AvailabilityExceptionCreateDto } from './dto/availability-exception-create.dto';
 import { AvailabilityExceptionsQueryDto } from './dto/availability-exceptions-query.dto';
 import { AvailabilityRuleInputDto } from './dto/availability-rule-input.dto';
@@ -28,7 +30,10 @@ const DEFAULT_CONFIG: DoctorSchedulingConfig = {
 
 @Injectable()
 export class DoctorAvailabilityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
 
   async listRules(userId: string) {
     return this.prisma.doctorAvailabilityRule.findMany({
@@ -144,7 +149,7 @@ export class DoctorAvailabilityService {
       throw new UnprocessableEntityException('from must be before to');
     }
 
-    const now = new Date();
+    const now = this.clock.now();
     const minStart = new Date(
       now.getTime() + config.leadTimeHours * 3600 * 1000,
     );
