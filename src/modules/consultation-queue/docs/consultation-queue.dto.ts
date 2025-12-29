@@ -40,6 +40,9 @@ export class ConsultationQueueItemDto {
   @ApiPropertyOptional({ example: 'd9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   cancelledBy?: string | null;
 
+  @ApiPropertyOptional({ example: 'd9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
+  rejectedBy?: string | null;
+
   @ApiPropertyOptional({ example: 'No disponible' })
   reason?: string | null;
 }

@@ -10,10 +10,14 @@ import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { CLOCK } from '../src/common/clock/clock';
 import { ProblemDetailsFilter } from '../src/common/filters/problem-details.filter';
 import { mapValidationErrors } from '../src/common/utils/validation-errors';
 import { PrismaService } from '../src/infra/prisma/prisma.service';
 import { resetDb } from './helpers/reset-db';
+import { FakeClock } from './utils/fake-clock';
+
+const BASE_TIME = new Date('2025-01-05T10:00:00.000Z');
 
 function ensureEnv() {
   process.env.APP_ENV = process.env.APP_ENV ?? 'test';
@@ -99,16 +103,69 @@ async function getUserId(app: INestApplication, token: string) {
   return me.body.id as string;
 }
 
+async function setAvailabilityRules(app: INestApplication, token: string) {
+  await request(httpServer(app))
+    .put('/api/v1/doctors/me/availability-rules')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      rules: [
+        { dayOfWeek: 0, startTime: '00:00', endTime: '23:59', isActive: true },
+        { dayOfWeek: 1, startTime: '00:00', endTime: '23:59', isActive: true },
+        { dayOfWeek: 2, startTime: '00:00', endTime: '23:59', isActive: true },
+        { dayOfWeek: 3, startTime: '00:00', endTime: '23:59', isActive: true },
+        { dayOfWeek: 4, startTime: '00:00', endTime: '23:59', isActive: true },
+        { dayOfWeek: 5, startTime: '00:00', endTime: '23:59', isActive: true },
+        { dayOfWeek: 6, startTime: '00:00', endTime: '23:59', isActive: true },
+      ],
+    })
+    .expect(200);
+}
+
+async function getAvailabilitySlots(
+  app: INestApplication,
+  doctorUserId: string,
+  from: Date,
+  to: Date,
+) {
+  const availability = await request(httpServer(app))
+    .get(`/api/v1/doctors/${doctorUserId}/availability`)
+    .query({ from: from.toISOString(), to: to.toISOString() })
+    .expect(200);
+
+  return availability.body.items as Array<{ startAt: string; endAt: string }>;
+}
+
+async function createAppointment(
+  app: INestApplication,
+  token: string,
+  doctorUserId: string,
+  startAt: string,
+) {
+  const response = await request(httpServer(app))
+    .post('/api/v1/appointments')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ doctorUserId, startAt })
+    .expect(201);
+
+  return response.body as { id: string };
+}
+
 describe('Consultation queue (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let fakeClock: FakeClock;
 
   beforeAll(async () => {
     ensureEnv();
 
+    fakeClock = new FakeClock(new Date(BASE_TIME));
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(CLOCK)
+      .useValue(fakeClock)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api/v1');
@@ -133,13 +190,14 @@ describe('Consultation queue (e2e)', () => {
 
   beforeEach(async () => {
     await resetDb(prisma);
+    fakeClock.setNow(new Date(BASE_TIME));
   });
 
   afterAll(async () => {
     await app.close();
   });
 
-  it('patient creates queue, doctor accepts, patient cancels', async () => {
+  it('patient creates queue, doctor accepts', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
@@ -161,14 +219,6 @@ describe('Consultation queue (e2e)', () => {
       .expect(201);
 
     expect(acceptResponse.body.status).toBe('accepted');
-
-    const cancelResponse = await request(httpServer(app))
-      .post(`/api/v1/consultations/queue/${queueId}/cancel`)
-      .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ reason: 'No puedo asistir' })
-      .expect(201);
-
-    expect(cancelResponse.body.status).toBe('cancelled');
   });
 
   it('rejects duplicate active queue without appointment', async () => {
@@ -248,39 +298,39 @@ describe('Consultation queue (e2e)', () => {
   it('enforces waiting-room window for appointment queues', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     await createDoctorProfile(app, doctor.accessToken);
+    await setAvailabilityRules(app, doctor.accessToken);
     const doctorUserId = await getUserId(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
     await createPatientProfile(app, patient.accessToken);
-    const patientUserId = await getUserId(app, patient.accessToken);
 
-    const soon = new Date(Date.now() + 10 * 60 * 1000);
-    const early = new Date(Date.now() + 20 * 60 * 1000);
-    const late = new Date(Date.now() - 20 * 60 * 1000);
+    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+    const slots = await getAvailabilitySlots(app, doctorUserId, from, to);
+    expect(slots.length).toBeGreaterThan(2);
 
-    const appointmentOk = await prisma.appointment.create({
-      data: {
-        doctorUserId,
-        patientUserId,
-        startAt: soon,
-        endAt: new Date(soon.getTime() + 20 * 60 * 1000),
-      },
-    });
+    const appointmentOk = await createAppointment(
+      app,
+      patient.accessToken,
+      doctorUserId,
+      slots[0].startAt,
+    );
 
-    await request(httpServer(app))
-      .post('/api/v1/consultations/queue')
-      .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ doctorUserId, appointmentId: appointmentOk.id })
-      .expect(201);
+    const appointmentEarly = await createAppointment(
+      app,
+      patient.accessToken,
+      doctorUserId,
+      slots[1].startAt,
+    );
 
-    const appointmentEarly = await prisma.appointment.create({
-      data: {
-        doctorUserId,
-        patientUserId,
-        startAt: early,
-        endAt: new Date(early.getTime() + 20 * 60 * 1000),
-      },
-    });
+    const appointmentLate = await createAppointment(
+      app,
+      patient.accessToken,
+      doctorUserId,
+      slots[2].startAt,
+    );
+
+    fakeClock.setNow(new Date(Date.parse(slots[1].startAt) - 20 * 60 * 1000));
 
     await request(httpServer(app))
       .post('/api/v1/consultations/queue')
@@ -288,14 +338,15 @@ describe('Consultation queue (e2e)', () => {
       .send({ doctorUserId, appointmentId: appointmentEarly.id })
       .expect(422);
 
-    const appointmentLate = await prisma.appointment.create({
-      data: {
-        doctorUserId,
-        patientUserId,
-        startAt: late,
-        endAt: new Date(late.getTime() + 20 * 60 * 1000),
-      },
-    });
+    fakeClock.setNow(new Date(Date.parse(slots[0].startAt) - 10 * 60 * 1000));
+
+    await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointmentOk.id })
+      .expect(201);
+
+    fakeClock.setNow(new Date(Date.parse(slots[2].startAt) + 20 * 60 * 1000));
 
     await request(httpServer(app))
       .post('/api/v1/consultations/queue')
@@ -304,63 +355,7 @@ describe('Consultation queue (e2e)', () => {
       .expect(422);
   });
 
-  it('orders queue by appointment startAt then queuedAt', async () => {
-    const doctor = await registerAndLogin(app, 'doctor');
-    await createDoctorProfile(app, doctor.accessToken);
-    const doctorUserId = await getUserId(app, doctor.accessToken);
-
-    const patientA = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patientA.accessToken);
-    const patientAId = await getUserId(app, patientA.accessToken);
-
-    const patientB = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patientB.accessToken);
-    const patientBId = await getUserId(app, patientB.accessToken);
-
-    const start1 = new Date(Date.now() + 5 * 60 * 1000);
-    const start2 = new Date(Date.now() + 10 * 60 * 1000);
-
-    const appointment1 = await prisma.appointment.create({
-      data: {
-        doctorUserId,
-        patientUserId: patientAId,
-        startAt: start1,
-        endAt: new Date(start1.getTime() + 20 * 60 * 1000),
-      },
-    });
-
-    const appointment2 = await prisma.appointment.create({
-      data: {
-        doctorUserId,
-        patientUserId: patientBId,
-        startAt: start2,
-        endAt: new Date(start2.getTime() + 20 * 60 * 1000),
-      },
-    });
-
-    await request(httpServer(app))
-      .post('/api/v1/consultations/queue')
-      .set('Authorization', `Bearer ${patientA.accessToken}`)
-      .send({ doctorUserId, appointmentId: appointment1.id })
-      .expect(201);
-
-    await request(httpServer(app))
-      .post('/api/v1/consultations/queue')
-      .set('Authorization', `Bearer ${patientB.accessToken}`)
-      .send({ doctorUserId, appointmentId: appointment2.id })
-      .expect(201);
-
-    const listResponse = await request(httpServer(app))
-      .get('/api/v1/consultations/queue')
-      .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(200);
-
-    expect(listResponse.body).toHaveLength(2);
-    expect(listResponse.body[0].appointmentId).toBe(appointment1.id);
-    expect(listResponse.body[1].appointmentId).toBe(appointment2.id);
-  });
-
-  it('marks queue as expired and blocks accept/cancel', async () => {
+  it('expires queued items on read and allows accept/reject', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
@@ -376,10 +371,17 @@ describe('Consultation queue (e2e)', () => {
 
     const queueId = createResponse.body.id as string;
 
-    await prisma.consultationQueueItem.update({
-      where: { id: queueId },
-      data: { expiresAt: new Date(Date.now() - 60 * 1000) },
-    });
+    fakeClock.setNow(new Date(BASE_TIME.getTime() + 16 * 60 * 1000));
+
+    const listResponse = await request(httpServer(app))
+      .get('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+
+    const expiredItem = listResponse.body.find(
+      (item: { id: string }) => item.id === queueId,
+    );
+    expect(expiredItem.status).toBe('expired');
 
     const getResponse = await request(httpServer(app))
       .get(`/api/v1/consultations/queue/${queueId}`)
@@ -388,10 +390,169 @@ describe('Consultation queue (e2e)', () => {
 
     expect(getResponse.body.status).toBe('expired');
 
+    const acceptResponse = await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/accept`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    expect(acceptResponse.body.status).toBe('accepted');
+
+    const otherPatient = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, otherPatient.accessToken);
+
+    const secondQueue = await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${otherPatient.accessToken}`)
+      .send({ doctorUserId })
+      .expect(201);
+
+    const secondQueueId = secondQueue.body.id as string;
+
+    fakeClock.setNow(new Date(BASE_TIME.getTime() + 32 * 60 * 1000));
+
+    await request(httpServer(app))
+      .get(`/api/v1/consultations/queue/${secondQueueId}`)
+      .set('Authorization', `Bearer ${otherPatient.accessToken}`)
+      .expect(200);
+
+    const rejectResponse = await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${secondQueueId}/reject`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({ reason: 'No disponible' })
+      .expect(201);
+
+    expect(rejectResponse.body.status).toBe('rejected');
+  });
+
+  it('orders queue with accepted, ontime, early, walk-ins, expired', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    await createDoctorProfile(app, doctor.accessToken);
+    await setAvailabilityRules(app, doctor.accessToken);
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+
+    const patientA = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patientA.accessToken);
+
+    const patientB = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patientB.accessToken);
+
+    const patientC = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patientC.accessToken);
+
+    const patientD = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patientD.accessToken);
+
+    const patientE = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patientE.accessToken);
+
+    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+    const slots = await getAvailabilitySlots(app, doctorUserId, from, to);
+    expect(slots.length).toBeGreaterThan(2);
+
+    const appointmentAccepted = await createAppointment(
+      app,
+      patientA.accessToken,
+      doctorUserId,
+      slots[0].startAt,
+    );
+
+    const appointmentEarly = await createAppointment(
+      app,
+      patientB.accessToken,
+      doctorUserId,
+      slots[2].startAt,
+    );
+
+    const appointmentOnTime = await createAppointment(
+      app,
+      patientE.accessToken,
+      doctorUserId,
+      slots[1].startAt,
+    );
+
+    const listNow = new Date(Date.parse(slots[0].startAt) + 10 * 60 * 1000);
+
+    fakeClock.setNow(new Date(Date.parse(slots[2].startAt) - 5 * 60 * 1000));
+    await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patientB.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointmentEarly.id })
+      .expect(201);
+
+    fakeClock.setNow(new Date(listNow.getTime() - 30 * 60 * 1000));
+    const expiredQueue = await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patientD.accessToken}`)
+      .send({ doctorUserId })
+      .expect(201);
+
+    fakeClock.setNow(new Date(listNow.getTime() - 10 * 60 * 1000));
+    const walkInQueue = await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patientC.accessToken}`)
+      .send({ doctorUserId })
+      .expect(201);
+
+    fakeClock.setNow(listNow);
+    const acceptedQueue = await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patientA.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointmentAccepted.id })
+      .expect(201);
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${acceptedQueue.body.id}/accept`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patientE.accessToken}`)
+      .send({ doctorUserId, appointmentId: appointmentOnTime.id })
+      .expect(201);
+
+    const listResponse = await request(httpServer(app))
+      .get('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+
+    expect(listResponse.body[0].status).toBe('accepted');
+    expect(listResponse.body[1].appointmentId).toBe(appointmentOnTime.id);
+    expect(listResponse.body[2].appointmentId).toBe(appointmentEarly.id);
+    expect(listResponse.body[3].id).toBe(walkInQueue.body.id);
+    expect(listResponse.body[4].id).toBe(expiredQueue.body.id);
+  });
+
+  it('returns 401 without auth, 403 for wrong role, 409 for invalid transition', async () => {
+    await request(httpServer(app))
+      .get('/api/v1/consultations/queue')
+      .expect(401);
+
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    await createDoctorProfile(app, doctor.accessToken);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patient.accessToken);
+
+    const createResponse = await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId })
+      .expect(201);
+
+    const queueId = createResponse.body.id as string;
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/accept`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(403);
+
     await request(httpServer(app))
       .post(`/api/v1/consultations/queue/${queueId}/accept`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(409);
+      .expect(201);
 
     await request(httpServer(app))
       .post(`/api/v1/consultations/queue/${queueId}/cancel`)

@@ -162,25 +162,23 @@ export class ConsultationQueueService {
       }
     }
 
-    if (this.isExpired(queue)) {
-      const updated = await this.prisma.consultationQueueItem.update({
-        where: { id },
-        data: { status: ConsultationQueueStatus.expired },
-      });
-      return updated;
+    await this.expireQueueById(id);
+    const updated = await this.prisma.consultationQueueItem.findUnique({
+      where: { id },
+    });
+    if (!updated) {
+      throw new NotFoundException('Queue not found');
     }
-
-    return queue;
+    return updated;
   }
 
   async acceptQueue(actor: Actor, queueId: string) {
     const queue = await this.getQueueById(actor, queueId);
 
-    if (this.isExpired(queue)) {
-      throw new ConflictException('Queue entry expired');
-    }
-
-    if (queue.status !== ConsultationQueueStatus.queued) {
+    if (
+      queue.status !== ConsultationQueueStatus.queued &&
+      queue.status !== ConsultationQueueStatus.expired
+    ) {
       throw new ConflictException('Queue status invalid');
     }
 
@@ -197,11 +195,10 @@ export class ConsultationQueueService {
   async rejectQueue(actor: Actor, queueId: string, dto: RejectQueueDto) {
     const queue = await this.getQueueById(actor, queueId);
 
-    if (this.isExpired(queue)) {
-      throw new ConflictException('Queue entry expired');
-    }
-
-    if (queue.status !== ConsultationQueueStatus.queued) {
+    if (
+      queue.status !== ConsultationQueueStatus.queued &&
+      queue.status !== ConsultationQueueStatus.expired
+    ) {
       throw new ConflictException('Queue status invalid');
     }
 
@@ -210,6 +207,7 @@ export class ConsultationQueueService {
       data: {
         status: ConsultationQueueStatus.rejected,
         rejectedAt: this.clock.now(),
+        rejectedBy: actor.id,
         reason: dto.reason ?? null,
       },
     });
@@ -218,14 +216,7 @@ export class ConsultationQueueService {
   async cancelQueue(actor: Actor, queueId: string, dto: CancelQueueDto) {
     const queue = await this.getQueueById(actor, queueId);
 
-    if (this.isExpired(queue)) {
-      throw new ConflictException('Queue entry expired');
-    }
-
-    if (
-      queue.status !== ConsultationQueueStatus.queued &&
-      queue.status !== ConsultationQueueStatus.accepted
-    ) {
+    if (queue.status !== ConsultationQueueStatus.queued) {
       throw new ConflictException('Queue status invalid');
     }
 
@@ -240,42 +231,39 @@ export class ConsultationQueueService {
     });
   }
 
-  // consultation-queue.service.ts (dentro de la clase)
   async listQueueForAdmin() {
-    return this.prisma.consultationQueueItem.findMany({
+    await this.expireQueuedItems();
+    const items = await this.prisma.consultationQueueItem.findMany({
       where: {
-        status: ConsultationQueueStatus.queued,
-        appointmentId: { not: null }, // si la FK la dejaste opcional
-      },
-      include: {
-        appointment: true, // esto requiere que la relación exista en schema.prisma
-      },
-      orderBy: [
-        { appointment: { startAt: 'asc' } },
-        { queuedAt: 'asc' }, // si no existe, cambiá a createdAt
-        { createdAt: 'asc' },
-      ],
-    });
-  }
-
-  async listQueueForDoctor(actor: Actor) {
-    return this.prisma.consultationQueueItem.findMany({
-      where: {
-        status: ConsultationQueueStatus.queued,
-        appointmentId: { not: null },
-        appointment: {
-          // AJUSTAR al nombre real del campo en Appointment:
-          doctorUserId: actor.id,
-          // si en tu schema es doctorUserId o doctorProfileId, reemplazar acá
+        status: {
+          in: [
+            ConsultationQueueStatus.accepted,
+            ConsultationQueueStatus.queued,
+            ConsultationQueueStatus.expired,
+          ],
         },
       },
       include: { appointment: true },
-      orderBy: [
-        { appointment: { startAt: 'asc' } },
-        { queuedAt: 'asc' },
-        { createdAt: 'asc' },
-      ],
     });
+    return this.sortQueueItems(items);
+  }
+
+  async listQueueForDoctor(actor: Actor) {
+    await this.expireQueuedItems(actor.id);
+    const items = await this.prisma.consultationQueueItem.findMany({
+      where: {
+        doctorUserId: actor.id,
+        status: {
+          in: [
+            ConsultationQueueStatus.accepted,
+            ConsultationQueueStatus.queued,
+            ConsultationQueueStatus.expired,
+          ],
+        },
+      },
+      include: { appointment: true },
+    });
+    return this.sortQueueItems(items);
   }
 
   startFromQueue(_actor: Actor, _queueId: string) {
@@ -292,19 +280,95 @@ export class ConsultationQueueService {
     throw new NotImplementedException('Consultation finalize not implemented');
   }
 
-  private isExpired(queue: {
-    status: ConsultationQueueStatus;
-    expiresAt: Date | null;
-  }) {
-    if (queue.status === ConsultationQueueStatus.expired) {
-      return true;
-    }
-    if (!queue.expiresAt) {
-      return false;
-    }
-    return (
-      queue.status === ConsultationQueueStatus.queued &&
-      queue.expiresAt.getTime() <= this.clock.now().getTime()
-    );
+  private async expireQueueById(id: string) {
+    const now = this.clock.now();
+    await this.prisma.consultationQueueItem.updateMany({
+      where: {
+        id,
+        status: ConsultationQueueStatus.queued,
+        expiresAt: { lte: now },
+      },
+      data: { status: ConsultationQueueStatus.expired },
+    });
+  }
+
+  private async expireQueuedItems(doctorUserId?: string) {
+    const now = this.clock.now();
+    await this.prisma.consultationQueueItem.updateMany({
+      where: {
+        status: ConsultationQueueStatus.queued,
+        expiresAt: { lte: now },
+        ...(doctorUserId ? { doctorUserId } : {}),
+      },
+      data: { status: ConsultationQueueStatus.expired },
+    });
+  }
+
+  private sortQueueItems(
+    items: Array<{
+      status: ConsultationQueueStatus;
+      appointment: { startAt: Date } | null;
+      queuedAt: Date | null;
+      createdAt: Date;
+    }>,
+  ) {
+    const now = this.clock.now();
+    const withPriority = items.map((item) => {
+      const queuedAt = item.queuedAt ?? item.createdAt;
+      const appointmentStart = item.appointment?.startAt ?? null;
+      const isOnTime =
+        appointmentStart &&
+        now >= new Date(appointmentStart.getTime() - 15 * 60 * 1000) &&
+        now <= new Date(appointmentStart.getTime() + 15 * 60 * 1000);
+      const isEarly =
+        appointmentStart &&
+        now < new Date(appointmentStart.getTime() - 15 * 60 * 1000);
+
+      let priority = 6;
+      if (item.status === ConsultationQueueStatus.accepted) {
+        priority = 0;
+      } else if (item.status === ConsultationQueueStatus.queued) {
+        if (appointmentStart && isOnTime) {
+          priority = 1;
+        } else if (appointmentStart && isEarly) {
+          priority = 2;
+        } else if (!appointmentStart) {
+          priority = 3;
+        } else {
+          priority = 4;
+        }
+      } else if (item.status === ConsultationQueueStatus.expired) {
+        priority = 5;
+      }
+
+      return {
+        item,
+        priority,
+        appointmentStart,
+        queuedAt,
+      };
+    });
+
+    withPriority.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+
+      if (a.appointmentStart && b.appointmentStart) {
+        const startDiff =
+          a.appointmentStart.getTime() - b.appointmentStart.getTime();
+        if (startDiff !== 0) {
+          return startDiff;
+        }
+      } else if (a.appointmentStart && !b.appointmentStart) {
+        return -1;
+      } else if (!a.appointmentStart && b.appointmentStart) {
+        return 1;
+      }
+
+      return a.queuedAt.getTime() - b.queuedAt.getTime();
+    });
+
+    return withPriority.map((entry) => entry.item);
   }
 }

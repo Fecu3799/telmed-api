@@ -250,6 +250,7 @@ model ConsultationQueueItem {
   acceptedAt    DateTime?              @map("accepted_at")
   cancelledAt   DateTime?              @map("cancelled_at")
   rejectedAt    DateTime?              @map("rejected_at")
+  rejectedBy    String?                @map("rejected_by")
   expiresAt     DateTime?              @map("expires_at")
   createdBy     String                 @map("created_by")
   acceptedBy    String?                @map("accepted_by")

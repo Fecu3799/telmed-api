@@ -13,24 +13,28 @@
 
 ## Roles & permissions
 - patient: crear queue, cancelar queue propia.
-- doctor: crear queue (si corresponde), aceptar/rechazar, iniciar, finalizar.
+- doctor: crear queue (si corresponde), aceptar/rechazar, cancelar, iniciar, finalizar.
 - admin: override total.
 
 ## Business rules
 1) Un solo queue activo por appointmentId si existe, o por (patientUserId, doctorUserId) si no hay appointment (urgencia).
 2) Si existe appointmentId: permitir queue solo dentro de [startAt - 15min, startAt + 15min].
-   - defaults: 15min/15min (documentado, no implementado).
 3) TTL queue: expiresAt = queuedAt + 15min (default, configurable a futuro).
-4) Doctor/admin pueden aceptar/rechazar; patient puede cancelar; admin override total.
+4) Doctor/admin pueden aceptar/rechazar; patient puede cancelar; doctor puede cancelar si es el owner; admin override total.
 5) Auditoria minima: createdBy, acceptedBy, cancelledBy; reason obligatorio en acciones manuales (reject/cancel por admin/doctor).
-6) Expiracion: si status=queued y now >= expiresAt, el item se considera expired.
-   - accept/cancel deben responder 409 con detail \"Queue entry expired\".
+6) Expiracion: si status=queued y now >= expiresAt, el item se marca como expired (persistente) al leer.
+   - accept/reject permiten estado expired; cancel solo permite status=queued.
 7) Ventana por appointmentId: si existe, validar `now` dentro de `[startAt - 15min, startAt + 15min]`.
    - fuera de ventana => 422 con detail \"Waiting room not available for this appointment time\".
 
 ## Queue ordering
-- Si existe appointmentId: ordenar por appointment.startAt asc y desempatar por queuedAt asc.
-- Si no hay appointmentId: ordenar por queuedAt asc.
+1) accepted
+2) queued appointments on-time (now dentro de [startAt - 15min, startAt + 15min])
+3) queued appointments early (now < startAt - 15min)
+4) queued walk-ins (sin appointmentId)
+5) expired
+- Dentro de appointments: startAt asc, luego queuedAt asc.
+- Walk-ins: queuedAt asc.
 - El doctor puede aceptar manualmente cualquiera, pero el orden por defecto debe ser consistente.
 
 ## Waiting-room window (appointment-linked)
@@ -105,6 +109,7 @@ Response 200:
   "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
   "createdBy": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
   "rejectedAt": "2025-01-05T13:53:00.000Z",
+  "rejectedBy": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
   "reason": "No disponible"
 }
 ```

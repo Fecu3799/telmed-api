@@ -109,7 +109,7 @@ export class ConsultationQueueController {
 
   @Post('consultations/queue/:queueId/cancel')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.patient, UserRole.admin)
+  @Roles(UserRole.patient, UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Cancel queue item' })
   @ApiBody({ type: CancelQueueDto })
