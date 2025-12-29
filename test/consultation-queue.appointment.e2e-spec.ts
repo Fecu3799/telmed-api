@@ -15,6 +15,8 @@ import { mapValidationErrors } from '../src/common/utils/validation-errors';
 import { CLOCK } from '../src/common/clock/clock';
 import { FakeClock } from './utils/fake-clock';
 
+const BASE_TIME = new Date('2025-01-05T10:00:00.000Z');
+
 function ensureEnv() {
   process.env.APP_ENV = process.env.APP_ENV ?? 'test';
   process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
@@ -124,7 +126,7 @@ describe('Consultation queue with appointment (time travel)', () => {
   beforeAll(async () => {
     ensureEnv();
 
-    fakeClock = new FakeClock(new Date());
+    fakeClock = new FakeClock(new Date(BASE_TIME));
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -158,6 +160,8 @@ describe('Consultation queue with appointment (time travel)', () => {
   });
 
   it('creates appointment with lead time and enqueues within window', async () => {
+    fakeClock.setNow(new Date(BASE_TIME));
+
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
