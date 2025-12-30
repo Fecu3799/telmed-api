@@ -3,6 +3,7 @@ import type {
   MercadoPagoPayment,
   MercadoPagoPreferenceInput,
   MercadoPagoPreferenceOutput,
+  MercadoPagoMerchantOrder,
 } from '../../src/modules/payments/mercadopago.client';
 
 export class FakeMercadoPagoClient implements MercadoPagoClient {
@@ -16,7 +17,8 @@ export class FakeMercadoPagoClient implements MercadoPagoClient {
     const providerPreferenceId = `pref_${this.preferences.length}`;
     return Promise.resolve({
       providerPreferenceId,
-      checkoutUrl: `https://mp.test/${providerPreferenceId}`,
+      initPoint: `https://mp.test/${providerPreferenceId}`,
+      sandboxInitPoint: `https://mp.test/${providerPreferenceId}`,
     });
   }
 
@@ -26,6 +28,12 @@ export class FakeMercadoPagoClient implements MercadoPagoClient {
       return Promise.reject(new Error('Payment not found'));
     }
     return Promise.resolve(payment);
+  }
+
+  getMerchantOrder(
+    _merchantOrderId: string,
+  ): Promise<MercadoPagoMerchantOrder> {
+    return Promise.resolve({ id: _merchantOrderId, payments: [] });
   }
 
   setPayment(paymentId: string, payment: MercadoPagoPayment) {

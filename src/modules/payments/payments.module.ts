@@ -9,6 +9,7 @@ import {
   MercadoPagoPayment,
   MercadoPagoPreferenceInput,
   MercadoPagoPreferenceOutput,
+  MercadoPagoMerchantOrder,
 } from './mercadopago.client';
 
 class MercadoPagoTestClient implements MercadoPagoClient {
@@ -18,7 +19,8 @@ class MercadoPagoTestClient implements MercadoPagoClient {
     const id = `pref_test_${randomUUID()}`;
     return Promise.resolve({
       providerPreferenceId: id,
-      checkoutUrl: `https://mp.test/${id}`,
+      initPoint: `https://mp.test/${id}`,
+      sandboxInitPoint: `https://mp.test/${id}`,
     });
   }
 
@@ -29,6 +31,15 @@ class MercadoPagoTestClient implements MercadoPagoClient {
       transaction_amount: 0,
       currency_id: 'ARS',
       metadata: {},
+    });
+  }
+
+  getMerchantOrder(
+    _merchantOrderId: string,
+  ): Promise<MercadoPagoMerchantOrder> {
+    return Promise.resolve({
+      id: `order_test_${randomUUID()}`,
+      payments: [],
     });
   }
 }

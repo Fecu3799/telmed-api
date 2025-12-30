@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -11,11 +13,13 @@ import {
   PaymentKind,
   PaymentProvider,
   PaymentStatus,
+  UserRole,
 } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import { CLOCK, type Clock } from '../../common/clock/clock';
+import type { Actor } from '../../common/types/actor.type';
 import { PrismaService } from '../../infra/prisma/prisma.service';
-import { MERCADOPAGO_CLIENT, signWebhookPayload } from './mercadopago.client';
+import { MERCADOPAGO_CLIENT } from './mercadopago.client';
 import type { MercadoPagoClient } from './mercadopago.client';
 
 const PAYMENT_TTL_MINUTES = 10;
@@ -36,6 +40,7 @@ export class PaymentsService {
     private readonly mercadoPago: MercadoPagoClient,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
+  private readonly logger = new Logger(PaymentsService.name);
 
   async createAppointmentPaymentPreference(input: {
     doctorUserId: string;
@@ -72,7 +77,7 @@ export class PaymentsService {
     return {
       paymentId,
       providerPreferenceId: preference.providerPreferenceId,
-      checkoutUrl: preference.checkoutUrl,
+      checkoutUrl: this.selectCheckoutUrl(preference),
       expiresAt,
     };
   }
@@ -100,6 +105,7 @@ export class PaymentsService {
       metadata: {
         paymentId,
         kind: PaymentKind.emergency,
+        queueId: input.queueItemId,
         queueItemId: input.queueItemId,
         doctorUserId: input.doctorUserId,
         patientUserId: input.patientUserId,
@@ -112,7 +118,7 @@ export class PaymentsService {
     return {
       paymentId,
       providerPreferenceId: preference.providerPreferenceId,
-      checkoutUrl: preference.checkoutUrl,
+      checkoutUrl: this.selectCheckoutUrl(preference),
       expiresAt,
     };
   }
@@ -197,6 +203,44 @@ export class PaymentsService {
     });
   }
 
+  async getPaymentById(actor: Actor, paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        provider: true,
+        kind: true,
+        status: true,
+        amountCents: true,
+        currency: true,
+        doctorUserId: true,
+        patientUserId: true,
+        appointmentId: true,
+        queueItemId: true,
+        checkoutUrl: true,
+        providerPreferenceId: true,
+        providerPaymentId: true,
+        expiresAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    if (actor.role === UserRole.doctor && payment.doctorUserId !== actor.id) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    if (actor.role !== UserRole.admin && actor.role !== UserRole.doctor) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    return payment;
+  }
+
   async expirePendingAppointmentPayments(scope: {
     doctorUserId?: string;
     patientUserId?: string;
@@ -229,23 +273,235 @@ export class PaymentsService {
     body: any;
     signature?: string | string[];
     requestId?: string | string[];
+    dataId?: string;
+    traceId?: string | null;
+    topic?: string;
+    queryId?: string;
+    resource?: string;
   }) {
     this.validateWebhookSignature(input);
 
-    const paymentId =
-      input.body?.data?.id ?? input.body?.id ?? input.body?.data?.payment_id;
+    const topic = input.topic ?? undefined;
+    const resource = input.resource ?? undefined;
+    const queryId = input.queryId ?? undefined;
 
-    if (!paymentId) {
-      throw new NotFoundException('Payment id not found in webhook');
+    if (
+      topic === 'merchant_order' ||
+      (resource && resource.includes('/merchant_orders/'))
+    ) {
+      const merchantOrderId =
+        queryId ?? this.extractMerchantOrderId(resource ?? '');
+      if (!merchantOrderId) {
+        this.logWebhookResult(input, 'skipped');
+        return { skipped: true };
+      }
+      const order = await this.mercadoPago.getMerchantOrder(
+        String(merchantOrderId),
+      );
+      const paymentIds =
+        order.payments?.map((payment) => String(payment.id)) ?? [];
+      if (paymentIds.length === 0) {
+        this.logWebhookResult(input, 'skipped');
+        return { skipped: true };
+      }
+      for (const mpPaymentId of paymentIds) {
+        await this.processPaymentId(mpPaymentId, input.traceId ?? null);
+      }
+      this.logWebhookResult(input, 'processed');
+      return { processed: true };
     }
 
-    const paymentInfo = await this.mercadoPago.getPayment(String(paymentId));
+    const paymentId =
+      queryId ??
+      input.dataId ??
+      input.body?.data?.id ??
+      input.body?.id ??
+      input.body?.data?.payment_id;
+
+    if (!paymentId) {
+      this.logWebhookResult(input, 'skipped');
+      return { skipped: true };
+    }
+
+    await this.processPaymentId(String(paymentId), input.traceId ?? null);
+    this.logWebhookResult(input, 'processed');
+    return { processed: true };
+  }
+
+  private mapMercadoPagoStatus(status: string): PaymentStatus {
+    switch (status) {
+      case 'approved':
+        return PaymentStatus.paid;
+      case 'pending':
+      case 'in_process':
+        return PaymentStatus.pending;
+      case 'rejected':
+      case 'cancelled':
+      case 'expired':
+        return PaymentStatus.failed;
+      default:
+        return PaymentStatus.failed;
+    }
+  }
+
+  private validateWebhookSignature(input: {
+    body: unknown;
+    signature?: string | string[];
+    requestId?: string | string[];
+    dataId?: string;
+    topic?: string;
+    queryId?: string;
+    resource?: string;
+  }) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const secret = this.config.getOrThrow<string>('MERCADOPAGO_WEBHOOK_SECRET');
+    const signatureHeader = Array.isArray(input.signature)
+      ? input.signature[0]
+      : input.signature;
+    const requestId = Array.isArray(input.requestId)
+      ? input.requestId[0]
+      : input.requestId;
+
+    const signatureParts = signatureHeader?.split(',') ?? [];
+    const tsPart = signatureParts.find((part) => part.startsWith('ts='));
+    const v1Part = signatureParts.find((part) => part.startsWith('v1='));
+    const ts = tsPart?.split('=')[1];
+    const v1 = v1Part?.split('=')[1];
+
+    const dataId =
+      input.dataId ??
+      input.queryId ??
+      (typeof input.body === 'object' && input.body !== null
+        ? (input.body as { data?: { id?: string } })?.data?.id
+        : undefined);
+
+    const manifest =
+      ts && dataId && requestId
+        ? `id:${dataId};request-id:${requestId};ts:${ts};`
+        : null;
+
+    const expected = manifest
+      ? createHmac('sha256', secret).update(manifest).digest('hex')
+      : null;
+
+    const expectedBuffer =
+      expected !== null ? Buffer.from(expected, 'utf8') : null;
+    const receivedBuffer = v1 !== undefined ? Buffer.from(v1, 'utf8') : null;
+
+    const matches =
+      expectedBuffer !== null &&
+      receivedBuffer !== null &&
+      expectedBuffer.length === receivedBuffer.length &&
+      timingSafeEqual(expectedBuffer, receivedBuffer);
+
+    if (!matches) {
+      if (!isProduction) {
+        this.logger.warn(
+          JSON.stringify({
+            dataId: dataId ?? null,
+            requestId: requestId ?? null,
+            ts: ts ?? null,
+            v1Received: v1 ?? null,
+            v1Expected: expected ?? null,
+            secretPrefix: secret.slice(0, 6),
+          }),
+        );
+        return;
+      }
+      throw new UnauthorizedException('Invalid webhook signature');
+    }
+  }
+
+  private selectCheckoutUrl(preference: {
+    initPoint: string;
+    sandboxInitPoint: string;
+  }) {
+    const mode =
+      this.config.get<'sandbox' | 'live'>('MERCADOPAGO_MODE') ??
+      (process.env.NODE_ENV === 'production' ? 'live' : 'sandbox');
+
+    return mode === 'live' ? preference.initPoint : preference.sandboxInitPoint;
+  }
+
+  private async resolveAccessToken(doctorUserId: string) {
+    const account = await this.prisma.doctorPaymentAccount.findUnique({
+      where: { doctorUserId },
+      select: { accessTokenEncrypted: true },
+    });
+
+    if (account?.accessTokenEncrypted) {
+      return account.accessTokenEncrypted;
+    }
+
+    return this.config.getOrThrow<string>('MERCADOPAGO_ACCESS_TOKEN');
+  }
+
+  private logWebhookDebug(paymentInfo: {
+    id?: string | number | null;
+    status?: string | null;
+    external_reference?: string | null;
+    metadata?: Record<string, string> | null;
+  }) {
+    const metadata = paymentInfo.metadata ?? {};
+    const payload = {
+      mpPaymentId: paymentInfo.id ?? null,
+      mpStatus: paymentInfo.status ?? null,
+      externalReference: paymentInfo.external_reference ?? null,
+      metadataPaymentId: metadata.paymentId ?? null,
+      metadataQueueId: metadata.queueId ?? null,
+    };
+    // Avoid throwing if logger is not configured.
+
+    console.info(JSON.stringify(payload));
+  }
+
+  private extractMerchantOrderId(resource: string) {
+    const parts = resource.split('/merchant_orders/');
+    if (parts.length < 2) {
+      return null;
+    }
+    const id = parts[1]?.split('?')[0];
+    return id || null;
+  }
+
+  private logWebhookResult(
+    input: {
+      topic?: string;
+      queryId?: string;
+      resource?: string;
+      traceId?: string | null;
+    },
+    result: 'processed' | 'skipped',
+  ) {
+    this.logger.log(
+      JSON.stringify({
+        traceId: input.traceId ?? null,
+        topic: input.topic ?? null,
+        queryId: input.queryId ?? null,
+        resource: input.resource ?? null,
+        result,
+      }),
+    );
+  }
+
+  private async processPaymentId(mpPaymentId: string, traceId: string | null) {
+    const paymentInfo = await this.mercadoPago.getPayment(String(mpPaymentId));
 
     const paymentRecordId =
-      paymentInfo.metadata?.paymentId ?? paymentInfo.external_reference;
+      paymentInfo.external_reference ?? paymentInfo.metadata?.paymentId;
 
     if (!paymentRecordId) {
-      throw new NotFoundException('Payment metadata missing');
+      if (process.env.NODE_ENV !== 'production') {
+        this.logWebhookDebug(paymentInfo);
+      }
+      this.logger.log(
+        JSON.stringify({
+          traceId,
+          mpPaymentId: paymentInfo.id ?? null,
+          status: 'not-found',
+        }),
+      );
+      return;
     }
 
     const existing = await this.prisma.payment.findUnique({
@@ -253,14 +509,24 @@ export class PaymentsService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Payment not found');
+      this.logger.log(
+        JSON.stringify({
+          traceId,
+          mpPaymentId: paymentInfo.id ?? null,
+          status: 'not-found',
+        }),
+      );
+      return;
     }
 
     if (existing.providerPaymentId) {
-      return existing;
+      return;
     }
 
     const mappedStatus = this.mapMercadoPagoStatus(paymentInfo.status);
+    if (process.env.NODE_ENV !== 'production') {
+      this.logWebhookDebug(paymentInfo);
+    }
 
     const updated = await this.prisma.payment.update({
       where: { id: existing.id },
@@ -283,8 +549,6 @@ export class PaymentsService {
         queuePaymentStatus = ConsultationQueuePaymentStatus.paid;
       } else if (mappedStatus === PaymentStatus.failed) {
         queuePaymentStatus = ConsultationQueuePaymentStatus.failed;
-      } else if (mappedStatus === PaymentStatus.expired) {
-        queuePaymentStatus = ConsultationQueuePaymentStatus.expired;
       }
 
       if (queuePaymentStatus) {
@@ -295,56 +559,12 @@ export class PaymentsService {
       }
     }
 
-    return updated;
-  }
-
-  private mapMercadoPagoStatus(status: string): PaymentStatus {
-    switch (status) {
-      case 'approved':
-        return PaymentStatus.paid;
-      case 'rejected':
-      case 'cancelled':
-        return PaymentStatus.failed;
-      case 'expired':
-        return PaymentStatus.expired;
-      default:
-        return PaymentStatus.failed;
-    }
-  }
-
-  private validateWebhookSignature(input: {
-    body: unknown;
-    signature?: string | string[];
-    requestId?: string | string[];
-  }) {
-    const secret = this.config.getOrThrow<string>('MERCADOPAGO_WEBHOOK_SECRET');
-    const signatureHeader = Array.isArray(input.signature)
-      ? input.signature[0]
-      : input.signature;
-    const requestId = Array.isArray(input.requestId)
-      ? input.requestId[0]
-      : input.requestId;
-
-    if (!signatureHeader || !requestId) {
-      throw new UnauthorizedException('Invalid webhook signature');
-    }
-
-    const expected = signWebhookPayload(secret, requestId, input.body);
-    if (signatureHeader !== expected) {
-      throw new UnauthorizedException('Invalid webhook signature');
-    }
-  }
-
-  private async resolveAccessToken(doctorUserId: string) {
-    const account = await this.prisma.doctorPaymentAccount.findUnique({
-      where: { doctorUserId },
-      select: { accessTokenEncrypted: true },
-    });
-
-    if (account?.accessTokenEncrypted) {
-      return account.accessTokenEncrypted;
-    }
-
-    return this.config.getOrThrow<string>('MERCADOPAGO_ACCESS_TOKEN');
+    this.logger.log(
+      JSON.stringify({
+        traceId,
+        mpPaymentId: paymentInfo.id ?? null,
+        status: updated.status,
+      }),
+    );
   }
 }

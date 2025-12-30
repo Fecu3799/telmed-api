@@ -31,7 +31,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { Actor } from '../../common/types/actor.type';
 import {
-  ConsultationDto,
+  ConsultationQueueConsultationDto,
   ConsultationQueueItemDto,
 } from './docs/consultation-queue.dto';
 import { ConsultationQueueService } from './consultation-queue.service';
@@ -212,7 +212,7 @@ export class ConsultationQueueController {
   @Roles(UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Start consultation from queue' })
-  @ApiCreatedResponse({ type: ConsultationDto })
+  @ApiCreatedResponse({ type: ConsultationQueueConsultationDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
@@ -231,7 +231,7 @@ export class ConsultationQueueController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Finalize consultation' })
   @ApiBody({ type: FinalizeConsultationDto })
-  @ApiOkResponse({ type: ConsultationDto })
+  @ApiOkResponse({ type: ConsultationQueueConsultationDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })

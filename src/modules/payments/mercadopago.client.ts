@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID, createHmac } from 'crypto';
 
@@ -15,7 +15,8 @@ export type MercadoPagoPreferenceInput = {
 
 export type MercadoPagoPreferenceOutput = {
   providerPreferenceId: string;
-  checkoutUrl: string;
+  initPoint: string;
+  sandboxInitPoint: string;
 };
 
 export type MercadoPagoPayment = {
@@ -29,6 +30,13 @@ export type MercadoPagoPayment = {
   collector_id?: string | number | null;
 };
 
+export type MercadoPagoMerchantOrder = {
+  id: string | number;
+  payments?: Array<{ id: string | number }>;
+  external_reference?: string | null;
+  preference_id?: string | null;
+};
+
 export interface MercadoPagoClient {
   createPreference(
     input: MercadoPagoPreferenceInput,
@@ -37,6 +45,10 @@ export interface MercadoPagoClient {
     paymentId: string,
     accessToken?: string | null,
   ): Promise<MercadoPagoPayment>;
+  getMerchantOrder(
+    merchantOrderId: string,
+    accessToken?: string | null,
+  ): Promise<MercadoPagoMerchantOrder>;
 }
 
 export const MERCADOPAGO_CLIENT = Symbol('MERCADOPAGO_CLIENT');
@@ -45,6 +57,8 @@ export const MERCADOPAGO_CLIENT = Symbol('MERCADOPAGO_CLIENT');
 export class MercadoPagoHttpClient implements MercadoPagoClient {
   private readonly baseUrl: string;
   private readonly defaultAccessToken: string;
+  private readonly notificationUrl?: string;
+  private readonly logger = new Logger(MercadoPagoHttpClient.name);
 
   constructor(private readonly config: ConfigService) {
     this.baseUrl =
@@ -53,6 +67,7 @@ export class MercadoPagoHttpClient implements MercadoPagoClient {
     this.defaultAccessToken = this.config.getOrThrow<string>(
       'MERCADOPAGO_ACCESS_TOKEN',
     );
+    this.notificationUrl = this.config.get<string>('MERCADOPAGO_WEBHOOK_URL');
   }
 
   async createPreference(
@@ -61,7 +76,7 @@ export class MercadoPagoHttpClient implements MercadoPagoClient {
     const accessToken = input.accessToken ?? this.defaultAccessToken;
     const url = `${this.baseUrl}/checkout/preferences`;
 
-    const body = {
+    const body: Record<string, unknown> = {
       items: [
         {
           title: input.title,
@@ -76,6 +91,9 @@ export class MercadoPagoHttpClient implements MercadoPagoClient {
       expiration_date_from: new Date().toISOString(),
       expiration_date_to: input.expiresAt.toISOString(),
     };
+    if (this.notificationUrl) {
+      body.notification_url = this.notificationUrl;
+    }
 
     const response = await this.fetchWithTimeout(url, {
       method: 'POST',
@@ -92,10 +110,23 @@ export class MercadoPagoHttpClient implements MercadoPagoClient {
       throw new Error(`MercadoPago create preference failed: ${errorText}`);
     }
 
-    const data = (await response.json()) as { id: string; init_point: string };
+    const data = (await response.json()) as {
+      id: string;
+      init_point: string;
+      sandbox_init_point: string;
+    };
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(
+        JSON.stringify({
+          providerPreferenceId: data.id,
+          notificationUrl: this.notificationUrl ?? null,
+        }),
+      );
+    }
     return {
       providerPreferenceId: data.id,
-      checkoutUrl: data.init_point,
+      initPoint: data.init_point,
+      sandboxInitPoint: data.sandbox_init_point,
     };
   }
 
@@ -121,6 +152,28 @@ export class MercadoPagoHttpClient implements MercadoPagoClient {
     return (await response.json()) as MercadoPagoPayment;
   }
 
+  async getMerchantOrder(
+    merchantOrderId: string,
+    accessToken?: string | null,
+  ): Promise<MercadoPagoMerchantOrder> {
+    const token = accessToken ?? this.defaultAccessToken;
+    const url = `${this.baseUrl}/merchant_orders/${merchantOrderId}`;
+
+    const response = await this.fetchWithTimeout(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`MercadoPago get merchant order failed: ${errorText}`);
+    }
+
+    return (await response.json()) as MercadoPagoMerchantOrder;
+  }
+
   private async fetchWithTimeout(
     url: string,
     init: RequestInit,
@@ -141,7 +194,16 @@ export function signWebhookPayload(
   secret: string,
   requestId: string,
   body: unknown,
+  ts: string = Math.floor(Date.now() / 1000).toString(),
 ) {
-  const payload = `${requestId}.${JSON.stringify(body)}`;
-  return createHmac('sha256', secret).update(payload).digest('hex');
+  const dataId =
+    typeof body === 'object' && body !== null
+      ? (body as { data?: { id?: string } })?.data?.id
+      : undefined;
+  if (!dataId) {
+    throw new Error('Missing data.id for webhook signature');
+  }
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+  const signature = createHmac('sha256', secret).update(manifest).digest('hex');
+  return `ts=${ts},v1=${signature}`;
 }

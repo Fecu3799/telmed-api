@@ -56,7 +56,7 @@ export class ConsultationQueueItemDto {
   reason?: string | null;
 }
 
-export class ConsultationDto {
+export class ConsultationQueueConsultationDto {
   @ApiProperty({ example: 'c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   id!: string;
 
