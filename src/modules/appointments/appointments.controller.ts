@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Query,
@@ -29,6 +30,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { Actor } from '../../common/types/actor.type';
 import { AppointmentDto } from './docs/appointment.dto';
+import { AppointmentWithPaymentDto } from './docs/appointment-payment.dto';
 import { AppointmentsResponseDto } from './docs/appointments-response.dto';
 import { AppointmentsService } from './appointments.service';
 import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
@@ -47,15 +49,23 @@ export class AppointmentsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create appointment' })
   @ApiBody({ type: CreateAppointmentDto })
-  @ApiCreatedResponse({ type: AppointmentDto })
+  @ApiCreatedResponse({ type: AppointmentWithPaymentDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async create(@CurrentUser() actor: Actor, @Body() dto: CreateAppointmentDto) {
-    return this.appointmentsService.createAppointment(actor, dto);
+  async create(
+    @CurrentUser() actor: Actor,
+    @Body() dto: CreateAppointmentDto,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+  ) {
+    return this.appointmentsService.createAppointment(
+      actor,
+      dto,
+      idempotencyKey,
+    );
   }
 
   @Get('patients/me/appointments')

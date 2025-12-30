@@ -30,6 +30,10 @@ function ensureEnv() {
   process.env.JWT_REFRESH_TTL_SECONDS =
     process.env.JWT_REFRESH_TTL_SECONDS ?? '2592000';
   process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  process.env.MERCADOPAGO_ACCESS_TOKEN =
+    process.env.MERCADOPAGO_ACCESS_TOKEN ?? 'test_mp_access_token';
+  process.env.MERCADOPAGO_WEBHOOK_SECRET =
+    process.env.MERCADOPAGO_WEBHOOK_SECRET ?? 'test_mp_webhook_secret';
   process.env.DATABASE_URL =
     process.env.DATABASE_URL_TEST ?? process.env.DATABASE_URL ?? '';
 
@@ -226,9 +230,10 @@ describe('Appointments (e2e)', () => {
       .send({ doctorUserId, startAt })
       .expect(201);
 
-    expect(response.body.doctorUserId).toBe(doctorUserId);
-    expect(response.body.patientUserId).toBe(patientUserId);
-    expect(response.body.status).toBe('scheduled');
+    expect(response.body.appointment.doctorUserId).toBe(doctorUserId);
+    expect(response.body.appointment.patientUserId).toBe(patientUserId);
+    expect(response.body.appointment.status).toBe('pending_payment');
+    expect(response.body.payment.checkoutUrl).toBeTruthy();
   });
 
   it('admin creates an appointment for a patient', async () => {
@@ -263,7 +268,7 @@ describe('Appointments (e2e)', () => {
       .send({ doctorUserId, patientUserId, startAt })
       .expect(201);
 
-    expect(response.body.patientUserId).toBe(patientUserId);
+    expect(response.body.appointment.patientUserId).toBe(patientUserId);
   });
 
   it('rejects overlapping appointments for the same doctor', async () => {
@@ -481,7 +486,7 @@ describe('Appointments (e2e)', () => {
       .send({ doctorUserId, startAt: `${dateStr}T09:00:00.000Z` })
       .expect(201);
 
-    const appointmentId = createResponse.body.id as string;
+    const appointmentId = createResponse.body.appointment.id as string;
 
     const intruder = await registerAndLogin(app, 'patient');
     await createPatientProfile(app, intruder.accessToken);

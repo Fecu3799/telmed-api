@@ -9,12 +9,17 @@ import {
 } from '@nestjs/common';
 import {
   AppointmentStatus,
+  ConsultationQueuePaymentStatus,
   ConsultationQueueStatus,
+  PaymentKind,
+  PaymentProvider,
+  PaymentStatus,
   UserRole,
 } from '@prisma/client';
 import type { Actor } from '../../common/types/actor.type';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
+import { PaymentsService } from '../payments/payments.service';
 import { CancelQueueDto } from './dto/cancel-queue.dto';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
@@ -24,6 +29,7 @@ import { RejectQueueDto } from './dto/reject-queue.dto';
 export class ConsultationQueueService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly paymentsService: PaymentsService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -75,8 +81,11 @@ export class ConsultationQueueService {
         );
       }
 
-      if (appointment.status !== AppointmentStatus.scheduled) {
-        throw new ConflictException('Appointment not scheduled');
+      if (
+        appointment.status !== AppointmentStatus.scheduled &&
+        appointment.status !== AppointmentStatus.confirmed
+      ) {
+        throw new ConflictException('Appointment not confirmed');
       }
 
       const now = this.clock.now();
@@ -100,6 +109,7 @@ export class ConsultationQueueService {
               ConsultationQueueStatus.accepted,
             ],
           },
+          closedAt: null,
         },
         select: { id: true },
       });
@@ -112,12 +122,14 @@ export class ConsultationQueueService {
         where: {
           doctorUserId,
           patientUserId,
+          appointmentId: null,
           status: {
             in: [
               ConsultationQueueStatus.queued,
               ConsultationQueueStatus.accepted,
             ],
           },
+          closedAt: null,
         },
         select: { id: true },
       });
@@ -136,6 +148,7 @@ export class ConsultationQueueService {
         doctorUserId,
         patientUserId,
         appointmentId: dto.appointmentId ?? null,
+        paymentStatus: ConsultationQueuePaymentStatus.not_started,
         createdBy: actor.id,
         queuedAt,
         expiresAt,
@@ -180,6 +193,13 @@ export class ConsultationQueueService {
       queue.status !== ConsultationQueueStatus.expired
     ) {
       throw new ConflictException('Queue status invalid');
+    }
+
+    if (
+      !queue.appointmentId &&
+      queue.paymentStatus !== ConsultationQueuePaymentStatus.paid
+    ) {
+      throw new ConflictException('Payment required');
     }
 
     return this.prisma.consultationQueueItem.update({
@@ -231,7 +251,121 @@ export class ConsultationQueueService {
     });
   }
 
-  async listQueueForAdmin() {
+  async closeQueue(actor: Actor, queueId: string) {
+    const queue = await this.getQueueById(actor, queueId);
+
+    if (queue.status !== ConsultationQueueStatus.accepted) {
+      throw new ConflictException('Queue status invalid');
+    }
+
+    return this.prisma.consultationQueueItem.update({
+      where: { id: queueId },
+      data: {
+        closedAt: this.clock.now(),
+      },
+    });
+  }
+
+  async enablePaymentForQueue(
+    actor: Actor,
+    queueId: string,
+    idempotencyKey?: string | null,
+  ) {
+    const queue = await this.getQueueById(actor, queueId);
+
+    if (queue.appointmentId) {
+      throw new ConflictException('Payment only allowed for emergencies');
+    }
+
+    if (queue.status !== ConsultationQueueStatus.queued) {
+      throw new ConflictException('Queue status invalid');
+    }
+
+    if (
+      queue.paymentStatus !== ConsultationQueuePaymentStatus.not_started &&
+      queue.paymentStatus !== ConsultationQueuePaymentStatus.failed &&
+      queue.paymentStatus !== ConsultationQueuePaymentStatus.expired
+    ) {
+      throw new ConflictException('Payment already in progress');
+    }
+
+    const doctorProfile = await this.prisma.doctorProfile.findUnique({
+      where: { userId: queue.doctorUserId },
+      select: { priceCents: true, currency: true },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor not found');
+    }
+
+    const existingPayment = await this.paymentsService.findIdempotentPayment(
+      queue.patientUserId,
+      PaymentKind.emergency,
+      idempotencyKey,
+    );
+
+    if (existingPayment) {
+      if (
+        existingPayment.queueItemId &&
+        existingPayment.queueItemId !== queue.id
+      ) {
+        throw new ConflictException('Idempotency key already used');
+      }
+      await this.prisma.consultationQueueItem.update({
+        where: { id: queue.id },
+        data: {
+          paymentStatus: ConsultationQueuePaymentStatus.pending,
+          paymentExpiresAt: existingPayment.expiresAt,
+        },
+      });
+
+      return this.toPaymentResponse(existingPayment);
+    }
+
+    const preference =
+      await this.paymentsService.createEmergencyPaymentPreference({
+        doctorUserId: queue.doctorUserId,
+        patientUserId: queue.patientUserId,
+        queueItemId: queue.id,
+        amountCents: doctorProfile.priceCents,
+        currency: doctorProfile.currency,
+        idempotencyKey,
+      });
+
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const createdPayment = await tx.payment.create({
+        data: {
+          id: preference.paymentId,
+          provider: PaymentProvider.mercadopago,
+          kind: PaymentKind.emergency,
+          status: PaymentStatus.pending,
+          amountCents: doctorProfile.priceCents,
+          currency: doctorProfile.currency,
+          doctorUserId: queue.doctorUserId,
+          patientUserId: queue.patientUserId,
+          queueItemId: queue.id,
+          checkoutUrl: preference.checkoutUrl,
+          providerPreferenceId: preference.providerPreferenceId,
+          idempotencyKey: idempotencyKey ?? null,
+          expiresAt: preference.expiresAt,
+        },
+      });
+
+      await tx.consultationQueueItem.update({
+        where: { id: queue.id },
+        data: {
+          paymentStatus: ConsultationQueuePaymentStatus.pending,
+          paymentExpiresAt: preference.expiresAt,
+        },
+      });
+
+      return createdPayment;
+    });
+
+    return this.toPaymentResponse(payment);
+  }
+
+  async listQueueForAdmin(includeClosed = false) {
     await this.expireQueuedItems();
     const items = await this.prisma.consultationQueueItem.findMany({
       where: {
@@ -242,13 +376,14 @@ export class ConsultationQueueService {
             ConsultationQueueStatus.expired,
           ],
         },
+        ...(includeClosed ? {} : { closedAt: null }),
       },
       include: { appointment: true },
     });
     return this.sortQueueItems(items);
   }
 
-  async listQueueForDoctor(actor: Actor) {
+  async listQueueForDoctor(actor: Actor, includeClosed = false) {
     await this.expireQueuedItems(actor.id);
     const items = await this.prisma.consultationQueueItem.findMany({
       where: {
@@ -260,6 +395,7 @@ export class ConsultationQueueService {
             ConsultationQueueStatus.expired,
           ],
         },
+        ...(includeClosed ? {} : { closedAt: null }),
       },
       include: { appointment: true },
     });
@@ -287,6 +423,7 @@ export class ConsultationQueueService {
         id,
         status: ConsultationQueueStatus.queued,
         expiresAt: { lte: now },
+        closedAt: null,
       },
       data: { status: ConsultationQueueStatus.expired },
     });
@@ -299,6 +436,7 @@ export class ConsultationQueueService {
         status: ConsultationQueueStatus.queued,
         expiresAt: { lte: now },
         ...(doctorUserId ? { doctorUserId } : {}),
+        closedAt: null,
       },
       data: { status: ConsultationQueueStatus.expired },
     });
@@ -370,5 +508,19 @@ export class ConsultationQueueService {
     });
 
     return withPriority.map((entry) => entry.item);
+  }
+
+  private toPaymentResponse(payment: {
+    id: string;
+    checkoutUrl: string;
+    expiresAt: Date;
+    status: string;
+  }) {
+    return {
+      id: payment.id,
+      checkoutUrl: payment.checkoutUrl,
+      expiresAt: payment.expiresAt,
+      status: payment.status,
+    };
   }
 }

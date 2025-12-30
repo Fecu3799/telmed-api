@@ -27,8 +27,11 @@ export class ConsultationsService {
       throw new NotFoundException('Appointment not found');
     }
 
-    if (appointment.status !== AppointmentStatus.scheduled) {
-      throw new ConflictException('Appointment is not scheduled');
+    if (
+      appointment.status !== AppointmentStatus.scheduled &&
+      appointment.status !== AppointmentStatus.confirmed
+    ) {
+      throw new ConflictException('Appointment is not confirmed');
     }
 
     if (actor.role === UserRole.doctor) {

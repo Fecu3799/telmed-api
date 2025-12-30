@@ -51,6 +51,8 @@ jobs:
       JWT_REFRESH_TTL_SECONDS: '2592000'
 
       REDIS_URL: 'redis://localhost:6379'
+      MERCADOPAGO_ACCESS_TOKEN: 'ci_mp_access_token'
+      MERCADOPAGO_WEBHOOK_SECRET: 'ci_mp_webhook_secret'
 
     steps:
       - uses: actions/checkout@v4

@@ -6,11 +6,19 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { AppointmentStatus, UserRole } from '@prisma/client';
+import {
+  AppointmentStatus,
+  PaymentKind,
+  PaymentProvider,
+  PaymentStatus,
+  UserRole,
+} from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { DoctorAvailabilityService } from '../doctors/availability/doctor-availability.service';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
 import type { Actor } from '../../common/types/actor.type';
+import { PaymentsService } from '../payments/payments.service';
 import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -24,10 +32,15 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly availabilityService: DoctorAvailabilityService,
+    private readonly paymentsService: PaymentsService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  async createAppointment(actor: Actor, dto: CreateAppointmentDto) {
+  async createAppointment(
+    actor: Actor,
+    dto: CreateAppointmentDto,
+    idempotencyKey?: string | null,
+  ) {
     const startAt = this.parseDateTime(dto.startAt);
     const doctorUserId = dto.doctorUserId;
 
@@ -52,7 +65,12 @@ export class AppointmentsService {
 
     const doctorProfile = await this.prisma.doctorProfile.findUnique({
       where: { userId: doctorUserId },
-      select: { userId: true, isActive: true },
+      select: {
+        userId: true,
+        isActive: true,
+        priceCents: true,
+        currency: true,
+      },
     });
     if (!doctorProfile || !doctorProfile.isActive) {
       throw new NotFoundException('Doctor not found');
@@ -64,6 +82,31 @@ export class AppointmentsService {
     });
     if (!patientProfile) {
       throw new NotFoundException('Patient not found');
+    }
+
+    const existingPayment = await this.paymentsService.findIdempotentPayment(
+      patientUserId,
+      PaymentKind.appointment,
+      idempotencyKey,
+    );
+    if (existingPayment) {
+      if (!existingPayment.appointmentId) {
+        throw new ConflictException('Idempotency key already used');
+      }
+      const existingAppointment =
+        await this.prisma.appointment.findUniqueOrThrow({
+          where: { id: existingPayment.appointmentId },
+        });
+      if (
+        existingAppointment.doctorUserId !== doctorUserId ||
+        existingAppointment.patientUserId !== patientUserId
+      ) {
+        throw new ConflictException('Idempotency key already used');
+      }
+      return {
+        appointment: existingAppointment,
+        payment: this.toPaymentResponse(existingPayment),
+      };
     }
 
     const config =
@@ -78,33 +121,84 @@ export class AppointmentsService {
       endAt,
     );
 
-    return this.prisma.$transaction(async (tx) => {
-      const overlap = await tx.appointment.findFirst({
-        where: {
-          doctorUserId,
-          status: AppointmentStatus.scheduled,
-          startAt: { lt: endAt },
-          endAt: { gt: startAt },
-        },
-        select: { id: true },
+    const appointmentId = randomUUID();
+
+    const preference =
+      await this.paymentsService.createAppointmentPaymentPreference({
+        doctorUserId,
+        patientUserId,
+        appointmentId,
+        amountCents: doctorProfile.priceCents,
+        currency: doctorProfile.currency,
+        idempotencyKey,
       });
 
-      if (overlap) {
-        throw new ConflictException('Appointment overlaps');
-      }
+    const [appointment, payment] = await this.prisma.$transaction(
+      async (tx) => {
+        const overlap = await tx.appointment.findFirst({
+          where: {
+            doctorUserId,
+            status: {
+              in: [
+                AppointmentStatus.pending_payment,
+                AppointmentStatus.confirmed,
+                AppointmentStatus.scheduled,
+              ],
+            },
+            startAt: { lt: endAt },
+            endAt: { gt: startAt },
+          },
+          select: { id: true },
+        });
 
-      return tx.appointment.create({
-        data: {
-          doctorUserId,
-          patientUserId,
-          startAt,
-          endAt,
-        },
-      });
-    });
+        if (overlap) {
+          throw new ConflictException('Appointment overlaps');
+        }
+
+        const createdAppointment = await tx.appointment.create({
+          data: {
+            id: appointmentId,
+            doctorUserId,
+            patientUserId,
+            startAt,
+            endAt,
+            status: AppointmentStatus.pending_payment,
+            paymentExpiresAt: preference.expiresAt,
+          },
+        });
+
+        const createdPayment = await tx.payment.create({
+          data: {
+            id: preference.paymentId,
+            provider: PaymentProvider.mercadopago,
+            kind: PaymentKind.appointment,
+            status: PaymentStatus.pending,
+            amountCents: doctorProfile.priceCents,
+            currency: doctorProfile.currency,
+            doctorUserId,
+            patientUserId,
+            appointmentId: appointmentId,
+            checkoutUrl: preference.checkoutUrl,
+            providerPreferenceId: preference.providerPreferenceId,
+            idempotencyKey: idempotencyKey ?? null,
+            expiresAt: preference.expiresAt,
+          },
+        });
+
+        return [createdAppointment, createdPayment] as const;
+      },
+    );
+
+    return {
+      appointment,
+      payment: this.toPaymentResponse(payment),
+    };
   }
 
   async listPatientAppointments(actor: Actor, query: ListAppointmentsQueryDto) {
+    await this.paymentsService.expirePendingAppointmentPayments({
+      patientUserId: actor.id,
+    });
     const { from, to } = this.parseRange(query.from, query.to);
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
 
@@ -127,6 +221,9 @@ export class AppointmentsService {
   }
 
   async listDoctorAppointments(actor: Actor, query: ListAppointmentsQueryDto) {
+    await this.paymentsService.expirePendingAppointmentPayments({
+      doctorUserId: actor.id,
+    });
     const { from, to } = this.parseRange(query.from, query.to);
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
 
@@ -149,6 +246,7 @@ export class AppointmentsService {
   }
 
   async listAdminAppointments(query: AdminAppointmentsQueryDto) {
+    await this.paymentsService.expirePendingAppointmentPayments({});
     const { from, to } = this.parseRange(query.from, query.to);
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
 
@@ -238,6 +336,20 @@ export class AppointmentsService {
         hasNextPage,
         hasPrevPage,
       },
+    };
+  }
+
+  private toPaymentResponse(payment: {
+    id: string;
+    checkoutUrl: string;
+    expiresAt: Date;
+    status: string;
+  }) {
+    return {
+      id: payment.id,
+      checkoutUrl: payment.checkoutUrl,
+      expiresAt: payment.expiresAt,
+      status: payment.status,
     };
   }
 }

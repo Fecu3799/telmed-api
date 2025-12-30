@@ -26,6 +26,10 @@ function ensureEnv() {
   process.env.JWT_REFRESH_TTL_SECONDS =
     process.env.JWT_REFRESH_TTL_SECONDS ?? '2592000';
   process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  process.env.MERCADOPAGO_ACCESS_TOKEN =
+    process.env.MERCADOPAGO_ACCESS_TOKEN ?? 'test_mp_access_token';
+  process.env.MERCADOPAGO_WEBHOOK_SECRET =
+    process.env.MERCADOPAGO_WEBHOOK_SECRET ?? 'test_mp_webhook_secret';
   process.env.DATABASE_URL =
     process.env.DATABASE_URL_TEST ?? process.env.DATABASE_URL ?? '';
 

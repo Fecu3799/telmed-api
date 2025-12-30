@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -8,6 +17,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
@@ -25,6 +35,7 @@ import {
   ConsultationQueueItemDto,
 } from './docs/consultation-queue.dto';
 import { ConsultationQueueService } from './consultation-queue.service';
+import { PaymentCheckoutDto } from '../payments/docs/payment.dto';
 import { CancelQueueDto } from './dto/cancel-queue.dto';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
@@ -128,20 +139,72 @@ export class ConsultationQueueController {
     return this.consultationQueueService.cancelQueue(actor, queueId, dto);
   }
 
+  @Post('consultations/queue/:queueId/close')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor, UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Close queue item' })
+  @ApiOkResponse({ type: ConsultationQueueItemDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  closeQueue(@CurrentUser() actor: Actor, @Param('queueId') queueId: string) {
+    return this.consultationQueueService.closeQueue(actor, queueId);
+  }
+
+  @Post('consultations/queue/:queueId/enable-payment')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor, UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Enable payment for emergency queue item' })
+  @ApiOkResponse({ type: PaymentCheckoutDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  enablePayment(
+    @CurrentUser() actor: Actor,
+    @Param('queueId') queueId: string,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+  ) {
+    return this.consultationQueueService.enablePaymentForQueue(
+      actor,
+      queueId,
+      idempotencyKey,
+    );
+  }
+
   @Get('consultations/queue')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List queue items (doctor/admin)' })
+  @ApiQuery({
+    name: 'includeClosed',
+    required: false,
+    type: Boolean,
+    description: 'Include closed queue items',
+  })
   @ApiOkResponse({ type: [ConsultationQueueItemDto] })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  listQueue(@CurrentUser() actor: Actor) {
+  listQueue(
+    @CurrentUser() actor: Actor,
+    @Query('includeClosed') includeClosed?: string,
+  ) {
+    const includeClosedFlag = includeClosed === 'true';
     if (actor.role === UserRole.admin) {
-      return this.consultationQueueService.listQueueForAdmin();
+      return this.consultationQueueService.listQueueForAdmin(includeClosedFlag);
     }
-    return this.consultationQueueService.listQueueForDoctor(actor);
+    return this.consultationQueueService.listQueueForDoctor(
+      actor,
+      includeClosedFlag,
+    );
   }
 
   @Post('consultations/from-queue/:queueId/start')

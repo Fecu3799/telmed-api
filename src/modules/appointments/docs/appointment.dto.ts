@@ -14,10 +14,10 @@ export class AppointmentDto {
   @ApiProperty({ example: '2025-01-05T14:00:00.000Z' })
   startAt!: string;
 
-  @ApiProperty({ example: '2025-01-05T15:00:00.000Z' })
+  @ApiProperty({ example: '2025-01-05T14:20:00.000Z' })
   endAt!: string;
 
-  @ApiProperty({ example: 'scheduled', enum: AppointmentStatus })
+  @ApiProperty({ example: 'pending_payment', enum: AppointmentStatus })
   status!: AppointmentStatus;
 
   @ApiProperty({ example: '2025-01-01T12:00:00.000Z' })
@@ -28,4 +28,7 @@ export class AppointmentDto {
 
   @ApiPropertyOptional({ example: 'No puedo asistir' })
   cancellationReason?: string | null;
+
+  @ApiPropertyOptional({ example: '2025-01-05T14:10:00.000Z' })
+  paymentExpiresAt?: string | null;
 }

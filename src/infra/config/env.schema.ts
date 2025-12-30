@@ -25,6 +25,8 @@ function formatEnvValue(value: unknown): string {
   }
 }
 
+const isTestEnv = process.env.NODE_ENV === 'test';
+
 export const envSchema = z.object({
   APP_ENV: z.string().default('local'),
   APP_PORT: z.coerce.number().int().positive().default(3000),
@@ -38,6 +40,13 @@ export const envSchema = z.object({
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive(),
 
   REDIS_URL: z.string().min(1),
+  MERCADOPAGO_ACCESS_TOKEN: isTestEnv
+    ? z.string().default('test_mp_access_token')
+    : z.string().min(1),
+  MERCADOPAGO_WEBHOOK_SECRET: isTestEnv
+    ? z.string().default('test_mp_webhook_secret')
+    : z.string().min(1),
+  MERCADOPAGO_BASE_URL: z.string().min(1).optional(),
   THROTTLE_ENABLED: z
     .preprocess((value) => {
       if (value === undefined || value === null || value === '') {

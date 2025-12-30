@@ -19,8 +19,17 @@ export class ConsultationQueueItemDto {
   @ApiPropertyOptional({ example: '2025-01-05T13:56:00.000Z' })
   rejectedAt?: string | null;
 
+  @ApiPropertyOptional({ example: '2025-01-05T14:10:00.000Z' })
+  closedAt?: string | null;
+
   @ApiProperty({ example: '2025-01-05T14:05:00.000Z' })
   expiresAt!: string;
+
+  @ApiProperty({ example: 'not_started' })
+  paymentStatus!: string;
+
+  @ApiPropertyOptional({ example: '2025-01-05T14:05:00.000Z' })
+  paymentExpiresAt?: string | null;
 
   @ApiPropertyOptional({ example: 'e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   appointmentId?: string | null;

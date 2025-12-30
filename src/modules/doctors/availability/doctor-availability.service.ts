@@ -10,6 +10,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { PaymentsService } from '../../payments/payments.service';
 import { CLOCK, type Clock } from '../../../common/clock/clock';
 import { AvailabilityExceptionCreateDto } from './dto/availability-exception-create.dto';
 import { AvailabilityExceptionsQueryDto } from './dto/availability-exceptions-query.dto';
@@ -33,6 +34,7 @@ export class DoctorAvailabilityService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CLOCK) private readonly clock: Clock,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   async listRules(userId: string) {
@@ -140,6 +142,10 @@ export class DoctorAvailabilityService {
     if (!doctor || doctor.role !== 'doctor' || doctor.status !== 'active') {
       throw new NotFoundException('Doctor not found');
     }
+
+    await this.paymentsService.expirePendingAppointmentPayments({
+      doctorUserId,
+    });
 
     const config = await this.getSchedulingConfig(doctorUserId);
 

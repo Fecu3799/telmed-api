@@ -7,20 +7,23 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  email          String          @unique
-  passwordHash   String          @map("password_hash")
-  role           UserRole
-  status         UserStatus      @default(active)
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  displayName    String?         @map("display_name")
-  doctorProfile  DoctorProfile?
-  patientProfile PatientProfile?
-  sessions       Session[]
-  availabilityRules DoctorAvailabilityRule[]
+  id                     String                        @id @default(uuid())
+  email                  String                        @unique
+  passwordHash           String                        @map("password_hash")
+  role                   UserRole
+  status                 UserStatus                    @default(active)
+  createdAt              DateTime                      @default(now()) @map("created_at")
+  updatedAt              DateTime                      @updatedAt @map("updated_at")
+  displayName            String?                       @map("display_name")
   availabilityExceptions DoctorAvailabilityException[]
-  schedulingConfig DoctorSchedulingConfig?
+  availabilityRules      DoctorAvailabilityRule[]
+  doctorPaymentAccount   DoctorPaymentAccount?
+  doctorProfile          DoctorProfile?
+  schedulingConfig       DoctorSchedulingConfig?
+  patientProfile         PatientProfile?
+  paymentsAsDoctor       Payment[]                     @relation("PaymentDoctor")
+  paymentsAsPatient      Payment[]                     @relation("PaymentPatient")
+  sessions               Session[]
 
   @@map("users")
 }
@@ -43,22 +46,20 @@ model Session {
 }
 
 model PatientProfile {
-  userId    String   @id @map("user_id")
-  firstName String   @map("first_name")
-  lastName  String   @map("last_name")
-  phone     String?
+  userId       String        @id @map("user_id")
+  firstName    String        @map("first_name")
+  lastName     String        @map("last_name")
+  phone        String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
   appointments Appointment[]
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("patient_profiles")
 }
 
 model DoctorProfile {
   userId             String                    @id @map("user_id")
-  firstName          String?                   @map("first_name")
-  lastName           String?                   @map("last_name")
   bio                String?
   currency           String                    @default("ARS")
   isActive           Boolean                   @default(true) @map("is_active")
@@ -67,18 +68,20 @@ model DoctorProfile {
   updatedAt          DateTime                  @updatedAt @map("updated_at")
   location           Unsupported("geography")? @map("location")
   priceCents         Int                       @map("price_cents")
+  firstName          String?                   @map("first_name")
+  lastName           String?                   @map("last_name")
+  appointments       Appointment[]
   user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   specialties        DoctorSpecialty[]
-  appointments       Appointment[]
 
   @@map("doctor_profiles")
 }
 
 model Specialty {
-  id      String            @id @default(uuid())
-  name    String            @unique
-  isActive Boolean          @default(true) @map("is_active")
-  doctors DoctorSpecialty[]
+  id       String            @id @default(uuid())
+  name     String            @unique
+  isActive Boolean           @default(true) @map("is_active")
+  doctors  DoctorSpecialty[]
 
   @@map("specialties")
 }
@@ -101,6 +104,162 @@ model spatial_ref_sys {
   auth_srid Int?
   srtext    String? @db.VarChar(2048)
   proj4text String? @db.VarChar(2048)
+}
+
+model DoctorAvailabilityRule {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  dayOfWeek Int      @map("day_of_week")
+  startTime String   @map("start_time")
+  endTime   String   @map("end_time")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("doctor_availability_rules")
+}
+
+model DoctorAvailabilityException {
+  id            String                          @id @default(uuid())
+  userId        String                          @map("user_id")
+  date          DateTime                        @map("date") @db.Date
+  type          DoctorAvailabilityExceptionType
+  customWindows Json?                           @map("custom_windows")
+  createdAt     DateTime                        @default(now()) @map("created_at")
+  updatedAt     DateTime                        @updatedAt @map("updated_at")
+  user          User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("doctor_availability_exceptions")
+}
+
+model DoctorSchedulingConfig {
+  userId              String   @id @map("user_id")
+  slotDurationMinutes Int      @default(60) @map("slot_duration_minutes")
+  leadTimeHours       Int      @default(24) @map("lead_time_hours")
+  horizonDays         Int      @default(60) @map("horizon_days")
+  timezone            String   @default("America/Argentina/Buenos_Aires")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_scheduling_configs")
+}
+
+model Appointment {
+  id                 String                 @id @default(uuid())
+  doctorUserId       String                 @map("doctor_user_id")
+  patientUserId      String                 @map("patient_user_id")
+  startAt            DateTime               @map("start_at")
+  endAt              DateTime               @map("end_at")
+  status             AppointmentStatus      @default(pending_payment)
+  createdAt          DateTime               @default(now()) @map("created_at")
+  cancelledAt        DateTime?              @map("cancelled_at")
+  cancellationReason String?                @map("cancellation_reason")
+  paymentExpiresAt   DateTime?              @map("payment_expires_at")
+  doctor             DoctorProfile          @relation(fields: [doctorUserId], references: [userId], onDelete: Cascade)
+  patient            PatientProfile         @relation(fields: [patientUserId], references: [userId], onDelete: Cascade)
+  queueItems         ConsultationQueueItem?
+  consultation       Consultation?
+  payment            Payment?               @relation("AppointmentPayment")
+
+  @@index([doctorUserId, startAt])
+  @@index([patientUserId, startAt])
+  @@map("appointments")
+}
+
+model Consultation {
+  id            String             @id @default(uuid())
+  appointmentId String             @unique @map("appointment_id")
+  doctorUserId  String             @map("doctor_user_id")
+  patientUserId String             @map("patient_user_id")
+  status        ConsultationStatus @default(draft)
+  startedAt     DateTime?          @map("started_at")
+  closedAt      DateTime?          @map("closed_at")
+  summary       String?
+  notes         String?
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  appointment   Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([doctorUserId, createdAt])
+  @@index([patientUserId, createdAt])
+  @@map("consultations")
+}
+
+model Payment {
+  id                   String                 @id @default(uuid())
+  provider             PaymentProvider
+  kind                 PaymentKind
+  status               PaymentStatus          @default(pending)
+  amountCents          Int                    @map("amount_cents")
+  currency             String                 @default("ARS")
+  doctorUserId         String                 @map("doctor_user_id")
+  patientUserId        String                 @map("patient_user_id")
+  appointmentId        String?                @unique @map("appointment_id")
+  queueItemId          String?                @unique @map("queue_item_id")
+  checkoutUrl          String                 @map("checkout_url")
+  providerPreferenceId String                 @unique @map("provider_preference_id")
+  providerPaymentId    String?                @unique @map("provider_payment_id")
+  idempotencyKey       String?                @map("idempotency_key")
+  expiresAt            DateTime               @map("expires_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  appointment          Appointment?           @relation("AppointmentPayment", fields: [appointmentId], references: [id], onDelete: Cascade)
+  doctor               User                   @relation("PaymentDoctor", fields: [doctorUserId], references: [id], onDelete: Cascade)
+  patient              User                   @relation("PaymentPatient", fields: [patientUserId], references: [id], onDelete: Cascade)
+  queueItem            ConsultationQueueItem? @relation("QueueItemPayment", fields: [queueItemId], references: [id], onDelete: Cascade)
+
+  @@unique([patientUserId, idempotencyKey, kind])
+  @@index([doctorUserId, status])
+  @@index([patientUserId, status])
+  @@map("payments")
+}
+
+model DoctorPaymentAccount {
+  doctorUserId          String          @id @map("doctor_user_id")
+  provider              PaymentProvider
+  mpUserId              String?         @map("mp_user_id")
+  collectorId           String?         @map("collector_id")
+  accessTokenEncrypted  String          @map("access_token_encrypted")
+  refreshTokenEncrypted String          @map("refresh_token_encrypted")
+  tokenExpiresAt        DateTime        @map("token_expires_at")
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
+  doctor                User            @relation(fields: [doctorUserId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_payment_accounts")
+}
+
+model ConsultationQueueItem {
+  id               String                         @id @default(uuid())
+  status           ConsultationQueueStatus        @default(queued)
+  doctorUserId     String                         @map("doctor_user_id")
+  patientUserId    String                         @map("patient_user_id")
+  appointmentId    String?                        @unique @map("appointment_id")
+  queuedAt         DateTime                       @default(now()) @map("queued_at")
+  acceptedAt       DateTime?                      @map("accepted_at")
+  cancelledAt      DateTime?                      @map("cancelled_at")
+  rejectedAt       DateTime?                      @map("rejected_at")
+  closedAt         DateTime?                      @map("closed_at")
+  expiresAt        DateTime?                      @map("expires_at")
+  createdBy        String                         @map("created_by")
+  acceptedBy       String?                        @map("accepted_by")
+  cancelledBy      String?                        @map("cancelled_by")
+  reason           String?
+  createdAt        DateTime                       @default(now()) @map("created_at")
+  updatedAt        DateTime                       @updatedAt @map("updated_at")
+  rejectedBy       String?                        @map("rejected_by")
+  paymentStatus    ConsultationQueuePaymentStatus @default(not_started) @map("payment_status")
+  paymentExpiresAt DateTime?                      @map("payment_expires_at")
+  appointment      Appointment?                   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  payment          Payment?                       @relation("QueueItemPayment")
+
+  @@index([doctorUserId, status])
+  @@index([patientUserId, status])
+  @@map("consultation_queue_items")
 }
 
 enum UserRole {
@@ -136,6 +295,33 @@ enum AppointmentStatus {
   scheduled
   cancelled
   completed
+  pending_payment
+  confirmed
+}
+
+enum PaymentProvider {
+  mercadopago
+}
+
+enum PaymentKind {
+  appointment
+  emergency
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  expired
+  refunded
+}
+
+enum ConsultationQueuePaymentStatus {
+  not_started
+  pending
+  paid
+  failed
+  expired
 }
 
 enum ConsultationStatus {
@@ -150,116 +336,4 @@ enum ConsultationQueueStatus {
   cancelled
   rejected
   expired
-}
-
-model DoctorAvailabilityRule {
-  id        String  @id @default(uuid())
-  userId    String  @map("user_id")
-  dayOfWeek Int     @map("day_of_week")
-  startTime String  @map("start_time")
-  endTime   String  @map("end_time")
-  isActive  Boolean @default(true) @map("is_active")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("doctor_availability_rules")
-}
-
-model DoctorAvailabilityException {
-  id            String                        @id @default(uuid())
-  userId        String                        @map("user_id")
-  date          DateTime                      @db.Date @map("date")
-  type          DoctorAvailabilityExceptionType
-  customWindows Json?                         @map("custom_windows")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, date])
-  @@map("doctor_availability_exceptions")
-}
-
-model DoctorSchedulingConfig {
-  userId              String  @id @map("user_id")
-  slotDurationMinutes Int     @default(60) @map("slot_duration_minutes")
-  leadTimeHours       Int     @default(24) @map("lead_time_hours")
-  horizonDays         Int     @default(60) @map("horizon_days")
-  timezone            String  @default("America/Argentina/Buenos_Aires")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("doctor_scheduling_configs")
-}
-
-model Appointment {
-  id                 String            @id @default(uuid())
-  doctorUserId       String            @map("doctor_user_id")
-  patientUserId      String            @map("patient_user_id")
-  startAt            DateTime          @map("start_at")
-  endAt              DateTime          @map("end_at")
-  status             AppointmentStatus @default(scheduled)
-  createdAt          DateTime          @default(now()) @map("created_at")
-  cancelledAt        DateTime?         @map("cancelled_at")
-  cancellationReason String?           @map("cancellation_reason")
-  doctor             DoctorProfile     @relation(fields: [doctorUserId], references: [userId], onDelete: Cascade)
-  patient            PatientProfile    @relation(fields: [patientUserId], references: [userId], onDelete: Cascade)
-  consultation       Consultation?
-  queueItems         ConsultationQueueItem[]
-
-  @@index([doctorUserId, startAt])
-  @@index([patientUserId, startAt])
-  @@map("appointments")
-}
-
-model Consultation {
-  id             String             @id @default(uuid())
-  appointmentId  String             @unique @map("appointment_id")
-  doctorUserId   String             @map("doctor_user_id")
-  patientUserId  String             @map("patient_user_id")
-  status         ConsultationStatus @default(draft)
-  startedAt      DateTime?          @map("started_at")
-  closedAt       DateTime?          @map("closed_at")
-  summary        String?
-  notes          String?
-  createdAt      DateTime           @default(now()) @map("created_at")
-  updatedAt      DateTime           @updatedAt @map("updated_at")
-  appointment    Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-
-  @@index([doctorUserId, createdAt])
-  @@index([patientUserId, createdAt])
-  @@map("consultations")
-}
-
-model ConsultationQueueItem {
-  id            String                 @id @default(uuid())
-  status        ConsultationQueueStatus @default(queued)
-  doctorUserId  String                 @map("doctor_user_id")
-  patientUserId String                 @map("patient_user_id")
-  appointmentId String?                @unique @map("appointment_id")
-  appointment   Appointment?           @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  queuedAt      DateTime               @default(now()) @map("queued_at")
-  acceptedAt    DateTime?              @map("accepted_at")
-  cancelledAt   DateTime?              @map("cancelled_at")
-  rejectedAt    DateTime?              @map("rejected_at")
-  rejectedBy    String?                @map("rejected_by")
-  expiresAt     DateTime?              @map("expires_at")
-  createdBy     String                 @map("created_by")
-  acceptedBy    String?                @map("accepted_by")
-  cancelledBy   String?                @map("cancelled_by")
-  reason        String?
-  createdAt     DateTime               @default(now()) @map("created_at")
-  updatedAt     DateTime               @updatedAt @map("updated_at")
-
-  @@index([doctorUserId, status])
-  @@index([patientUserId, status])
-  @@map("consultation_queue_items")
 }

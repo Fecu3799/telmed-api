@@ -33,6 +33,10 @@ function ensureEnv() {
   process.env.JWT_REFRESH_TTL_SECONDS =
     process.env.JWT_REFRESH_TTL_SECONDS ?? '2592000';
   process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  process.env.MERCADOPAGO_ACCESS_TOKEN =
+    process.env.MERCADOPAGO_ACCESS_TOKEN ?? 'test_mp_access_token';
+  process.env.MERCADOPAGO_WEBHOOK_SECRET =
+    process.env.MERCADOPAGO_WEBHOOK_SECRET ?? 'test_mp_webhook_secret';
   process.env.DATABASE_URL =
     process.env.DATABASE_URL_TEST ?? process.env.DATABASE_URL ?? '';
 
@@ -137,6 +141,7 @@ async function getAvailabilitySlots(
 
 async function createAppointment(
   app: INestApplication,
+  prisma: PrismaService,
   token: string,
   doctorUserId: string,
   startAt: string,
@@ -147,7 +152,14 @@ async function createAppointment(
     .send({ doctorUserId, startAt })
     .expect(201);
 
-  return response.body as { id: string };
+  const appointment = response.body.appointment as { id: string };
+
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: { status: 'confirmed' },
+  });
+
+  return appointment;
 }
 
 describe('Consultation queue (e2e)', () => {
@@ -201,14 +213,30 @@ describe('Consultation queue (e2e)', () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
+    await setAvailabilityRules(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
     await createPatientProfile(app, patient.accessToken);
 
+    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+    const slots = await getAvailabilitySlots(app, doctorUserId, from, to);
+    expect(slots.length).toBeGreaterThan(0);
+
+    const appointment = await createAppointment(
+      app,
+      prisma,
+      patient.accessToken,
+      doctorUserId,
+      slots[0].startAt,
+    );
+
+    fakeClock.setNow(new Date(Date.parse(slots[0].startAt) - 5 * 60 * 1000));
+
     const createResponse = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ doctorUserId })
+      .send({ doctorUserId, appointmentId: appointment.id })
       .expect(201);
 
     const queueId = createResponse.body.id as string;
@@ -246,14 +274,30 @@ describe('Consultation queue (e2e)', () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
+    await setAvailabilityRules(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
     await createPatientProfile(app, patient.accessToken);
 
+    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+    const slots = await getAvailabilitySlots(app, doctorUserId, from, to);
+    expect(slots.length).toBeGreaterThan(0);
+
+    const appointment = await createAppointment(
+      app,
+      prisma,
+      patient.accessToken,
+      doctorUserId,
+      slots[0].startAt,
+    );
+
+    fakeClock.setNow(new Date(Date.parse(slots[0].startAt) - 5 * 60 * 1000));
+
     const createResponse = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ doctorUserId })
+      .send({ doctorUserId, appointmentId: appointment.id })
       .expect(201);
 
     const queueId = createResponse.body.id as string;
@@ -311,6 +355,7 @@ describe('Consultation queue (e2e)', () => {
 
     const appointmentOk = await createAppointment(
       app,
+      prisma,
       patient.accessToken,
       doctorUserId,
       slots[0].startAt,
@@ -318,6 +363,7 @@ describe('Consultation queue (e2e)', () => {
 
     const appointmentEarly = await createAppointment(
       app,
+      prisma,
       patient.accessToken,
       doctorUserId,
       slots[1].startAt,
@@ -325,6 +371,7 @@ describe('Consultation queue (e2e)', () => {
 
     const appointmentLate = await createAppointment(
       app,
+      prisma,
       patient.accessToken,
       doctorUserId,
       slots[2].startAt,
@@ -359,19 +406,35 @@ describe('Consultation queue (e2e)', () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
+    await setAvailabilityRules(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
     await createPatientProfile(app, patient.accessToken);
 
+    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+    const slots = await getAvailabilitySlots(app, doctorUserId, from, to);
+    expect(slots.length).toBeGreaterThan(2);
+
+    const appointment = await createAppointment(
+      app,
+      prisma,
+      patient.accessToken,
+      doctorUserId,
+      slots[0].startAt,
+    );
+
+    fakeClock.setNow(new Date(Date.parse(slots[0].startAt) - 5 * 60 * 1000));
+
     const createResponse = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ doctorUserId })
+      .send({ doctorUserId, appointmentId: appointment.id })
       .expect(201);
 
     const queueId = createResponse.body.id as string;
 
-    fakeClock.setNow(new Date(BASE_TIME.getTime() + 16 * 60 * 1000));
+    fakeClock.setNow(new Date(Date.parse(slots[0].startAt) + 20 * 60 * 1000));
 
     const listResponse = await request(httpServer(app))
       .get('/api/v1/consultations/queue')
@@ -400,15 +463,26 @@ describe('Consultation queue (e2e)', () => {
     const otherPatient = await registerAndLogin(app, 'patient');
     await createPatientProfile(app, otherPatient.accessToken);
 
+    fakeClock.setNow(new Date(BASE_TIME));
+    const secondAppointment = await createAppointment(
+      app,
+      prisma,
+      otherPatient.accessToken,
+      doctorUserId,
+      slots[1].startAt,
+    );
+
+    fakeClock.setNow(new Date(Date.parse(slots[1].startAt) - 5 * 60 * 1000));
+
     const secondQueue = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${otherPatient.accessToken}`)
-      .send({ doctorUserId })
+      .send({ doctorUserId, appointmentId: secondAppointment.id })
       .expect(201);
 
     const secondQueueId = secondQueue.body.id as string;
 
-    fakeClock.setNow(new Date(BASE_TIME.getTime() + 32 * 60 * 1000));
+    fakeClock.setNow(new Date(Date.parse(slots[1].startAt) + 20 * 60 * 1000));
 
     await request(httpServer(app))
       .get(`/api/v1/consultations/queue/${secondQueueId}`)
@@ -452,6 +526,7 @@ describe('Consultation queue (e2e)', () => {
 
     const appointmentAccepted = await createAppointment(
       app,
+      prisma,
       patientA.accessToken,
       doctorUserId,
       slots[0].startAt,
@@ -459,6 +534,7 @@ describe('Consultation queue (e2e)', () => {
 
     const appointmentEarly = await createAppointment(
       app,
+      prisma,
       patientB.accessToken,
       doctorUserId,
       slots[2].startAt,
@@ -466,6 +542,7 @@ describe('Consultation queue (e2e)', () => {
 
     const appointmentOnTime = await createAppointment(
       app,
+      prisma,
       patientE.accessToken,
       doctorUserId,
       slots[1].startAt,
@@ -552,12 +629,12 @@ describe('Consultation queue (e2e)', () => {
     await request(httpServer(app))
       .post(`/api/v1/consultations/queue/${queueId}/accept`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(201);
+      .expect(409);
 
     await request(httpServer(app))
       .post(`/api/v1/consultations/queue/${queueId}/cancel`)
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .send({ reason: 'No puedo asistir' })
-      .expect(409);
+      .expect(201);
   });
 });

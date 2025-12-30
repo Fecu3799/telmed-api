@@ -10,11 +10,17 @@ import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { CLOCK } from '../src/common/clock/clock';
 import { ProblemDetailsFilter } from '../src/common/filters/problem-details.filter';
 import { mapValidationErrors } from '../src/common/utils/validation-errors';
-import { CLOCK } from '../src/common/clock/clock';
+import {
+  MERCADOPAGO_CLIENT,
+  signWebhookPayload,
+} from '../src/modules/payments/mercadopago.client';
 import { PrismaService } from '../src/infra/prisma/prisma.service';
+import { resetDb } from './helpers/reset-db';
 import { FakeClock } from './utils/fake-clock';
+import { FakeMercadoPagoClient } from './utils/fake-mercadopago-client';
 
 const BASE_TIME = new Date('2025-01-05T10:00:00.000Z');
 
@@ -124,21 +130,25 @@ async function setAvailabilityRules(app: INestApplication, token: string) {
     .expect(200);
 }
 
-describe('Consultation queue with appointment (time travel)', () => {
+describe('Payments (e2e)', () => {
   let app: INestApplication<App>;
-  let fakeClock: FakeClock;
   let prisma: PrismaService;
+  let fakeClock: FakeClock;
+  let fakeMp: FakeMercadoPagoClient;
 
   beforeAll(async () => {
     ensureEnv();
 
     fakeClock = new FakeClock(new Date(BASE_TIME));
+    fakeMp = new FakeMercadoPagoClient();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(CLOCK)
       .useValue(fakeClock)
+      .overrideProvider(MERCADOPAGO_CLIENT)
+      .useValue(fakeMp)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -162,13 +172,16 @@ describe('Consultation queue with appointment (time travel)', () => {
     prisma = app.get(PrismaService);
   });
 
+  beforeEach(async () => {
+    await resetDb(prisma);
+    fakeClock.setNow(new Date(BASE_TIME));
+  });
+
   afterAll(async () => {
     await app.close();
   });
 
-  it('creates appointment with lead time and enqueues within window', async () => {
-    fakeClock.setNow(new Date(BASE_TIME));
-
+  it('creates appointment payment and confirms on webhook', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
@@ -188,46 +201,163 @@ describe('Consultation queue with appointment (time travel)', () => {
     const startAt = availability.body.items[0]?.startAt as string;
     expect(startAt).toBeTruthy();
 
-    const appointment = await request(httpServer(app))
+    const createAppointment = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .set('Idempotency-Key', 'idemp-appointment-1')
+      .send({ doctorUserId, startAt })
+      .expect(201);
+
+    const appointmentId = createAppointment.body.appointment.id as string;
+    const paymentId = createAppointment.body.payment.id as string;
+
+    fakeMp.setPayment('mp_1', {
+      id: 'mp_1',
+      status: 'approved',
+      transaction_amount: 1200,
+      currency_id: 'ARS',
+      metadata: { paymentId },
+    });
+
+    const requestId = 'req_webhook_1';
+    const body = { data: { id: 'mp_1' } };
+    const signature = signWebhookPayload(
+      process.env.MERCADOPAGO_WEBHOOK_SECRET as string,
+      requestId,
+      body,
+    );
+
+    await request(httpServer(app))
+      .post('/api/v1/payments/webhooks/mercadopago')
+      .set('x-request-id', requestId)
+      .set('x-signature', signature)
+      .send(body)
+      .expect(200);
+
+    const list = await request(httpServer(app))
+      .get('/api/v1/patients/me/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .query({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        page: 1,
+        limit: 10,
+      })
+      .expect(200);
+
+    const confirmed = list.body.items.find(
+      (item: { id: string }) => item.id === appointmentId,
+    );
+    expect(confirmed.status).toBe('confirmed');
+  });
+
+  it('expires pending payment on read and cancels appointment', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    await createDoctorProfile(app, doctor.accessToken);
+    await setAvailabilityRules(app, doctor.accessToken);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patient.accessToken);
+
+    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+
+    const availability = await request(httpServer(app))
+      .get(`/api/v1/doctors/${doctorUserId}/availability`)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const startAt = availability.body.items[0]?.startAt as string;
+
+    await request(httpServer(app))
       .post('/api/v1/appointments')
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .send({ doctorUserId, startAt })
       .expect(201);
 
-    const appointmentId = appointment.body.appointment.id as string;
+    fakeClock.setNow(new Date(BASE_TIME.getTime() + 11 * 60 * 1000));
 
-    await prisma.appointment.update({
-      where: { id: appointmentId },
-      data: { status: 'confirmed' },
-    });
+    const list = await request(httpServer(app))
+      .get('/api/v1/patients/me/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .query({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        page: 1,
+        limit: 10,
+      })
+      .expect(200);
 
-    const windowTime = new Date(Date.parse(startAt) - 5 * 60 * 1000);
-    fakeClock.setNow(windowTime);
+    expect(list.body.items[0].status).toBe('cancelled');
+  });
+
+  it('enables emergency payment and allows accept after paid', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    await createDoctorProfile(app, doctor.accessToken);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientProfile(app, patient.accessToken);
 
     const queue = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ appointmentId, doctorUserId })
+      .send({ doctorUserId })
       .expect(201);
 
-    expect(queue.body.appointmentId).toBe(appointmentId);
+    const queueId = queue.body.id as string;
 
-    const list = await request(httpServer(app))
-      .get('/api/v1/consultations/queue')
+    const enable = await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/enable-payment`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(200);
+      .set('Idempotency-Key', 'idemp-queue-1')
+      .expect(201);
 
-    expect(
-      list.body.some(
-        (item: { appointmentId: string }) =>
-          item.appointmentId === appointmentId,
-      ),
-    ).toBe(true);
+    const paymentId = enable.body.id as string;
+
+    fakeMp.setPayment('mp_2', {
+      id: 'mp_2',
+      status: 'approved',
+      transaction_amount: 1200,
+      currency_id: 'ARS',
+      metadata: { paymentId },
+    });
+
+    const requestId = 'req_webhook_2';
+    const body = { data: { id: 'mp_2' } };
+    const signature = signWebhookPayload(
+      process.env.MERCADOPAGO_WEBHOOK_SECRET as string,
+      requestId,
+      body,
+    );
 
     await request(httpServer(app))
+      .post('/api/v1/payments/webhooks/mercadopago')
+      .set('x-request-id', requestId)
+      .set('x-signature', signature)
+      .send(body)
+      .expect(200);
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/accept`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/close`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    const queueNoPayment = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ appointmentId, doctorUserId })
+      .send({ doctorUserId })
+      .expect(201);
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueNoPayment.body.id}/accept`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
       .expect(409);
   });
 });

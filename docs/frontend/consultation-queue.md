@@ -36,6 +36,7 @@
 - Dentro de appointments: startAt asc, luego queuedAt asc.
 - Walk-ins: queuedAt asc.
 - El doctor puede aceptar manualmente cualquiera, pero el orden por defecto debe ser consistente.
+- Emergencias: `paymentStatus` debe ser `paid` para aceptar.
 
 ## Waiting-room window (appointment-linked)
 - Si existe appointmentId: permitir crear queue solo si `now` esta en `[startAt - 15min, startAt + 15min]`.
@@ -136,6 +137,29 @@ Response 200:
 }
 ```
 
+### POST /api/v1/consultations/queue/:queueId/close
+Status: 200, 409 si estado invalido.
+Response 200:
+```json
+{
+  "id": "q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
+  "status": "accepted",
+  "closedAt": "2025-01-05T14:10:00.000Z"
+}
+```
+
+### POST /api/v1/consultations/queue/:queueId/enable-payment
+Status: 200, 409 si estado invalido.
+Response 200:
+```json
+{
+  "id": "pay_9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
+  "checkoutUrl": "https://www.mercadopago.com/init-point",
+  "expiresAt": "2025-01-05T14:05:00.000Z",
+  "status": "pending"
+}
+```
+
 ### POST /api/v1/consultations/from-queue/:queueId/start
 Status: 201.
 Response 201:
@@ -201,6 +225,7 @@ Response 200:
     "status": "queued",
     "queuedAt": "2025-01-05T13:50:00.000Z",
     "expiresAt": "2025-01-05T14:05:00.000Z",
+    "closedAt": null,
     "appointmentId": "e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
     "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
     "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",

@@ -61,6 +61,7 @@ Problem Details example:
 ## Consultation queue
 
 - Waiting room contract: `docs/frontend/consultation-queue.md`
+- Payments MVP: `docs/payments.md`
 
 ## Examples
 
