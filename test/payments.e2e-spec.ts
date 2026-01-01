@@ -303,7 +303,7 @@ describe('Payments (e2e)', () => {
     const queue = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ doctorUserId })
+      .send({ doctorUserId, reason: 'Dolor agudo' })
       .expect(201);
 
     const queueId = queue.body.id as string;
@@ -352,7 +352,7 @@ describe('Payments (e2e)', () => {
     const queueNoPayment = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ doctorUserId })
+      .send({ doctorUserId, reason: 'Dolor agudo' })
       .expect(201);
 
     await request(httpServer(app))

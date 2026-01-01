@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import {
   AppointmentStatus,
+  ConsultationQueueEntryType,
   ConsultationQueuePaymentStatus,
   ConsultationQueueStatus,
   PaymentKind,
@@ -36,6 +37,10 @@ export class ConsultationQueueService {
   async createQueue(actor: Actor, dto: CreateQueueDto) {
     let doctorUserId = dto.doctorUserId;
     let patientUserId = dto.patientUserId;
+    // Entry type is derived from appointment presence, never from input.
+    const entryType = dto.appointmentId
+      ? ConsultationQueueEntryType.appointment
+      : ConsultationQueueEntryType.emergency;
 
     if (actor.role === UserRole.patient) {
       patientUserId = actor.id;
@@ -45,6 +50,10 @@ export class ConsultationQueueService {
 
     if (!patientUserId) {
       throw new UnprocessableEntityException('patientUserId is required');
+    }
+
+    if (entryType === ConsultationQueueEntryType.emergency && !dto.reason) {
+      throw new UnprocessableEntityException('reason is required');
     }
 
     const doctorProfile = await this.prisma.doctorProfile.findUnique({
@@ -63,9 +72,18 @@ export class ConsultationQueueService {
       throw new NotFoundException('Patient not found');
     }
 
+    let appointmentReason: string | null = null;
     if (dto.appointmentId) {
       const appointment = await this.prisma.appointment.findUnique({
         where: { id: dto.appointmentId },
+        select: {
+          id: true,
+          doctorUserId: true,
+          patientUserId: true,
+          status: true,
+          startAt: true,
+          reason: true,
+        },
       });
 
       if (!appointment) {
@@ -87,6 +105,7 @@ export class ConsultationQueueService {
       ) {
         throw new ConflictException('Appointment not confirmed');
       }
+      appointmentReason = appointment.reason ?? null;
 
       const now = this.clock.now();
       const startAt = appointment.startAt;
@@ -141,14 +160,24 @@ export class ConsultationQueueService {
 
     const queuedAt = this.clock.now();
     const expiresAt = new Date(queuedAt.getTime() + 15 * 60 * 1000);
+    const paymentStatus =
+      entryType === ConsultationQueueEntryType.appointment
+        ? ConsultationQueuePaymentStatus.not_required
+        : ConsultationQueuePaymentStatus.not_started;
+    const reason =
+      entryType === ConsultationQueueEntryType.appointment
+        ? (dto.reason ?? appointmentReason ?? null)
+        : (dto.reason ?? null);
 
     return this.prisma.consultationQueueItem.create({
       data: {
         status: ConsultationQueueStatus.queued,
+        entryType,
         doctorUserId,
         patientUserId,
         appointmentId: dto.appointmentId ?? null,
-        paymentStatus: ConsultationQueuePaymentStatus.not_started,
+        paymentStatus,
+        reason,
         createdBy: actor.id,
         queuedAt,
         expiresAt,
@@ -196,8 +225,8 @@ export class ConsultationQueueService {
     }
 
     if (
-      !queue.appointmentId &&
-      queue.paymentStatus !== ConsultationQueuePaymentStatus.paid
+      queue.paymentStatus !== ConsultationQueuePaymentStatus.paid &&
+      queue.paymentStatus !== ConsultationQueuePaymentStatus.not_required
     ) {
       throw new ConflictException('Payment required');
     }
@@ -273,7 +302,7 @@ export class ConsultationQueueService {
   ) {
     const queue = await this.getQueueById(actor, queueId);
 
-    if (queue.appointmentId) {
+    if (queue.entryType === ConsultationQueueEntryType.appointment) {
       throw new ConflictException('Payment only allowed for emergencies');
     }
 
@@ -343,6 +372,7 @@ export class ConsultationQueueService {
           currency: doctorProfile.currency,
           doctorUserId: queue.doctorUserId,
           patientUserId: queue.patientUserId,
+          appointmentId: null,
           queueItemId: queue.id,
           checkoutUrl: preference.checkoutUrl,
           providerPreferenceId: preference.providerPreferenceId,

@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsUUID,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 
 export class CreateQueueDto {
   @ApiPropertyOptional({ example: 'e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
@@ -15,4 +21,13 @@ export class CreateQueueDto {
   @IsOptional()
   @IsUUID()
   patientUserId?: string;
+
+  @ApiPropertyOptional({
+    example: 'Dolor agudo en el pecho',
+    description: 'Requerido si no se envía appointmentId (emergency).',
+  })
+  @ValidateIf((dto) => !dto.appointmentId)
+  @IsString()
+  @MinLength(2)
+  reason?: string;
 }

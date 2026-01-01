@@ -164,9 +164,11 @@ export class AppointmentsService {
             endAt,
             status: AppointmentStatus.pending_payment,
             paymentExpiresAt: preference.expiresAt,
+            reason: dto.reason ?? null,
           },
         });
 
+        // Payment.kind invariants: appointment must reference appointmentId only.
         const createdPayment = await tx.payment.create({
           data: {
             id: preference.paymentId,
@@ -178,6 +180,7 @@ export class AppointmentsService {
             doctorUserId,
             patientUserId,
             appointmentId: appointmentId,
+            queueItemId: null,
             checkoutUrl: preference.checkoutUrl,
             providerPreferenceId: preference.providerPreferenceId,
             idempotencyKey: idempotencyKey ?? null,

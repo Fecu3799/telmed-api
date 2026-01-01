@@ -154,6 +154,7 @@ model Appointment {
   patientUserId      String                 @map("patient_user_id")
   startAt            DateTime               @map("start_at")
   endAt              DateTime               @map("end_at")
+  reason             String?                @map("reason")
   status             AppointmentStatus      @default(pending_payment)
   createdAt          DateTime               @default(now()) @map("created_at")
   cancelledAt        DateTime?              @map("cancelled_at")
@@ -236,6 +237,7 @@ model DoctorPaymentAccount {
 model ConsultationQueueItem {
   id               String                         @id @default(uuid())
   status           ConsultationQueueStatus        @default(queued)
+  entryType        ConsultationQueueEntryType     @default(emergency) @map("entry_type")
   doctorUserId     String                         @map("doctor_user_id")
   patientUserId    String                         @map("patient_user_id")
   appointmentId    String?                        @unique @map("appointment_id")
@@ -318,10 +320,16 @@ enum PaymentStatus {
 
 enum ConsultationQueuePaymentStatus {
   not_started
+  not_required
   pending
   paid
   failed
   expired
+}
+
+enum ConsultationQueueEntryType {
+  appointment
+  emergency
 }
 
 enum ConsultationStatus {

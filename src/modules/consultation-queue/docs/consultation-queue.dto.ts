@@ -7,6 +7,9 @@ export class ConsultationQueueItemDto {
   @ApiProperty({ example: 'queued' })
   status!: string;
 
+  @ApiProperty({ example: 'appointment' })
+  entryType!: string;
+
   @ApiProperty({ example: '2025-01-05T13:50:00.000Z' })
   queuedAt!: string;
 

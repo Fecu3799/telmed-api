@@ -22,10 +22,13 @@
 3) TTL queue: expiresAt = queuedAt + 15min (default, configurable a futuro).
 4) Doctor/admin pueden aceptar/rechazar; patient puede cancelar; doctor puede cancelar si es el owner; admin override total.
 5) Auditoria minima: createdBy, acceptedBy, cancelledBy; reason obligatorio en acciones manuales (reject/cancel por admin/doctor).
-6) Expiracion: si status=queued y now >= expiresAt, el item se marca como expired (persistente) al leer.
+6) `entryType` se deriva del backend: appointmentId -> appointment, sin appointmentId -> emergency.
+7) Si `entryType=appointment` entonces `paymentStatus=not_required`.
+8) Si `entryType=emergency` entonces `reason` es obligatorio.
+9) Expiracion: si status=queued y now >= expiresAt, el item se marca como expired (persistente) al leer.
    - accept/reject permiten estado expired; cancel solo permite status=queued.
-7) Ventana por appointmentId: si existe, validar `now` dentro de `[startAt - 15min, startAt + 15min]`.
-   - fuera de ventana => 422 con detail \"Waiting room not available for this appointment time\".
+10) Ventana por appointmentId: si existe, validar `now` dentro de `[startAt - 15min, startAt + 15min]`.
+    - fuera de ventana => 422 con detail \"Waiting room not available for this appointment time\".
 
 ## Queue ordering
 1) accepted
@@ -56,23 +59,28 @@ Request:
 {
   "appointmentId": "e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
   "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
-  "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc"
+  "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
+  "reason": "Dolor agudo en el pecho"
 }
 ```
 Notas:
 - `appointmentId` es opcional para consultas de urgencia.
 - Si `appointmentId` existe, se valida la ventana ±15min.
+- Si no hay `appointmentId`, `reason` es obligatorio.
 Response 201:
 ```json
 {
   "id": "q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
   "status": "queued",
+  "entryType": "appointment",
+  "paymentStatus": "not_required",
   "queuedAt": "2025-01-05T13:50:00.000Z",
   "expiresAt": "2025-01-05T14:05:00.000Z",
   "appointmentId": "e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
   "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
   "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
-  "createdBy": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc"
+  "createdBy": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
+  "reason": "Control anual"
 }
 ```
 
@@ -150,6 +158,8 @@ Response 200:
 
 ### POST /api/v1/consultations/queue/:queueId/enable-payment
 Status: 200, 409 si estado invalido.
+Notas:
+- Solo aplica a `entryType=emergency`. Si es `appointment`, responde 409.
 Response 200:
 ```json
 {
@@ -223,13 +233,16 @@ Response 200:
   {
     "id": "q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
     "status": "queued",
+    "entryType": "emergency",
+    "paymentStatus": "pending",
     "queuedAt": "2025-01-05T13:50:00.000Z",
     "expiresAt": "2025-01-05T14:05:00.000Z",
     "closedAt": null,
     "appointmentId": "e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
     "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
     "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
-    "createdBy": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc"
+    "createdBy": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
+    "reason": "Dolor agudo"
   }
 ]
 ```

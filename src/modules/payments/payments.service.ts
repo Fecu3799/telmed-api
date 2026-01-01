@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
   ForbiddenException,
+  UnprocessableEntityException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -153,6 +154,9 @@ export class PaymentsService {
     expiresAt: Date;
     idempotencyKey?: string | null;
   }) {
+    if (!input.appointmentId) {
+      throw new UnprocessableEntityException('appointmentId is required');
+    }
     return this.prisma.payment.create({
       data: {
         id: input.paymentId,
@@ -164,6 +168,7 @@ export class PaymentsService {
         doctorUserId: input.doctorUserId,
         patientUserId: input.patientUserId,
         appointmentId: input.appointmentId,
+        queueItemId: null,
         checkoutUrl: input.checkoutUrl,
         providerPreferenceId: input.providerPreferenceId,
         idempotencyKey: input.idempotencyKey ?? null,
@@ -184,6 +189,9 @@ export class PaymentsService {
     expiresAt: Date;
     idempotencyKey?: string | null;
   }) {
+    if (!input.queueItemId) {
+      throw new UnprocessableEntityException('queueItemId is required');
+    }
     return this.prisma.payment.create({
       data: {
         id: input.paymentId,
@@ -194,6 +202,7 @@ export class PaymentsService {
         currency: input.currency,
         doctorUserId: input.doctorUserId,
         patientUserId: input.patientUserId,
+        appointmentId: null,
         queueItemId: input.queueItemId,
         checkoutUrl: input.checkoutUrl,
         providerPreferenceId: input.providerPreferenceId,
