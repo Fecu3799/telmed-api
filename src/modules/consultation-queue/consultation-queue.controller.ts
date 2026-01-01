@@ -3,9 +3,12 @@ import {
   Controller,
   Get,
   Headers,
+  HttpException,
+  HttpStatus,
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -23,13 +26,16 @@ import {
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { AuditAction, UserRole } from '@prisma/client';
+import type { Request } from 'express';
 import { ProblemDetailsDto } from '../../common/docs/problem-details.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { Actor } from '../../common/types/actor.type';
+import { AuditService } from '../../infra/audit/audit.service';
+import { RateLimitService } from '../../infra/rate-limit/rate-limit.service';
 import {
   ConsultationQueueConsultationDto,
   ConsultationQueueItemDto,
@@ -46,6 +52,8 @@ import { RejectQueueDto } from './dto/reject-queue.dto';
 export class ConsultationQueueController {
   constructor(
     private readonly consultationQueueService: ConsultationQueueService,
+    private readonly auditService: AuditService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   @Post('consultations/queue')
@@ -61,8 +69,24 @@ export class ConsultationQueueController {
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async createQueue(@CurrentUser() actor: Actor, @Body() dto: CreateQueueDto) {
-    return this.consultationQueueService.createQueue(actor, dto);
+  async createQueue(
+    @CurrentUser() actor: Actor,
+    @Body() dto: CreateQueueDto,
+    @Req() req: Request,
+  ) {
+    const queue = await this.consultationQueueService.createQueue(actor, dto);
+    // Audit queue creation for operational traceability.
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'ConsultationQueueItem',
+      resourceId: queue.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: { entryType: queue.entryType },
+    });
+    return queue;
   }
 
   @Get('consultations/queue/:id')
@@ -166,16 +190,41 @@ export class ConsultationQueueController {
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  enablePayment(
+  async enablePayment(
     @CurrentUser() actor: Actor,
     @Param('queueId') queueId: string,
+    @Req() req: Request,
     @Headers('Idempotency-Key') idempotencyKey?: string,
   ) {
-    return this.consultationQueueService.enablePaymentForQueue(
+    const actorResult = this.rateLimit.consume(
+      `enable-payment:actor:${actor.id}`,
+      30,
+      60_000,
+    );
+    if (!actorResult.allowed) {
+      throw new HttpException(
+        'Rate limit exceeded',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const payment = await this.consultationQueueService.enablePaymentForQueue(
       actor,
       queueId,
       idempotencyKey,
     );
+    // Audit payment enablement for emergency queues.
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'Payment',
+      resourceId: payment.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: { queueId },
+    });
+    return payment;
   }
 
   @Get('consultations/queue')

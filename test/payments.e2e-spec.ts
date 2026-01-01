@@ -238,6 +238,18 @@ describe('Payments (e2e)', () => {
       .send(body)
       .expect(200);
 
+    await request(httpServer(app))
+      .post('/api/v1/payments/webhooks/mercadopago')
+      .set('x-request-id', requestId)
+      .set('x-signature', signature)
+      .send(body)
+      .expect(200);
+
+    const webhookEvents = await prisma.webhookEvent.findMany({
+      where: { eventId: 'mp_1' },
+    });
+    expect(webhookEvents).toHaveLength(1);
+
     const list = await request(httpServer(app))
       .get('/api/v1/patients/me/appointments')
       .set('Authorization', `Bearer ${patient.accessToken}`)

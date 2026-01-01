@@ -1,4 +1,9 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -15,6 +20,7 @@ import { ConsultationQueueModule } from './modules/consultation-queue/consultati
 import { ConsultationsModule } from './modules/consultations/consultations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ClockModule } from './common/clock/clock.module';
+import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -76,5 +82,47 @@ import { AppService } from './app.service';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(TraceIdMiddleware).forRoutes('*');
+    consumer
+      .apply(
+        createRateLimitMiddleware({
+          keyPrefix: 'auth-register',
+          limit: 10,
+          windowMs: 60_000,
+        }),
+      )
+      .forRoutes({ path: 'auth/register', method: RequestMethod.POST });
+    consumer
+      .apply(
+        createRateLimitMiddleware({
+          keyPrefix: 'auth-login',
+          limit: 10,
+          windowMs: 60_000,
+        }),
+      )
+      .forRoutes({ path: 'auth/login', method: RequestMethod.POST });
+    consumer
+      .apply(
+        createRateLimitMiddleware({
+          keyPrefix: 'payments-webhook',
+          limit: 60,
+          windowMs: 60_000,
+        }),
+      )
+      .forRoutes({
+        path: 'payments/webhooks/mercadopago',
+        method: RequestMethod.POST,
+      });
+    consumer
+      .apply(
+        createRateLimitMiddleware({
+          keyPrefix: 'enable-payment',
+          limit: 30,
+          windowMs: 60_000,
+        }),
+      )
+      .forRoutes({
+        path: 'consultations/queue/:queueId/enable-payment',
+        method: RequestMethod.POST,
+      });
   }
 }

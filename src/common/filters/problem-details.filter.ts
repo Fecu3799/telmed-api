@@ -4,11 +4,15 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ProblemDetailsFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -16,11 +20,25 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let detail = 'Unexpected error';
+    let errorCode: string | undefined;
     let errors: Record<string, string[]> | string[] | undefined;
     let extensions: Record<string, unknown> | undefined;
 
-    if (exception instanceof HttpException) {
+    if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+      errorCode = exception.code;
+      if (exception.code === 'P2002') {
+        status = HttpStatus.CONFLICT;
+        detail = 'Resource already exists';
+      } else if (exception.code === 'P2025') {
+        status = HttpStatus.NOT_FOUND;
+        detail = 'Resource not found';
+      } else {
+        status = HttpStatus.INTERNAL_SERVER_ERROR;
+        detail = 'Database error';
+      }
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus();
+      errorCode = String(status);
       const payload = exception.getResponse();
 
       if (typeof payload === 'string') {
@@ -61,6 +79,17 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     if (extensions) {
       body.extensions = extensions;
     }
+
+    const traceId = (request as Request & { traceId?: string }).traceId ?? null;
+    this.logger.error(
+      JSON.stringify({
+        traceId,
+        errorCode: errorCode ?? 'unknown',
+        status,
+        detail,
+        path: request.originalUrl,
+      }),
+    );
 
     response.status(status).json(body);
   }

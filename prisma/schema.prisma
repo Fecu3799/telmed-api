@@ -271,6 +271,37 @@ model ConsultationQueueItem {
   @@map("consultation_queue_items")
 }
 
+model AuditLog {
+  id           String      @id @default(uuid())
+  action       AuditAction
+  resourceType String      @map("resource_type")
+  resourceId   String      @map("resource_id")
+  actorId      String?     @map("actor_id")
+  actorRole    UserRole?   @map("actor_role")
+  traceId      String?     @map("trace_id")
+  ip           String?     @map("ip")
+  userAgent    String?     @map("user_agent")
+  metadata     Json?
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
+
+model WebhookEvent {
+  id          String          @id @default(uuid())
+  provider    WebhookProvider
+  eventId     String          @unique @map("event_id")
+  receivedAt  DateTime        @default(now()) @map("received_at")
+  processedAt DateTime?       @map("processed_at")
+  status      String
+  payload     Json
+  traceId     String?         @map("trace_id")
+
+  @@index([provider, receivedAt])
+  @@map("webhook_events")
+}
+
 enum UserRole {
   patient
   doctor
@@ -357,4 +388,16 @@ enum ConsultationQueueStatus {
   cancelled
   rejected
   expired
+}
+
+enum AuditAction {
+  READ
+  WRITE
+  VERIFY
+  EXPORT
+  WEBHOOK
+}
+
+enum WebhookProvider {
+  mercadopago
 }

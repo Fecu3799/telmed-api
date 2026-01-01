@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   UnprocessableEntityException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -15,10 +16,14 @@ import {
   PaymentProvider,
   PaymentStatus,
   UserRole,
+  AuditAction,
+  WebhookProvider,
 } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import { CLOCK, type Clock } from '../../common/clock/clock';
 import type { Actor } from '../../common/types/actor.type';
+import { AuditService } from '../../infra/audit/audit.service';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { MERCADOPAGO_CLIENT } from './mercadopago.client';
 import type { MercadoPagoClient } from './mercadopago.client';
@@ -37,6 +42,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly auditService: AuditService,
     @Inject(MERCADOPAGO_CLIENT)
     private readonly mercadoPago: MercadoPagoClient,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -292,6 +298,39 @@ export class PaymentsService {
   }) {
     this.validateWebhookSignature(input);
 
+    const eventId =
+      input.body?.id ??
+      input.body?.data?.id ??
+      input.dataId ??
+      input.queryId ??
+      null;
+
+    if (!eventId) {
+      this.logWebhookResult(input, 'skipped');
+      throw new BadRequestException('Missing webhook event id');
+    }
+
+    try {
+      await this.prisma.webhookEvent.create({
+        data: {
+          provider: WebhookProvider.mercadopago,
+          eventId: String(eventId),
+          status: 'received',
+          payload: input.body ?? {},
+          traceId: input.traceId ?? null,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        this.logWebhookResult(input, 'skipped');
+        return { received: true, duplicate: true };
+      }
+      throw error;
+    }
+
     const topic = input.topic ?? undefined;
     const resource = input.resource ?? undefined;
     const queryId = input.queryId ?? undefined;
@@ -312,12 +351,20 @@ export class PaymentsService {
       const paymentIds =
         order.payments?.map((payment) => String(payment.id)) ?? [];
       if (paymentIds.length === 0) {
+        await this.prisma.webhookEvent.update({
+          where: { eventId: String(eventId) },
+          data: { status: 'ignored', processedAt: this.clock.now() },
+        });
         this.logWebhookResult(input, 'skipped');
         return { skipped: true };
       }
       for (const mpPaymentId of paymentIds) {
         await this.processPaymentId(mpPaymentId, input.traceId ?? null);
       }
+      await this.prisma.webhookEvent.update({
+        where: { eventId: String(eventId) },
+        data: { status: 'processed', processedAt: this.clock.now() },
+      });
       this.logWebhookResult(input, 'processed');
       return { processed: true };
     }
@@ -330,11 +377,19 @@ export class PaymentsService {
       input.body?.data?.payment_id;
 
     if (!paymentId) {
+      await this.prisma.webhookEvent.update({
+        where: { eventId: String(eventId) },
+        data: { status: 'ignored', processedAt: this.clock.now() },
+      });
       this.logWebhookResult(input, 'skipped');
       return { skipped: true };
     }
 
     await this.processPaymentId(String(paymentId), input.traceId ?? null);
+    await this.prisma.webhookEvent.update({
+      where: { eventId: String(eventId) },
+      data: { status: 'processed', processedAt: this.clock.now() },
+    });
     this.logWebhookResult(input, 'processed');
     return { processed: true };
   }
@@ -547,11 +602,28 @@ export class PaymentsService {
       },
     });
 
+    await this.auditService.log({
+      action: AuditAction.WEBHOOK,
+      resourceType: 'Payment',
+      resourceId: updated.id,
+      actor: null,
+      traceId,
+      metadata: { status: mappedStatus },
+    });
+
     if (updated.kind === PaymentKind.appointment) {
       if (mappedStatus === PaymentStatus.paid) {
         await this.prisma.appointment.update({
           where: { id: updated.appointmentId ?? '' },
           data: { status: AppointmentStatus.confirmed },
+        });
+        await this.auditService.log({
+          action: AuditAction.WEBHOOK,
+          resourceType: 'Appointment',
+          resourceId: updated.appointmentId ?? updated.id,
+          actor: null,
+          traceId,
+          metadata: { paymentId: updated.id, status: mappedStatus },
         });
       }
     } else if (updated.kind === PaymentKind.emergency) {
@@ -566,6 +638,14 @@ export class PaymentsService {
         await this.prisma.consultationQueueItem.update({
           where: { id: updated.queueItemId ?? '' },
           data: { paymentStatus: queuePaymentStatus },
+        });
+        await this.auditService.log({
+          action: AuditAction.WEBHOOK,
+          resourceType: 'ConsultationQueueItem',
+          resourceId: updated.queueItemId ?? updated.id,
+          actor: null,
+          traceId,
+          metadata: { paymentId: updated.id, status: mappedStatus },
         });
       }
     }
