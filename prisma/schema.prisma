@@ -20,7 +20,7 @@ model User {
   doctorPaymentAccount   DoctorPaymentAccount?
   doctorProfile          DoctorProfile?
   schedulingConfig       DoctorSchedulingConfig?
-  patientProfile         PatientProfile?
+  patient               Patient?
   paymentsAsDoctor       Payment[]                     @relation("PaymentDoctor")
   paymentsAsPatient      Payment[]                     @relation("PaymentPatient")
   sessions               Session[]
@@ -45,17 +45,24 @@ model Session {
   @@map("sessions")
 }
 
-model PatientProfile {
-  userId       String        @id @map("user_id")
-  firstName    String        @map("first_name")
-  lastName     String        @map("last_name")
-  phone        String?
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  appointments Appointment[]
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Patient {
+  id              String              @id @default(uuid()) @map("id")
+  userId          String              @unique @map("user_id")
+  legalFirstName  String              @map("legal_first_name")
+  legalLastName   String              @map("legal_last_name")
+  documentType    PatientDocumentType @map("document_type")
+  documentNumber  String              @map("document_number")
+  documentCountry String              @default("AR") @map("document_country")
+  birthDate       DateTime            @map("birth_date") @db.Date
+  phone           String?             @map("phone")
+  addressText     String?             @map("address_text")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  appointments    Appointment[]
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("patient_profiles")
+  @@unique([documentType, documentCountry, documentNumber])
+  @@map("patients")
 }
 
 model DoctorProfile {
@@ -151,7 +158,7 @@ model DoctorSchedulingConfig {
 model Appointment {
   id                 String                 @id @default(uuid())
   doctorUserId       String                 @map("doctor_user_id")
-  patientUserId      String                 @map("patient_user_id")
+  patientId          String                 @map("patient_id")
   startAt            DateTime               @map("start_at")
   endAt              DateTime               @map("end_at")
   reason             String?                @map("reason")
@@ -161,13 +168,13 @@ model Appointment {
   cancellationReason String?                @map("cancellation_reason")
   paymentExpiresAt   DateTime?              @map("payment_expires_at")
   doctor             DoctorProfile          @relation(fields: [doctorUserId], references: [userId], onDelete: Cascade)
-  patient            PatientProfile         @relation(fields: [patientUserId], references: [userId], onDelete: Cascade)
+  patient            Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
   queueItems         ConsultationQueueItem?
   consultation       Consultation?
   payment            Payment?               @relation("AppointmentPayment")
 
   @@index([doctorUserId, startAt])
-  @@index([patientUserId, startAt])
+  @@index([patientId, startAt])
   @@map("appointments")
 }
 
@@ -316,6 +323,12 @@ enum PaymentStatus {
   failed
   expired
   refunded
+}
+
+enum PatientDocumentType {
+  DNI
+  PASSPORT
+  OTHER
 }
 
 enum ConsultationQueuePaymentStatus {

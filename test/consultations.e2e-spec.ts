@@ -90,13 +90,17 @@ async function createDoctorProfile(app: INestApplication, token: string) {
     .expect(200);
 }
 
-async function createPatientProfile(app: INestApplication, token: string) {
+async function createPatientIdentity(app: INestApplication, token: string) {
   await request(httpServer(app))
-    .put('/api/v1/patients/me/profile')
+    .patch('/api/v1/patients/me/identity')
     .set('Authorization', `Bearer ${token}`)
     .send({
-      firstName: 'Juan',
-      lastName: 'Paciente',
+      legalFirstName: 'Juan',
+      legalLastName: 'Paciente',
+      documentType: 'DNI',
+      documentNumber: `30${Math.floor(Math.random() * 10000000)}`,
+      documentCountry: 'AR',
+      birthDate: '1990-05-10',
       phone: '+5491100000000',
     })
     .expect(200);
@@ -153,7 +157,7 @@ async function createAppointment(
   const { dateStr, dayOfWeek } = dateParts(2);
   await setAvailabilityRule(app, doctorToken, dayOfWeek);
 
-  await createPatientProfile(app, patientToken);
+  await createPatientIdentity(app, patientToken);
 
   const startAt = `${dateStr}T09:00:00.000Z`;
 

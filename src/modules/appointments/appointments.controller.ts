@@ -47,7 +47,10 @@ export class AppointmentsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.patient, UserRole.admin)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Create appointment' })
+  @ApiOperation({
+    summary: 'Create appointment',
+    description: 'Requires patient identity to be complete before booking.',
+  })
   @ApiBody({ type: CreateAppointmentDto })
   @ApiCreatedResponse({ type: AppointmentWithPaymentDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })

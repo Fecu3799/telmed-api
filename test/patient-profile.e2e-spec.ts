@@ -60,7 +60,7 @@ async function registerAndLogin(
   return loginResponse.body.accessToken as string;
 }
 
-describe('Patient profiles (e2e)', () => {
+describe('Patient identity (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
@@ -94,35 +94,42 @@ describe('Patient profiles (e2e)', () => {
     await app.close();
   });
 
-  it('GET /patients/me/profile -> 404 before create', async () => {
+  it('GET /patients/me/identity -> 404 before create', async () => {
     const token = await registerAndLogin(app, 'patient');
 
     await request(app.getHttpServer())
-      .get('/api/v1/patients/me/profile')
+      .get('/api/v1/patients/me/identity')
       .set('Authorization', `Bearer ${token}`)
-      //.expect(404);
       .expect(404);
   });
 
-  it('PUT -> GET -> PATCH flow for patient profile', async () => {
+  it('PATCH -> GET -> PATCH flow for patient identity', async () => {
     const token = await registerAndLogin(app, 'patient');
 
     await request(app.getHttpServer())
-      .put('/api/v1/patients/me/profile')
+      .patch('/api/v1/patients/me/identity')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Juan', lastName: 'Perez', phone: '+54 11 5555' })
+      .send({
+        legalFirstName: 'Juan',
+        legalLastName: 'Perez',
+        documentType: 'DNI',
+        documentNumber: `30${Math.floor(Math.random() * 10000000)}`,
+        documentCountry: 'AR',
+        birthDate: '1990-05-10',
+        phone: '+54 11 5555',
+      })
       .expect(200);
 
     const getResponse = await request(app.getHttpServer())
-      .get('/api/v1/patients/me/profile')
+      .get('/api/v1/patients/me/identity')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
-    expect(getResponse.body.firstName).toBe('Juan');
-    expect(getResponse.body.lastName).toBe('Perez');
+    expect(getResponse.body.legalFirstName).toBe('Juan');
+    expect(getResponse.body.legalLastName).toBe('Perez');
 
     const patchResponse = await request(app.getHttpServer())
-      .patch('/api/v1/patients/me/profile')
+      .patch('/api/v1/patients/me/identity')
       .set('Authorization', `Bearer ${token}`)
       .send({ phone: '+54 11 4444' })
       .expect(200);
@@ -134,7 +141,7 @@ describe('Patient profiles (e2e)', () => {
     const token = await registerAndLogin(app, 'doctor');
 
     await request(app.getHttpServer())
-      .get('/api/v1/patients/me/profile')
+      .get('/api/v1/patients/me/identity')
       .set('Authorization', `Bearer ${token}`)
       .expect(403);
   });

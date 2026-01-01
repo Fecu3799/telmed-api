@@ -87,13 +87,17 @@ async function createDoctorProfile(app: INestApplication, token: string) {
     .expect(200);
 }
 
-async function createPatientProfile(app: INestApplication, token: string) {
+async function createPatientIdentity(app: INestApplication, token: string) {
   await request(httpServer(app))
-    .put('/api/v1/patients/me/profile')
+    .patch('/api/v1/patients/me/identity')
     .set('Authorization', `Bearer ${token}`)
     .send({
-      firstName: 'Juan',
-      lastName: 'Paciente',
+      legalFirstName: 'Juan',
+      legalLastName: 'Paciente',
+      documentType: 'DNI',
+      documentNumber: `30${Math.floor(Math.random() * 10000000)}`,
+      documentCountry: 'AR',
+      birthDate: '1990-05-10',
       phone: '+5491100000000',
     })
     .expect(200);
@@ -217,7 +221,7 @@ describe('Consultation queue (e2e)', () => {
     await setAvailabilityRules(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
     const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
@@ -266,7 +270,7 @@ describe('Consultation queue (e2e)', () => {
     await createDoctorProfile(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     await request(httpServer(app))
       .post('/api/v1/consultations/queue')
@@ -288,7 +292,7 @@ describe('Consultation queue (e2e)', () => {
     await setAvailabilityRules(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
     const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
@@ -314,7 +318,7 @@ describe('Consultation queue (e2e)', () => {
     const queueId = createResponse.body.id as string;
 
     const otherPatient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, otherPatient.accessToken);
+    await createPatientIdentity(app, otherPatient.accessToken);
 
     await request(httpServer(app))
       .get(`/api/v1/consultations/queue/${queueId}`)
@@ -341,7 +345,7 @@ describe('Consultation queue (e2e)', () => {
     const doctorUserId = await getUserId(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     await request(httpServer(app))
       .post('/api/v1/consultations/queue')
@@ -357,7 +361,7 @@ describe('Consultation queue (e2e)', () => {
     const doctorUserId = await getUserId(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
     const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
@@ -420,7 +424,7 @@ describe('Consultation queue (e2e)', () => {
     await setAvailabilityRules(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
     const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
@@ -472,7 +476,7 @@ describe('Consultation queue (e2e)', () => {
     expect(acceptResponse.body.status).toBe('accepted');
 
     const otherPatient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, otherPatient.accessToken);
+    await createPatientIdentity(app, otherPatient.accessToken);
 
     fakeClock.setNow(new Date(BASE_TIME));
     const secondAppointment = await createAppointment(
@@ -516,19 +520,19 @@ describe('Consultation queue (e2e)', () => {
     const doctorUserId = await getUserId(app, doctor.accessToken);
 
     const patientA = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patientA.accessToken);
+    await createPatientIdentity(app, patientA.accessToken);
 
     const patientB = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patientB.accessToken);
+    await createPatientIdentity(app, patientB.accessToken);
 
     const patientC = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patientC.accessToken);
+    await createPatientIdentity(app, patientC.accessToken);
 
     const patientD = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patientD.accessToken);
+    await createPatientIdentity(app, patientD.accessToken);
 
     const patientE = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patientE.accessToken);
+    await createPatientIdentity(app, patientE.accessToken);
 
     const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
     const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
@@ -622,7 +626,7 @@ describe('Consultation queue (e2e)', () => {
     await createDoctorProfile(app, doctor.accessToken);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const createResponse = await request(httpServer(app))
       .post('/api/v1/consultations/queue')

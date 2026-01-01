@@ -17,6 +17,9 @@ export class AppointmentDto {
   @ApiProperty({ example: '2025-01-05T14:20:00.000Z' })
   endAt!: string;
 
+  @ApiPropertyOptional({ example: 'Control anual' })
+  reason?: string | null;
+
   @ApiProperty({ example: 'pending_payment', enum: AppointmentStatus })
   status!: AppointmentStatus;
 

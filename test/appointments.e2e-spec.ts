@@ -114,13 +114,17 @@ async function createDoctorProfile(app: INestApplication, token: string) {
     .expect(200);
 }
 
-async function createPatientProfile(app: INestApplication, token: string) {
+async function createPatientIdentity(app: INestApplication, token: string) {
   await request(httpServer(app))
-    .put('/api/v1/patients/me/profile')
+    .patch('/api/v1/patients/me/identity')
     .set('Authorization', `Bearer ${token}`)
     .send({
-      firstName: 'Juan',
-      lastName: 'Paciente',
+      legalFirstName: 'Juan',
+      legalLastName: 'Paciente',
+      documentType: 'DNI',
+      documentNumber: `30${Math.floor(Math.random() * 10000000)}`,
+      documentCountry: 'AR',
+      birthDate: '1990-05-10',
       phone: '+5491100000000',
     })
     .expect(200);
@@ -220,7 +224,7 @@ describe('Appointments (e2e)', () => {
       .expect(200);
     const patientUserId = patientMe.body.id as string;
 
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const startAt = `${dateStr}T09:00:00.000Z`;
 
@@ -234,6 +238,30 @@ describe('Appointments (e2e)', () => {
     expect(response.body.appointment.patientUserId).toBe(patientUserId);
     expect(response.body.appointment.status).toBe('pending_payment');
     expect(response.body.payment.checkoutUrl).toBeTruthy();
+  });
+
+  it('rejects appointment when patient identity is missing', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorMe = await request(httpServer(app))
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+    const doctorUserId = doctorMe.body.id as string;
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await setUtcSchedulingConfig(prisma, doctorUserId);
+
+    const { dateStr, dayOfWeek } = dateParts(2);
+    await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
+
+    const patient = await registerAndLogin(app, 'patient');
+    const startAt = `${dateStr}T09:00:00.000Z`;
+
+    await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt })
+      .expect(409);
   });
 
   it('admin creates an appointment for a patient', async () => {
@@ -257,7 +285,7 @@ describe('Appointments (e2e)', () => {
       .expect(200);
     const patientUserId = patientMe.body.id as string;
 
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const adminToken = await createAdmin(app, prisma);
     const startAt = `${dateStr}T09:00:00.000Z`;
@@ -286,7 +314,7 @@ describe('Appointments (e2e)', () => {
     await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const startAt = `${dateStr}T09:00:00.000Z`;
 
@@ -320,7 +348,7 @@ describe('Appointments (e2e)', () => {
     await setAvailabilityRule(app, doctor.accessToken, soonDay);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const tooSoonStart = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
 
@@ -359,7 +387,7 @@ describe('Appointments (e2e)', () => {
       .expect(201);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const startAt = `${dateStr}T09:00:00.000Z`;
 
@@ -385,7 +413,7 @@ describe('Appointments (e2e)', () => {
     await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
 
     const patient = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const startAt = `${dateStr}T09:00:00.000Z`;
 
@@ -436,7 +464,7 @@ describe('Appointments (e2e)', () => {
       .expect(200);
     const patientUserId = patientMe.body.id as string;
 
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     await request(httpServer(app))
       .post('/api/v1/appointments')
@@ -478,7 +506,7 @@ describe('Appointments (e2e)', () => {
       .expect(200);
     const patientUserId = patientMe.body.id as string;
 
-    await createPatientProfile(app, patient.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
 
     const createResponse = await request(httpServer(app))
       .post('/api/v1/appointments')
@@ -489,7 +517,7 @@ describe('Appointments (e2e)', () => {
     const appointmentId = createResponse.body.appointment.id as string;
 
     const intruder = await registerAndLogin(app, 'patient');
-    await createPatientProfile(app, intruder.accessToken);
+    await createPatientIdentity(app, intruder.accessToken);
 
     await request(httpServer(app))
       .post(`/api/v1/appointments/${appointmentId}/cancel`)

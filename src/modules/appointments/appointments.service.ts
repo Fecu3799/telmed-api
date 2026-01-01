@@ -19,6 +19,7 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
 import type { Actor } from '../../common/types/actor.type';
 import { PaymentsService } from '../payments/payments.service';
+import { PatientsIdentityService } from '../patients-identity/patients-identity.service';
 import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -33,6 +34,7 @@ export class AppointmentsService {
     private readonly prisma: PrismaService,
     private readonly availabilityService: DoctorAvailabilityService,
     private readonly paymentsService: PaymentsService,
+    private readonly patientsIdentityService: PatientsIdentityService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -76,12 +78,11 @@ export class AppointmentsService {
       throw new NotFoundException('Doctor not found');
     }
 
-    const patientProfile = await this.prisma.patientProfile.findUnique({
-      where: { userId: patientUserId },
-      select: { userId: true },
-    });
-    if (!patientProfile) {
-      throw new NotFoundException('Patient not found');
+    const identityStatus =
+      await this.patientsIdentityService.getIdentityStatus(patientUserId);
+    if (!identityStatus.exists || !identityStatus.isComplete) {
+      // Patients must complete identity before booking appointments.
+      throw new ConflictException('Patient identity is incomplete');
     }
 
     const existingPayment = await this.paymentsService.findIdempotentPayment(
@@ -96,15 +97,16 @@ export class AppointmentsService {
       const existingAppointment =
         await this.prisma.appointment.findUniqueOrThrow({
           where: { id: existingPayment.appointmentId },
+          include: { patient: { select: { userId: true } } },
         });
       if (
         existingAppointment.doctorUserId !== doctorUserId ||
-        existingAppointment.patientUserId !== patientUserId
+        existingAppointment.patient.userId !== patientUserId
       ) {
         throw new ConflictException('Idempotency key already used');
       }
       return {
-        appointment: existingAppointment,
+        appointment: this.toAppointmentResponse(existingAppointment),
         payment: this.toPaymentResponse(existingPayment),
       };
     }
@@ -159,7 +161,7 @@ export class AppointmentsService {
           data: {
             id: appointmentId,
             doctorUserId,
-            patientUserId,
+            patientId: identityStatus.patientId!,
             startAt,
             endAt,
             status: AppointmentStatus.pending_payment,
@@ -193,7 +195,10 @@ export class AppointmentsService {
     );
 
     return {
-      appointment,
+      appointment: this.toAppointmentResponse({
+        ...appointment,
+        patientUserId,
+      }),
       payment: this.toPaymentResponse(payment),
     };
   }
@@ -204,9 +209,15 @@ export class AppointmentsService {
     });
     const { from, to } = this.parseRange(query.from, query.to);
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
+    const identityStatus = await this.patientsIdentityService.getIdentityStatus(
+      actor.id,
+    );
+    if (!identityStatus.exists) {
+      return this.buildPage([], 0, page, limit);
+    }
 
     const where = {
-      patientUserId: actor.id,
+      patientId: identityStatus.patientId!,
       startAt: { gte: from, lte: to },
     };
 
@@ -216,11 +227,17 @@ export class AppointmentsService {
         orderBy: { startAt: 'asc' },
         skip,
         take: limit,
+        include: { patient: { select: { userId: true } } },
       }),
       this.prisma.appointment.count({ where }),
     ]);
 
-    return this.buildPage(items, total, page, limit);
+    return this.buildPage(
+      items.map((item) => this.toAppointmentResponse(item)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async listDoctorAppointments(actor: Actor, query: ListAppointmentsQueryDto) {
@@ -241,11 +258,17 @@ export class AppointmentsService {
         orderBy: { startAt: 'asc' },
         skip,
         take: limit,
+        include: { patient: { select: { userId: true } } },
       }),
       this.prisma.appointment.count({ where }),
     ]);
 
-    return this.buildPage(items, total, page, limit);
+    return this.buildPage(
+      items.map((item) => this.toAppointmentResponse(item)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async listAdminAppointments(query: AdminAppointmentsQueryDto) {
@@ -253,10 +276,21 @@ export class AppointmentsService {
     const { from, to } = this.parseRange(query.from, query.to);
     const { page, limit, skip } = this.resolvePaging(query.page, query.limit);
 
+    let patientIdFilter: string | undefined;
+    if (query.patientUserId) {
+      const status = await this.patientsIdentityService.getIdentityStatus(
+        query.patientUserId,
+      );
+      if (status.exists) {
+        patientIdFilter = status.patientId ?? undefined;
+      } else {
+        return this.buildPage([], 0, page, limit);
+      }
+    }
     const where = {
       startAt: { gte: from, lte: to },
       ...(query.doctorUserId ? { doctorUserId: query.doctorUserId } : {}),
-      ...(query.patientUserId ? { patientUserId: query.patientUserId } : {}),
+      ...(patientIdFilter ? { patientId: patientIdFilter } : {}),
     };
 
     const [items, total] = await this.prisma.$transaction([
@@ -265,16 +299,23 @@ export class AppointmentsService {
         orderBy: { startAt: 'asc' },
         skip,
         take: limit,
+        include: { patient: { select: { userId: true } } },
       }),
       this.prisma.appointment.count({ where }),
     ]);
 
-    return this.buildPage(items, total, page, limit);
+    return this.buildPage(
+      items.map((item) => this.toAppointmentResponse(item)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async cancelAppointment(actor: Actor, id: string, dto: CancelAppointmentDto) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
+      include: { patient: { select: { userId: true } } },
     });
 
     if (!appointment) {
@@ -282,7 +323,7 @@ export class AppointmentsService {
     }
 
     if (actor.role === UserRole.patient) {
-      if (appointment.patientUserId !== actor.id) {
+      if (appointment.patient.userId !== actor.id) {
         throw new ForbiddenException('Forbidden');
       }
     } else if (actor.role === UserRole.doctor) {
@@ -291,13 +332,17 @@ export class AppointmentsService {
       }
     }
 
-    return this.prisma.appointment.update({
+    const updated = await this.prisma.appointment.update({
       where: { id },
       data: {
         status: AppointmentStatus.cancelled,
         cancelledAt: this.clock.now(),
         cancellationReason: dto.reason ?? null,
       },
+    });
+    return this.toAppointmentResponse({
+      ...updated,
+      patientUserId: appointment.patient.userId,
     });
   }
 
@@ -316,6 +361,19 @@ export class AppointmentsService {
       throw new UnprocessableEntityException('from must be before to');
     }
     return { from: fromDate, to: toDate };
+  }
+
+  private toAppointmentResponse(appointment: Record<string, unknown>) {
+    const patient =
+      'patient' in appointment
+        ? (appointment.patient as { userId: string })
+        : null;
+    const patientUserId =
+      patient?.userId ??
+      (appointment.patientUserId as string | undefined) ??
+      '';
+    const { patient: _patient, patientId: _patientId, ...rest } = appointment;
+    return { ...rest, patientUserId };
   }
 
   private resolvePaging(page?: number, limit?: number) {

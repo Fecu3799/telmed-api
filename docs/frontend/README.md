@@ -65,22 +65,33 @@ Problem Details example:
 
 ## Examples
 
-### PUT /patients/me/profile
+### PATCH /patients/me/identity
 Request:
 ```json
 {
-  "firstName": "Juan",
-  "lastName": "Perez",
-  "phone": "+5491100000000"
+  "legalFirstName": "Juan",
+  "legalLastName": "Perez",
+  "documentType": "DNI",
+  "documentNumber": "30123456",
+  "documentCountry": "AR",
+  "birthDate": "1990-05-10",
+  "phone": "+5491100000000",
+  "addressText": "Av. Siempre Viva 123"
 }
 ```
 Response 200:
 ```json
 {
+  "id": "p9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
   "userId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
-  "firstName": "Juan",
-  "lastName": "Perez",
+  "legalFirstName": "Juan",
+  "legalLastName": "Perez",
+  "documentType": "DNI",
+  "documentNumber": "30123456",
+  "documentCountry": "AR",
+  "birthDate": "1990-05-10",
   "phone": "+5491100000000",
+  "addressText": "Av. Siempre Viva 123",
   "createdAt": "2025-01-01T12:00:00.000Z",
   "updatedAt": "2025-01-01T12:00:00.000Z"
 }

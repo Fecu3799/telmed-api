@@ -3,9 +3,10 @@ import { DoctorAvailabilityModule } from '../doctors/availability/doctor-availab
 import { PaymentsModule } from '../payments/payments.module';
 import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
+import { PatientsIdentityModule } from '../patients-identity/patients-identity.module';
 
 @Module({
-  imports: [DoctorAvailabilityModule, PaymentsModule],
+  imports: [DoctorAvailabilityModule, PaymentsModule, PatientsIdentityModule],
   controllers: [AppointmentsController],
   providers: [AppointmentsService],
 })

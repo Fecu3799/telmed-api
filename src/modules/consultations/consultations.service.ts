@@ -21,6 +21,7 @@ export class ConsultationsService {
   async createForAppointment(actor: Actor, appointmentId: string) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
+      include: { patient: { select: { userId: true } } },
     });
 
     if (!appointment) {
@@ -53,7 +54,7 @@ export class ConsultationsService {
         data: {
           appointmentId,
           doctorUserId: appointment.doctorUserId,
-          patientUserId: appointment.patientUserId,
+          patientUserId: appointment.patient.userId,
         },
       });
       return { consultation, created: true };

@@ -19,6 +19,7 @@ import type { Actor } from '../../common/types/actor.type';
 import { AuthService } from './auth.service';
 import { AuthMeDto } from './docs/auth-me.dto';
 import { AuthResponseDto } from './docs/auth-response.dto';
+import { PatientsIdentityService } from '../patients-identity/patients-identity.service';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { LogoutResponseDto } from './docs/logout-response.dto';
@@ -35,7 +36,10 @@ type RequestWithActor = Request & { user?: Actor };
 // Tight rate limit for auth endpoints to reduce abuse.
 @Throttle(AUTH_THROTTLE)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly patientsIdentityService: PatientsIdentityService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user (doctor or patient)' })
@@ -90,8 +94,13 @@ export class AuthController {
   @ApiOkResponse({ type: AuthMeDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  getMe(@CurrentUser() actor: Actor, @Req() req: RequestWithActor) {
+  async getMe(@CurrentUser() actor: Actor, @Req() req: RequestWithActor) {
     const response: Record<string, unknown> = { ...actor };
+    // Expose identity completion so the frontend can gate appointment creation.
+    const identityStatus = await this.patientsIdentityService.getIdentityStatus(
+      actor.id,
+    );
+    response.hasPatientIdentity = identityStatus.isComplete;
     if (
       process.env.NODE_ENV === 'test' ||
       String(process.env.DEBUG_AUTH).toLowerCase() === 'true'

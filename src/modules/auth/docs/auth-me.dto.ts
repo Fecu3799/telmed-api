@@ -14,6 +14,9 @@ export class AuthMeDto {
   })
   sessionId?: string;
 
+  @ApiProperty({ example: true })
+  hasPatientIdentity!: boolean;
+
   @ApiProperty({ example: ['id', 'role'], required: false })
   rawUserKeys?: string[];
 }

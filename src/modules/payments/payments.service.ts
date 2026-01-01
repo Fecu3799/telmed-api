@@ -272,7 +272,9 @@ export class PaymentsService {
         status: AppointmentStatus.pending_payment,
         paymentExpiresAt: { lt: now },
         ...(scope.doctorUserId ? { doctorUserId: scope.doctorUserId } : {}),
-        ...(scope.patientUserId ? { patientUserId: scope.patientUserId } : {}),
+        ...(scope.patientUserId
+          ? { patient: { userId: scope.patientUserId } }
+          : {}),
       },
       data: { status: AppointmentStatus.cancelled },
     });

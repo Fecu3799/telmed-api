@@ -7,7 +7,7 @@ import { envSchema } from './infra/config/env.schema';
 import { PrismaModule } from './infra/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
-import { PatientProfilesModule } from './modules/patient-profiles/patient-profiles.module';
+import { PatientsIdentityModule } from './modules/patients-identity/patients-identity.module';
 import { DoctorsModule } from './modules/doctors/doctors.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
@@ -56,7 +56,7 @@ import { AppService } from './app.service';
         ]),
     AuthModule,
     UsersModule,
-    PatientProfilesModule,
+    PatientsIdentityModule,
     DoctorsModule,
     SpecialtiesModule,
     AppointmentsModule,

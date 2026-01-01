@@ -1,0 +1,144 @@
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import { PatientIdentityPatchDto } from './dto/patient-identity-patch.dto';
+
+type PatientIdentity = {
+  legalFirstName: string | null;
+  legalLastName: string | null;
+  documentType: string | null;
+  documentNumber: string | null;
+  documentCountry: string | null;
+  birthDate: Date | null;
+};
+
+@Injectable()
+export class PatientsIdentityService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getIdentity(userId: string) {
+    const patient = await this.prisma.patient.findUnique({
+      where: { userId },
+    });
+
+    if (!patient) {
+      throw new NotFoundException('Patient identity not found');
+    }
+
+    return patient;
+  }
+
+  async upsertIdentity(userId: string, dto: PatientIdentityPatchDto) {
+    const existing = await this.prisma.patient.findUnique({
+      where: { userId },
+    });
+
+    if (!existing) {
+      // For the first identity record we require the full legal dataset.
+      if (!this.isIdentityCompleteInput(dto)) {
+        throw new UnprocessableEntityException(
+          'Patient identity is incomplete',
+        );
+      }
+
+      return this.prisma.patient.create({
+        data: {
+          userId,
+          legalFirstName: dto.legalFirstName!,
+          legalLastName: dto.legalLastName!,
+          documentType: dto.documentType!,
+          documentNumber: dto.documentNumber!,
+          documentCountry: dto.documentCountry ?? 'AR',
+          birthDate: new Date(dto.birthDate!),
+          phone: dto.phone ?? null,
+          addressText: dto.addressText ?? null,
+        },
+      });
+    }
+
+    const data: Record<string, unknown> = {};
+    if (dto.legalFirstName !== undefined) {
+      data.legalFirstName = dto.legalFirstName;
+    }
+    if (dto.legalLastName !== undefined) {
+      data.legalLastName = dto.legalLastName;
+    }
+    if (dto.documentType !== undefined) {
+      data.documentType = dto.documentType;
+    }
+    if (dto.documentNumber !== undefined) {
+      data.documentNumber = dto.documentNumber;
+    }
+    if (dto.documentCountry !== undefined) {
+      data.documentCountry = dto.documentCountry;
+    }
+    if (dto.birthDate !== undefined) {
+      data.birthDate = new Date(dto.birthDate);
+    }
+    if (dto.phone !== undefined) {
+      data.phone = dto.phone;
+    }
+    if (dto.addressText !== undefined) {
+      data.addressText = dto.addressText;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return existing;
+    }
+
+    return this.prisma.patient.update({
+      where: { userId },
+      data,
+    });
+  }
+
+  async getIdentityStatus(userId: string) {
+    const patient = await this.prisma.patient.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        legalFirstName: true,
+        legalLastName: true,
+        documentType: true,
+        documentNumber: true,
+        documentCountry: true,
+        birthDate: true,
+      },
+    });
+
+    if (!patient) {
+      return { exists: false, isComplete: false, patientId: null };
+    }
+
+    return {
+      exists: true,
+      isComplete: this.isIdentityComplete(patient),
+      patientId: patient.id,
+    };
+  }
+
+  isIdentityComplete(identity: PatientIdentity) {
+    return Boolean(
+      identity.legalFirstName &&
+      identity.legalLastName &&
+      identity.documentType &&
+      identity.documentNumber &&
+      identity.documentCountry &&
+      identity.birthDate,
+    );
+  }
+
+  private isIdentityCompleteInput(dto: PatientIdentityPatchDto) {
+    return Boolean(
+      dto.legalFirstName &&
+      dto.legalLastName &&
+      dto.documentType &&
+      dto.documentNumber &&
+      (dto.documentCountry ?? 'AR') &&
+      dto.birthDate,
+    );
+  }
+}

@@ -64,11 +64,11 @@ export class ConsultationQueueService {
       throw new NotFoundException('Doctor not found');
     }
 
-    const patientProfile = await this.prisma.patientProfile.findUnique({
+    const patientIdentity = await this.prisma.patient.findUnique({
       where: { userId: patientUserId },
       select: { userId: true },
     });
-    if (!patientProfile) {
+    if (!patientIdentity) {
       throw new NotFoundException('Patient not found');
     }
 
@@ -79,10 +79,10 @@ export class ConsultationQueueService {
         select: {
           id: true,
           doctorUserId: true,
-          patientUserId: true,
           status: true,
           startAt: true,
           reason: true,
+          patient: { select: { userId: true } },
         },
       });
 
@@ -92,7 +92,7 @@ export class ConsultationQueueService {
 
       if (
         appointment.doctorUserId !== doctorUserId ||
-        appointment.patientUserId !== patientUserId
+        appointment.patient.userId !== patientUserId
       ) {
         throw new UnprocessableEntityException(
           'Appointment does not match doctor/patient',
