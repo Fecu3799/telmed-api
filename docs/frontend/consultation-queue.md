@@ -82,6 +82,7 @@ Notas:
 
 - `appointmentId` es opcional para consultas de urgencia.
 - Si `appointmentId` existe, se valida la ventana ±15min.
+- Para `entryType=appointment` no se requiere `accept` previo para iniciar la consulta.
 - Si no hay `appointmentId`, `reason` es obligatorio.
   Response 201:
 
@@ -104,17 +105,17 @@ Notas:
 ### POST /api/v1/consultations/queue/:queueId/accept
 
 Status: 200, 409 si estado invalido.
+Notas:
+- Solo aplica a `entryType=emergency`.
+- Cambia `paymentStatus` a `pending` y setea `paymentExpiresAt` (TTL 10 min).
 Response 200:
 
 ```json
 {
   "id": "q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
   "status": "accepted",
-  "queuedAt": "2025-01-05T13:50:00.000Z",
-  "expiresAt": "2025-01-05T14:05:00.000Z",
-  "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
-  "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
-  "createdBy": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
+  "paymentStatus": "pending",
+  "paymentExpiresAt": "2025-01-05T14:05:00.000Z",
   "acceptedAt": "2025-01-05T13:52:00.000Z",
   "acceptedBy": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a"
 }
@@ -185,13 +186,13 @@ Response 200:
 }
 ```
 
-### POST /api/v1/consultations/queue/:queueId/enable-payment
+### POST /api/v1/consultations/queue/:queueId/payment
 
 Status: 200, 409 si estado invalido.
 Notas:
-
-- Solo aplica a `entryType=emergency`. Si es `appointment`, responde 409.
-  Response 200:
+- Solo aplica a `entryType=emergency`.
+- Requiere `status=accepted` y `paymentStatus=pending`.
+Response 200:
 
 ```json
 {
@@ -202,19 +203,27 @@ Notas:
 }
 ```
 
-### POST /api/v1/consultations/from-queue/:queueId/start
+### POST /api/v1/consultations/queue/:queueId/start
 
 Status: 201.
 Response 201:
 
 ```json
 {
-  "id": "c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
-  "status": "in_progress",
-  "startedAt": "2025-01-05T14:00:00.000Z",
-  "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
-  "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
-  "appointmentId": "e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a"
+  "queueItem": {
+    "id": "q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
+    "entryType": "appointment",
+    "paymentStatus": "not_required"
+  },
+  "consultation": {
+    "id": "c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
+    "status": "in_progress",
+    "startedAt": "2025-01-05T14:00:00.000Z",
+    "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
+    "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
+    "appointmentId": "e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a"
+  },
+  "videoUrl": "https://video.telmed.local/consultations/c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a"
 }
 ```
 

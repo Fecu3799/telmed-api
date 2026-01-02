@@ -7,10 +7,11 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -25,7 +26,7 @@ import {
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { AuditAction, UserRole } from '@prisma/client';
 import { ProblemDetailsDto } from '../../common/docs/problem-details.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -35,11 +36,15 @@ import type { Actor } from '../../common/types/actor.type';
 import { ConsultationDto } from './docs/consultation.dto';
 import { ConsultationsService } from './consultations.service';
 import { ConsultationPatchDto } from './dto/consultation-patch.dto';
+import { AuditService } from '../../infra/audit/audit.service';
 
 @ApiTags('consultations')
 @Controller()
 export class ConsultationsController {
-  constructor(private readonly consultationsService: ConsultationsService) {}
+  constructor(
+    private readonly consultationsService: ConsultationsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Post('appointments/:appointmentId/consultation')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -76,8 +81,23 @@ export class ConsultationsController {
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async get(@CurrentUser() actor: Actor, @Param('id') id: string) {
-    return this.consultationsService.getById(actor, id);
+  async get(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    const consultation = await this.consultationsService.getById(actor, id);
+    // Audit reads for consultation access.
+    await this.auditService.log({
+      action: AuditAction.READ,
+      resourceType: 'Consultation',
+      resourceId: consultation.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+    });
+    return this.withConsultationExtras(consultation);
   }
 
   @Patch('consultations/:id')
@@ -98,7 +118,8 @@ export class ConsultationsController {
     @Param('id') id: string,
     @Body() dto: ConsultationPatchDto,
   ) {
-    return this.consultationsService.patch(actor, id, dto);
+    const consultation = await this.consultationsService.patch(actor, id, dto);
+    return this.withConsultationExtras(consultation);
   }
 
   @Post('consultations/:id/start')
@@ -114,7 +135,8 @@ export class ConsultationsController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   @HttpCode(HttpStatus.OK)
   async start(@CurrentUser() actor: Actor, @Param('id') id: string) {
-    return this.consultationsService.start(actor, id);
+    const consultation = await this.consultationsService.start(actor, id);
+    return this.withConsultationExtras(consultation);
   }
 
   @Post('consultations/:id/close')
@@ -122,6 +144,7 @@ export class ConsultationsController {
   @Roles(UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Close consultation' })
+  @ApiBody({ type: ConsultationPatchDto })
   @ApiOkResponse({ type: ConsultationDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
@@ -129,7 +152,40 @@ export class ConsultationsController {
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   @HttpCode(HttpStatus.OK)
-  async close(@CurrentUser() actor: Actor, @Param('id') id: string) {
-    return this.consultationsService.close(actor, id);
+  async close(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Body() dto: ConsultationPatchDto,
+    @Req() req: Request,
+  ) {
+    const consultation = await this.consultationsService.close(actor, id, dto);
+    // Audit consultation closures for clinical traceability.
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'Consultation',
+      resourceId: consultation.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: { fields: Object.keys(dto ?? {}) },
+    });
+    return this.withConsultationExtras(consultation);
+  }
+
+  private withConsultationExtras(consultation: {
+    id: string;
+    queueItem?: {
+      id: string;
+      entryType: string;
+      reason: string | null;
+      paymentStatus: string | null;
+      appointmentId: string | null;
+    } | null;
+  }) {
+    return {
+      ...consultation,
+      videoUrl: `https://video.telmed.local/consultations/${consultation.id}`,
+    };
   }
 }

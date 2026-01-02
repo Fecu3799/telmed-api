@@ -75,6 +75,17 @@ export class ConsultationsService {
   async getById(actor: Actor, id: string) {
     const consultation = await this.prisma.consultation.findUnique({
       where: { id },
+      include: {
+        queueItem: {
+          select: {
+            id: true,
+            entryType: true,
+            reason: true,
+            paymentStatus: true,
+            appointmentId: true,
+          },
+        },
+      },
     });
 
     if (!consultation) {
@@ -138,7 +149,7 @@ export class ConsultationsService {
     });
   }
 
-  async close(actor: Actor, id: string) {
+  async close(actor: Actor, id: string, dto?: ConsultationPatchDto) {
     const consultation = await this.getById(actor, id);
 
     if (consultation.status === ConsultationStatus.closed) {
@@ -149,12 +160,23 @@ export class ConsultationsService {
       throw new ForbiddenException('Forbidden');
     }
 
-    return this.prisma.consultation.update({
+    const updated = await this.prisma.consultation.update({
       where: { id },
       data: {
         status: ConsultationStatus.closed,
         closedAt: consultation.closedAt ?? new Date(),
+        summary: dto?.summary ?? consultation.summary ?? null,
+        notes: dto?.notes ?? consultation.notes ?? null,
       },
     });
+
+    if (consultation.queueItem?.id) {
+      await this.prisma.consultationQueueItem.update({
+        where: { id: consultation.queueItem.id },
+        data: { closedAt: new Date() },
+      });
+    }
+
+    return updated;
   }
 }

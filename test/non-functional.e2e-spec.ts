@@ -216,7 +216,7 @@ describe('Non-functional requirements (e2e)', () => {
     expect(readLog?.traceId).toBe(traceId);
   });
 
-  it('logs audit entries for enable-payment', async () => {
+  it('logs audit entries for queue payment', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
@@ -230,15 +230,20 @@ describe('Non-functional requirements (e2e)', () => {
       .send({ doctorUserId, reason: 'Dolor agudo' })
       .expect(201);
 
-    const enable = await request(httpServer(app))
-      .post(`/api/v1/consultations/queue/${queue.body.id}/enable-payment`)
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queue.body.id}/accept`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    const payment = await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queue.body.id}/payment`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
       .expect(201);
 
     const auditLog = await prisma.auditLog.findFirst({
       where: {
         resourceType: 'Payment',
-        resourceId: enable.body.id as string,
+        resourceId: payment.body.id as string,
       },
     });
 

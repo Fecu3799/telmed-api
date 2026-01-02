@@ -63,24 +63,24 @@ export class ConsultationQueueItemDto {
 }
 
 export class ConsultationQueueConsultationDto {
-  @ApiProperty({ example: 'c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
-  id!: string;
+  @ApiProperty({ type: ConsultationQueueItemDto })
+  queueItem!: ConsultationQueueItemDto;
 
-  @ApiProperty({ example: 'draft' })
-  status!: string;
+  @ApiProperty({
+    example: {
+      id: 'c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+      status: 'in_progress',
+      startedAt: '2025-01-05T14:00:00.000Z',
+      appointmentId: 'e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+      doctorUserId: 'd9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+      patientUserId: '2b3c5f7a-9c2a-4c1e-8e9f-123456789abc',
+    },
+  })
+  consultation!: Record<string, unknown>;
 
-  @ApiPropertyOptional({ example: '2025-01-05T14:00:00.000Z' })
-  startedAt?: string | null;
-
-  @ApiPropertyOptional({ example: '2025-01-05T14:30:00.000Z' })
-  endedAt?: string | null;
-
-  @ApiPropertyOptional({ example: 'e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
-  appointmentId?: string | null;
-
-  @ApiProperty({ example: 'd9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
-  doctorUserId!: string;
-
-  @ApiProperty({ example: '2b3c5f7a-9c2a-4c1e-8e9f-123456789abc' })
-  patientUserId!: string;
+  @ApiProperty({
+    example:
+      'https://video.telmed.local/consultations/c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+  })
+  videoUrl!: string;
 }

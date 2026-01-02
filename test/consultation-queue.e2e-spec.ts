@@ -214,7 +214,7 @@ describe('Consultation queue (e2e)', () => {
     await app.close();
   });
 
-  it('patient creates queue, doctor accepts', async () => {
+  it('patient creates appointment queue and doctor can start without accept', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
@@ -252,16 +252,17 @@ describe('Consultation queue (e2e)', () => {
     expect(createResponse.body.reason).toBe(appointmentReason);
 
     await request(httpServer(app))
-      .post(`/api/v1/consultations/queue/${queueId}/enable-payment`)
+      .post(`/api/v1/consultations/queue/${queueId}/accept`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .expect(409);
 
-    const acceptResponse = await request(httpServer(app))
-      .post(`/api/v1/consultations/queue/${queueId}/accept`)
+    const startResponse = await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/start`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .expect(201);
 
-    expect(acceptResponse.body.status).toBe('accepted');
+    expect(startResponse.body.queueItem.id).toBe(queueId);
+    expect(startResponse.body.consultation.status).toBe('in_progress');
   });
 
   it('rejects duplicate active queue without appointment', async () => {
@@ -417,7 +418,7 @@ describe('Consultation queue (e2e)', () => {
       .expect(422);
   });
 
-  it('expires queued items on read and allows accept/reject', async () => {
+  it('expires queued items on read and allows reject', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
@@ -431,25 +432,15 @@ describe('Consultation queue (e2e)', () => {
     const slots = await getAvailabilitySlots(app, doctorUserId, from, to);
     expect(slots.length).toBeGreaterThan(2);
 
-    const appointment = await createAppointment(
-      app,
-      prisma,
-      patient.accessToken,
-      doctorUserId,
-      slots[0].startAt,
-    );
-
-    fakeClock.setNow(new Date(Date.parse(slots[0].startAt) - 5 * 60 * 1000));
-
     const createResponse = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ doctorUserId, appointmentId: appointment.id })
+      .send({ doctorUserId, reason: 'Dolor agudo' })
       .expect(201);
 
     const queueId = createResponse.body.id as string;
 
-    fakeClock.setNow(new Date(Date.parse(slots[0].startAt) + 20 * 60 * 1000));
+    fakeClock.setNow(new Date(BASE_TIME.getTime() + 30 * 60 * 1000));
 
     const listResponse = await request(httpServer(app))
       .get('/api/v1/consultations/queue')
@@ -468,36 +459,24 @@ describe('Consultation queue (e2e)', () => {
 
     expect(getResponse.body.status).toBe('expired');
 
-    const acceptResponse = await request(httpServer(app))
+    await request(httpServer(app))
       .post(`/api/v1/consultations/queue/${queueId}/accept`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(201);
-
-    expect(acceptResponse.body.status).toBe('accepted');
+      .expect(409);
 
     const otherPatient = await registerAndLogin(app, 'patient');
     await createPatientIdentity(app, otherPatient.accessToken);
 
     fakeClock.setNow(new Date(BASE_TIME));
-    const secondAppointment = await createAppointment(
-      app,
-      prisma,
-      otherPatient.accessToken,
-      doctorUserId,
-      slots[1].startAt,
-    );
-
-    fakeClock.setNow(new Date(Date.parse(slots[1].startAt) - 5 * 60 * 1000));
-
     const secondQueue = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${otherPatient.accessToken}`)
-      .send({ doctorUserId, appointmentId: secondAppointment.id })
+      .send({ doctorUserId, reason: 'Dolor agudo' })
       .expect(201);
 
     const secondQueueId = secondQueue.body.id as string;
 
-    fakeClock.setNow(new Date(Date.parse(slots[1].startAt) + 20 * 60 * 1000));
+    fakeClock.setNow(new Date(BASE_TIME.getTime() + 30 * 60 * 1000));
 
     await request(httpServer(app))
       .get(`/api/v1/consultations/queue/${secondQueueId}`)
@@ -590,7 +569,7 @@ describe('Consultation queue (e2e)', () => {
     const acceptedQueue = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
       .set('Authorization', `Bearer ${patientA.accessToken}`)
-      .send({ doctorUserId, appointmentId: appointmentAccepted.id })
+      .send({ doctorUserId, reason: 'Dolor agudo' })
       .expect(201);
 
     await request(httpServer(app))
@@ -644,12 +623,17 @@ describe('Consultation queue (e2e)', () => {
     await request(httpServer(app))
       .post(`/api/v1/consultations/queue/${queueId}/accept`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/accept`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
       .expect(409);
 
     await request(httpServer(app))
       .post(`/api/v1/consultations/queue/${queueId}/cancel`)
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .send({ reason: 'No puedo asistir' })
-      .expect(201);
+      .expect(409);
   });
 });

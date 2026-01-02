@@ -3,8 +3,6 @@ import {
   Controller,
   Get,
   Headers,
-  HttpException,
-  HttpStatus,
   Param,
   Post,
   Query,
@@ -35,7 +33,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { Actor } from '../../common/types/actor.type';
 import { AuditService } from '../../infra/audit/audit.service';
-import { RateLimitService } from '../../infra/rate-limit/rate-limit.service';
 import {
   ConsultationQueueConsultationDto,
   ConsultationQueueItemDto,
@@ -53,7 +50,6 @@ export class ConsultationQueueController {
   constructor(
     private readonly consultationQueueService: ConsultationQueueService,
     private readonly auditService: AuditService,
-    private readonly rateLimit: RateLimitService,
   ) {}
 
   @Post('consultations/queue')
@@ -117,10 +113,62 @@ export class ConsultationQueueController {
   async acceptQueue(
     @CurrentUser() actor: Actor,
     @Param('queueId') queueId: string,
+    @Req() req: Request,
   ) {
-    return this.consultationQueueService.acceptQueue(actor, queueId);
+    const queue = await this.consultationQueueService.acceptQueue(
+      actor,
+      queueId,
+    );
+    // Audit queue transitions for emergency flow.
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'ConsultationQueueItem',
+      resourceId: queue.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: { transition: 'accept', entryType: queue.entryType },
+    });
+    return queue;
   }
 
+  @Post('consultations/queue/:queueId/payment')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Start emergency payment for queue item' })
+  @ApiOkResponse({ type: PaymentCheckoutDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async payForQueue(
+    @CurrentUser() actor: Actor,
+    @Param('queueId') queueId: string,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+    @Req() req?: Request,
+  ) {
+    const payment = await this.consultationQueueService.requestPaymentForQueue(
+      actor,
+      queueId,
+      idempotencyKey,
+    );
+    // Audit payment creation for emergency flows.
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'Payment',
+      resourceId: payment.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req?.ip,
+      userAgent: req?.get('user-agent') ?? null,
+      metadata: { queueId },
+    });
+    return payment;
+  }
   @Post('consultations/queue/:queueId/reject')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)
@@ -178,55 +226,6 @@ export class ConsultationQueueController {
     return this.consultationQueueService.closeQueue(actor, queueId);
   }
 
-  @Post('consultations/queue/:queueId/enable-payment')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.doctor, UserRole.admin)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Enable payment for emergency queue item' })
-  @ApiOkResponse({ type: PaymentCheckoutDto })
-  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
-  @ApiForbiddenResponse({ type: ProblemDetailsDto })
-  @ApiNotFoundResponse({ type: ProblemDetailsDto })
-  @ApiConflictResponse({ type: ProblemDetailsDto })
-  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
-  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async enablePayment(
-    @CurrentUser() actor: Actor,
-    @Param('queueId') queueId: string,
-    @Req() req: Request,
-    @Headers('Idempotency-Key') idempotencyKey?: string,
-  ) {
-    const actorResult = this.rateLimit.consume(
-      `enable-payment:actor:${actor.id}`,
-      30,
-      60_000,
-    );
-    if (!actorResult.allowed) {
-      throw new HttpException(
-        'Rate limit exceeded',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    const payment = await this.consultationQueueService.enablePaymentForQueue(
-      actor,
-      queueId,
-      idempotencyKey,
-    );
-    // Audit payment enablement for emergency queues.
-    await this.auditService.log({
-      action: AuditAction.WRITE,
-      resourceType: 'Payment',
-      resourceId: payment.id,
-      actor,
-      traceId: (req as Request & { traceId?: string }).traceId ?? null,
-      ip: req.ip,
-      userAgent: req.get('user-agent') ?? null,
-      metadata: { queueId },
-    });
-    return payment;
-  }
-
   @Get('consultations/queue')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)
@@ -256,7 +255,7 @@ export class ConsultationQueueController {
     );
   }
 
-  @Post('consultations/from-queue/:queueId/start')
+  @Post('consultations/queue/:queueId/start')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
@@ -267,11 +266,27 @@ export class ConsultationQueueController {
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   @ApiConflictResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  startFromQueue(
+  async startQueueConsultation(
     @CurrentUser() actor: Actor,
     @Param('queueId') queueId: string,
+    @Req() req: Request,
   ) {
-    return this.consultationQueueService.startFromQueue(actor, queueId);
+    const result = await this.consultationQueueService.startFromQueue(
+      actor,
+      queueId,
+    );
+    // Audit consultation starts for queue-driven flows.
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'Consultation',
+      resourceId: result.consultation.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: { queueId },
+    });
+    return result;
   }
 
   @Post('consultations/:id/finalize')

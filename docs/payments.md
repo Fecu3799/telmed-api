@@ -5,7 +5,7 @@
 - TTL: 10 minutos desde la creación del pago.
 - Unidades monetarias: `amountCents` (centavos), moneda `ARS` por defecto.
 - Appointment: se crea en `pending_payment` y pasa a `confirmed` solo por webhook.
-- Emergencia (queue): el pago habilitado por el doctor deja el item en `queued` y solo habilita `accept` cuando el pago queda `paid`.
+- Emergencia (queue): el doctor acepta para habilitar pago; el paciente inicia el checkout; el pago debe estar `paid` antes de iniciar la consulta.
 
 ## Estados
 
@@ -41,10 +41,12 @@
 ### Emergencia (queue)
 1) `POST /api/v1/consultations/queue` (walk-in)
    - crea queueItem con `paymentStatus=not_started`.
-2) `POST /api/v1/consultations/queue/:id/enable-payment` (doctor/admin)
-   - crea `Payment` `pending` (TTL 10 min), setea `paymentStatus=pending`.
-3) Webhook MP (aprobado) -> `paymentStatus=paid`.
-4) `POST /api/v1/consultations/queue/:id/accept`
+2) `POST /api/v1/consultations/queue/:id/accept` (doctor)
+   - cambia a `status=accepted` y `paymentStatus=pending` (TTL 10 min).
+3) `POST /api/v1/consultations/queue/:id/payment` (patient)
+   - crea `Payment` `pending` y devuelve `checkoutUrl`.
+4) Webhook MP (aprobado) -> `paymentStatus=paid`.
+5) `POST /api/v1/consultations/queue/:id/start`
    - requiere `paymentStatus=paid` si es emergencia.
 
 ## Webhooks

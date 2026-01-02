@@ -343,13 +343,18 @@ describe('Payments (e2e)', () => {
 
     const queueId = queue.body.id as string;
 
-    const enable = await request(httpServer(app))
-      .post(`/api/v1/consultations/queue/${queueId}/enable-payment`)
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/accept`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    const enablePayment = await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/payment`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
       .set('Idempotency-Key', 'idemp-queue-1')
       .expect(201);
 
-    const paymentId = enable.body.id as string;
+    const paymentId = enablePayment.body.id as string;
 
     fakeMp.setPayment('mp_2', {
       id: 'mp_2',
@@ -374,15 +379,18 @@ describe('Payments (e2e)', () => {
       .send(body)
       .expect(200);
 
-    await request(httpServer(app))
-      .post(`/api/v1/consultations/queue/${queueId}/accept`)
-      .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(201);
+    const consultationId = (
+      await request(httpServer(app))
+        .post(`/api/v1/consultations/queue/${queueId}/start`)
+        .set('Authorization', `Bearer ${doctor.accessToken}`)
+        .expect(201)
+    ).body.consultation.id as string;
 
     await request(httpServer(app))
-      .post(`/api/v1/consultations/queue/${queueId}/close`)
+      .post(`/api/v1/consultations/${consultationId}/close`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(201);
+      .send({ summary: 'Ok' })
+      .expect(200);
 
     const queueNoPayment = await request(httpServer(app))
       .post('/api/v1/consultations/queue')
@@ -392,6 +400,11 @@ describe('Payments (e2e)', () => {
 
     await request(httpServer(app))
       .post(`/api/v1/consultations/queue/${queueNoPayment.body.id}/accept`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueNoPayment.body.id}/start`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .expect(409);
   });
