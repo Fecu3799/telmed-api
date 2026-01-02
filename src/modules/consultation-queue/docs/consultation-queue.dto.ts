@@ -37,6 +37,9 @@ export class ConsultationQueueItemDto {
   @ApiPropertyOptional({ example: 'e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   appointmentId?: string | null;
 
+  @ApiPropertyOptional({ example: 'q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
+  queueItemId?: string | null;
+
   @ApiProperty({ example: 'd9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   doctorUserId!: string;
 

@@ -5,8 +5,17 @@ export class ConsultationDto {
   @ApiProperty({ example: 'b9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   id!: string;
 
-  @ApiProperty({ example: 'e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
-  appointmentId!: string;
+  @ApiPropertyOptional({
+    example: 'e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+    nullable: true,
+  })
+  appointmentId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+    nullable: true,
+  })
+  queueItemId?: string | null;
 
   @ApiProperty({ example: 'd9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   doctorUserId!: string;

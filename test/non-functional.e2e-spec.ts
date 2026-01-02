@@ -197,9 +197,11 @@ describe('Non-functional requirements (e2e)', () => {
 
     const identityId = createIdentity.body.id as string;
 
+    const traceId = 'trace-identity-read';
     await request(httpServer(app))
       .get('/api/v1/patients/me/identity')
       .set('Authorization', `Bearer ${patient.accessToken}`)
+      .set('X-Trace-Id', traceId)
       .expect(200);
 
     const auditLogs = await prisma.auditLog.findMany({
@@ -209,6 +211,9 @@ describe('Non-functional requirements (e2e)', () => {
     const actions = auditLogs.map((entry) => entry.action);
     expect(actions).toContain('WRITE');
     expect(actions).toContain('READ');
+
+    const readLog = auditLogs.find((entry) => entry.action === 'READ');
+    expect(readLog?.traceId).toBe(traceId);
   });
 
   it('logs audit entries for enable-payment', async () => {

@@ -231,10 +231,12 @@ describe('Payments (e2e)', () => {
       body,
     );
 
+    const webhookTraceId = 'trace-webhook-mp-1';
     await request(httpServer(app))
       .post('/api/v1/payments/webhooks/mercadopago')
       .set('x-request-id', requestId)
       .set('x-signature', signature)
+      .set('X-Trace-Id', webhookTraceId)
       .send(body)
       .expect(200);
 
@@ -249,6 +251,23 @@ describe('Payments (e2e)', () => {
       where: { eventId: 'mp_1' },
     });
     expect(webhookEvents).toHaveLength(1);
+    expect(webhookEvents[0]?.traceId).toBe(webhookTraceId);
+
+    const traceId = 'trace-payment-read';
+    await request(httpServer(app))
+      .get(`/api/v1/payments/${paymentId}`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .set('X-Trace-Id', traceId)
+      .expect(200);
+
+    const paymentAudit = await prisma.auditLog.findFirst({
+      where: {
+        resourceType: 'Payment',
+        resourceId: paymentId,
+        action: 'READ',
+      },
+    });
+    expect(paymentAudit?.traceId).toBe(traceId);
 
     const list = await request(httpServer(app))
       .get('/api/v1/patients/me/appointments')

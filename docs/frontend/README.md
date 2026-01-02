@@ -58,6 +58,17 @@ Problem Details example:
 }
 ```
 
+## Auditoria y Observabilidad
+- `X-Trace-Id`: el cliente puede enviarlo; el servidor siempre lo devuelve en la respuesta.
+- AuditLog (uso interno):
+  - Campos: `action` (READ/WRITE/VERIFY/EXPORT/WEBHOOK), `resourceType`, `resourceId`, `actorId`, `actorRole`, `traceId`, `createdAt`, `metadata`.
+  - Objetivo: trazabilidad de accesos y cambios críticos (identidad, pagos, webhooks).
+- UI admin (guidelines):
+  - Filtrar por `traceId` para seguir un flujo completo (ej: pago -> webhook -> update).
+  - Mostrar eventos READ/WRITE por paciente/pago para auditoria.
+  - Filtros sugeridos: por actor, por recurso, por rango de fechas.
+- Nota MVP: no hay endpoints públicos de auditoria; se consume via DB/operaciones internas.
+
 ## Consultation queue
 
 - Waiting room contract: `docs/frontend/consultation-queue.md`

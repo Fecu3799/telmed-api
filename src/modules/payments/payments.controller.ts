@@ -17,14 +17,18 @@ import { PaymentDetailDto } from './docs/payment.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { AuditAction, UserRole } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { Actor } from '../../common/types/actor.type';
+import { AuditService } from '../../infra/audit/audit.service';
 
 @ApiTags('payments')
 @Controller()
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly auditService: AuditService,
+  ) {}
   private readonly logger = new Logger(PaymentsController.name);
 
   @Post('payments/webhooks/mercadopago')
@@ -89,7 +93,22 @@ export class PaymentsController {
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
-  getPaymentById(@CurrentUser() actor: Actor, @Param('id') id: string) {
-    return this.paymentsService.getPaymentById(actor, id);
+  async getPaymentById(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    const payment = await this.paymentsService.getPaymentById(actor, id);
+    // Audit reads for payment access tracking.
+    await this.auditService.log({
+      action: AuditAction.READ,
+      resourceType: 'Payment',
+      resourceId: payment.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+    });
+    return payment;
   }
 }
