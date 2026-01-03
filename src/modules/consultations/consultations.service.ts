@@ -125,30 +125,6 @@ export class ConsultationsService {
     });
   }
 
-  async start(actor: Actor, id: string) {
-    const consultation = await this.getById(actor, id);
-
-    if (consultation.status === ConsultationStatus.closed) {
-      throw new ConflictException('Consultation already closed');
-    }
-
-    if (actor.role !== UserRole.admin && actor.role !== UserRole.doctor) {
-      throw new ForbiddenException('Forbidden');
-    }
-
-    if (consultation.status === ConsultationStatus.in_progress) {
-      return consultation;
-    }
-
-    return this.prisma.consultation.update({
-      where: { id },
-      data: {
-        status: ConsultationStatus.in_progress,
-        startedAt: consultation.startedAt ?? new Date(),
-      },
-    });
-  }
-
   async close(actor: Actor, id: string, dto?: ConsultationPatchDto) {
     const consultation = await this.getById(actor, id);
 

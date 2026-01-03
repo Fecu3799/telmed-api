@@ -85,7 +85,7 @@ export class ConsultationQueueController {
     return queue;
   }
 
-  @Get('consultations/queue/:id')
+  @Get('consultations/queue/:queueItemId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.patient, UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
@@ -95,11 +95,14 @@ export class ConsultationQueueController {
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async getQueue(@CurrentUser() actor: Actor, @Param('id') id: string) {
-    return this.consultationQueueService.getQueueById(actor, id);
+  async getQueue(
+    @CurrentUser() actor: Actor,
+    @Param('queueItemId') queueItemId: string,
+  ) {
+    return this.consultationQueueService.getQueueById(actor, queueItemId);
   }
 
-  @Post('consultations/queue/:queueId/accept')
+  @Post('consultations/queue/:queueItemId/accept')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
@@ -112,12 +115,12 @@ export class ConsultationQueueController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async acceptQueue(
     @CurrentUser() actor: Actor,
-    @Param('queueId') queueId: string,
+    @Param('queueItemId') queueItemId: string,
     @Req() req: Request,
   ) {
     const queue = await this.consultationQueueService.acceptQueue(
       actor,
-      queueId,
+      queueItemId,
     );
     // Audit queue transitions for emergency flow.
     await this.auditService.log({
@@ -133,7 +136,7 @@ export class ConsultationQueueController {
     return queue;
   }
 
-  @Post('consultations/queue/:queueId/payment')
+  @Post('consultations/queue/:queueItemId/payment')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.patient)
   @ApiBearerAuth('access-token')
@@ -147,13 +150,13 @@ export class ConsultationQueueController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async payForQueue(
     @CurrentUser() actor: Actor,
-    @Param('queueId') queueId: string,
+    @Param('queueItemId') queueItemId: string,
     @Headers('Idempotency-Key') idempotencyKey?: string,
     @Req() req?: Request,
   ) {
     const payment = await this.consultationQueueService.requestPaymentForQueue(
       actor,
-      queueId,
+      queueItemId,
       idempotencyKey,
     );
     // Audit payment creation for emergency flows.
@@ -165,11 +168,11 @@ export class ConsultationQueueController {
       traceId: (req as Request & { traceId?: string }).traceId ?? null,
       ip: req?.ip,
       userAgent: req?.get('user-agent') ?? null,
-      metadata: { queueId },
+      metadata: { queueItemId },
     });
     return payment;
   }
-  @Post('consultations/queue/:queueId/reject')
+  @Post('consultations/queue/:queueItemId/reject')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
@@ -184,13 +187,13 @@ export class ConsultationQueueController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async rejectQueue(
     @CurrentUser() actor: Actor,
-    @Param('queueId') queueId: string,
+    @Param('queueItemId') queueItemId: string,
     @Body() dto: RejectQueueDto,
   ) {
-    return this.consultationQueueService.rejectQueue(actor, queueId, dto);
+    return this.consultationQueueService.rejectQueue(actor, queueItemId, dto);
   }
 
-  @Post('consultations/queue/:queueId/cancel')
+  @Post('consultations/queue/:queueItemId/cancel')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.patient, UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
@@ -205,25 +208,10 @@ export class ConsultationQueueController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async cancelQueue(
     @CurrentUser() actor: Actor,
-    @Param('queueId') queueId: string,
+    @Param('queueItemId') queueItemId: string,
     @Body() dto: CancelQueueDto,
   ) {
-    return this.consultationQueueService.cancelQueue(actor, queueId, dto);
-  }
-
-  @Post('consultations/queue/:queueId/close')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.patient, UserRole.doctor, UserRole.admin)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Close queue item' })
-  @ApiOkResponse({ type: ConsultationQueueItemDto })
-  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
-  @ApiForbiddenResponse({ type: ProblemDetailsDto })
-  @ApiNotFoundResponse({ type: ProblemDetailsDto })
-  @ApiConflictResponse({ type: ProblemDetailsDto })
-  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  closeQueue(@CurrentUser() actor: Actor, @Param('queueId') queueId: string) {
-    return this.consultationQueueService.closeQueue(actor, queueId);
+    return this.consultationQueueService.cancelQueue(actor, queueItemId, dto);
   }
 
   @Get('consultations/queue')
@@ -255,7 +243,7 @@ export class ConsultationQueueController {
     );
   }
 
-  @Post('consultations/queue/:queueId/start')
+  @Post('consultations/queue/:queueItemId/start')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
@@ -268,12 +256,12 @@ export class ConsultationQueueController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async startQueueConsultation(
     @CurrentUser() actor: Actor,
-    @Param('queueId') queueId: string,
+    @Param('queueItemId') queueItemId: string,
     @Req() req: Request,
   ) {
     const result = await this.consultationQueueService.startFromQueue(
       actor,
-      queueId,
+      queueItemId,
     );
     // Audit consultation starts for queue-driven flows.
     await this.auditService.log({
@@ -284,7 +272,7 @@ export class ConsultationQueueController {
       traceId: (req as Request & { traceId?: string }).traceId ?? null,
       ip: req.ip,
       userAgent: req.get('user-agent') ?? null,
-      metadata: { queueId },
+      metadata: { queueItemId },
     });
     return result;
   }

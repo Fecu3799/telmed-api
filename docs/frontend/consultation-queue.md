@@ -102,7 +102,7 @@ Notas:
 }
 ```
 
-### POST /api/v1/consultations/queue/:queueId/accept
+### POST /api/v1/consultations/queue/:queueItemId/accept
 
 Status: 200, 409 si estado invalido.
 Notas:
@@ -121,7 +121,7 @@ Response 200:
 }
 ```
 
-### POST /api/v1/consultations/queue/:queueId/reject
+### POST /api/v1/consultations/queue/:queueItemId/reject
 
 Status: 200, 409 si estado invalido.
 Request:
@@ -147,7 +147,7 @@ Response 200:
 }
 ```
 
-### POST /api/v1/consultations/queue/:queueId/cancel
+### POST /api/v1/consultations/queue/:queueItemId/cancel
 
 Status: 200, 409 si estado invalido.
 Request:
@@ -173,20 +173,9 @@ Response 200:
 }
 ```
 
-### POST /api/v1/consultations/queue/:queueId/close
+Nota: el cierre de la atención se hace por consulta con `POST /api/v1/consultations/:id/close`.
 
-Status: 200, 409 si estado invalido.
-Response 200:
-
-```json
-{
-  "id": "q9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
-  "status": "accepted",
-  "closedAt": "2025-01-05T14:10:00.000Z"
-}
-```
-
-### POST /api/v1/consultations/queue/:queueId/payment
+### POST /api/v1/consultations/queue/:queueItemId/payment
 
 Status: 200, 409 si estado invalido.
 Notas:
@@ -203,7 +192,7 @@ Response 200:
 }
 ```
 
-### POST /api/v1/consultations/queue/:queueId/start
+### POST /api/v1/consultations/queue/:queueItemId/start
 
 Status: 201.
 Response 201:

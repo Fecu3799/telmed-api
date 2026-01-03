@@ -41,12 +41,12 @@
 ### Emergencia (queue)
 1) `POST /api/v1/consultations/queue` (walk-in)
    - crea queueItem con `paymentStatus=not_started`.
-2) `POST /api/v1/consultations/queue/:id/accept` (doctor)
+2) `POST /api/v1/consultations/queue/:queueItemId/accept` (doctor)
    - cambia a `status=accepted` y `paymentStatus=pending` (TTL 10 min).
-3) `POST /api/v1/consultations/queue/:id/payment` (patient)
+3) `POST /api/v1/consultations/queue/:queueItemId/payment` (patient)
    - crea `Payment` `pending` y devuelve `checkoutUrl`.
 4) Webhook MP (aprobado) -> `paymentStatus=paid`.
-5) `POST /api/v1/consultations/queue/:id/start`
+5) `POST /api/v1/consultations/queue/:queueItemId/start`
    - requiere `paymentStatus=paid` si es emergencia.
 
 ## Webhooks

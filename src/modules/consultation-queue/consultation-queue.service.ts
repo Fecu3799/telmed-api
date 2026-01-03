@@ -218,8 +218,8 @@ export class ConsultationQueueService {
     return paymentUpdated ?? updated;
   }
 
-  async acceptQueue(actor: Actor, queueId: string) {
-    const queue = await this.getQueueById(actor, queueId);
+  async acceptQueue(actor: Actor, queueItemId: string) {
+    const queue = await this.getQueueById(actor, queueItemId);
     const paymentExpired = await this.expirePendingPaymentIfNeeded(queue);
     if (
       paymentExpired?.paymentStatus === ConsultationQueuePaymentStatus.expired
@@ -240,7 +240,7 @@ export class ConsultationQueueService {
     }
 
     return this.prisma.consultationQueueItem.update({
-      where: { id: queueId },
+      where: { id: queueItemId },
       data: {
         status: ConsultationQueueStatus.accepted,
         acceptedAt: this.clock.now(),
@@ -251,8 +251,8 @@ export class ConsultationQueueService {
     });
   }
 
-  async rejectQueue(actor: Actor, queueId: string, dto: RejectQueueDto) {
-    const queue = await this.getQueueById(actor, queueId);
+  async rejectQueue(actor: Actor, queueItemId: string, dto: RejectQueueDto) {
+    const queue = await this.getQueueById(actor, queueItemId);
 
     if (
       queue.status !== ConsultationQueueStatus.queued &&
@@ -262,7 +262,7 @@ export class ConsultationQueueService {
     }
 
     return this.prisma.consultationQueueItem.update({
-      where: { id: queueId },
+      where: { id: queueItemId },
       data: {
         status: ConsultationQueueStatus.rejected,
         rejectedAt: this.clock.now(),
@@ -272,15 +272,15 @@ export class ConsultationQueueService {
     });
   }
 
-  async cancelQueue(actor: Actor, queueId: string, dto: CancelQueueDto) {
-    const queue = await this.getQueueById(actor, queueId);
+  async cancelQueue(actor: Actor, queueItemId: string, dto: CancelQueueDto) {
+    const queue = await this.getQueueById(actor, queueItemId);
 
     if (queue.status !== ConsultationQueueStatus.queued) {
       throw new ConflictException('Queue status invalid');
     }
 
     return this.prisma.consultationQueueItem.update({
-      where: { id: queueId },
+      where: { id: queueItemId },
       data: {
         status: ConsultationQueueStatus.cancelled,
         cancelledAt: this.clock.now(),
@@ -290,27 +290,12 @@ export class ConsultationQueueService {
     });
   }
 
-  async closeQueue(actor: Actor, queueId: string) {
-    const queue = await this.getQueueById(actor, queueId);
-
-    if (queue.status !== ConsultationQueueStatus.accepted) {
-      throw new ConflictException('Queue status invalid');
-    }
-
-    return this.prisma.consultationQueueItem.update({
-      where: { id: queueId },
-      data: {
-        closedAt: this.clock.now(),
-      },
-    });
-  }
-
   async requestPaymentForQueue(
     actor: Actor,
-    queueId: string,
+    queueItemId: string,
     idempotencyKey?: string | null,
   ) {
-    let queue = await this.getQueueById(actor, queueId);
+    let queue = await this.getQueueById(actor, queueItemId);
 
     if (queue.entryType !== ConsultationQueueEntryType.emergency) {
       throw new ConflictException('Payment only allowed for emergencies');
@@ -451,8 +436,8 @@ export class ConsultationQueueService {
     return this.sortQueueItems(items);
   }
 
-  async startFromQueue(actor: Actor, queueId: string) {
-    let queue = await this.getQueueById(actor, queueId);
+  async startFromQueue(actor: Actor, queueItemId: string) {
+    let queue = await this.getQueueById(actor, queueItemId);
 
     if (actor.role === UserRole.doctor && queue.doctorUserId !== actor.id) {
       throw new ForbiddenException('Forbidden');

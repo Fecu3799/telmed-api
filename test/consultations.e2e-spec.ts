@@ -275,7 +275,7 @@ describe('Consultations (e2e)', () => {
       .expect(403);
   });
 
-  it('doctor can start and close, then patch returns 409', async () => {
+  it('doctor can close, then patch returns 409', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const patient = await registerAndLogin(app, 'patient');
 
@@ -292,11 +292,6 @@ describe('Consultations (e2e)', () => {
       .expect(201);
 
     const consultationId = created.body.id as string;
-
-    await request(httpServer(app))
-      .post(`/api/v1/consultations/${consultationId}/start`)
-      .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(200);
 
     await request(httpServer(app))
       .post(`/api/v1/consultations/${consultationId}/close`)

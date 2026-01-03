@@ -65,7 +65,8 @@ export class ConsultationDto {
   queueItem?: ConsultationQueueSummaryDto | null;
 
   @ApiPropertyOptional({
-    example: 'https://video.telmed.local/consultations/b9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+    example:
+      'https://video.telmed.local/consultations/b9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
   })
   videoUrl?: string | null;
 }

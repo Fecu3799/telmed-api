@@ -122,23 +122,6 @@ export class ConsultationsController {
     return this.withConsultationExtras(consultation);
   }
 
-  @Post('consultations/:id/start')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.doctor, UserRole.admin)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Start consultation' })
-  @ApiOkResponse({ type: ConsultationDto })
-  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
-  @ApiForbiddenResponse({ type: ProblemDetailsDto })
-  @ApiNotFoundResponse({ type: ProblemDetailsDto })
-  @ApiConflictResponse({ type: ProblemDetailsDto })
-  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  @HttpCode(HttpStatus.OK)
-  async start(@CurrentUser() actor: Actor, @Param('id') id: string) {
-    const consultation = await this.consultationsService.start(actor, id);
-    return this.withConsultationExtras(consultation);
-  }
-
   @Post('consultations/:id/close')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.doctor, UserRole.admin)

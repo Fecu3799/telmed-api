@@ -115,13 +115,13 @@ export class AppModule implements NestModule {
     consumer
       .apply(
         createRateLimitMiddleware({
-          keyPrefix: 'enable-payment',
+          keyPrefix: 'queue-payment',
           limit: 30,
           windowMs: 60_000,
         }),
       )
       .forRoutes({
-        path: 'consultations/queue/:queueId/enable-payment',
+        path: 'consultations/queue/:queueItemId/payment',
         method: RequestMethod.POST,
       });
   }
