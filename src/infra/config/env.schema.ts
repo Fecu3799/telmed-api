@@ -52,6 +52,48 @@ export const envSchema = z.object({
   MERCADOPAGO_MODE: z
     .enum(['sandbox', 'live'])
     .default(isProdEnv ? 'live' : 'sandbox'),
+  LIVEKIT_URL:
+    isTestEnv || !isProdEnv
+      ? z.string().default('wss://livekit.dev')
+      : z.string().min(1),
+  LIVEKIT_API_KEY:
+    isTestEnv || !isProdEnv
+      ? z.string().default('dev_livekit_key')
+      : z.string().min(1),
+  LIVEKIT_API_SECRET:
+    isTestEnv || !isProdEnv
+      ? z.string().default('dev_livekit_secret')
+      : z.string().min(1),
+  LIVEKIT_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+  STORAGE_PROVIDER: z.enum(['minio', 's3']).default(isProdEnv ? 's3' : 'minio'),
+  S3_ENDPOINT: z.string().min(1).optional(),
+  S3_REGION: z.string().min(1).default('us-east-1'),
+  S3_BUCKET:
+    isTestEnv || !isProdEnv
+      ? z.string().default('dev-bucket')
+      : z.string().min(1),
+  S3_ACCESS_KEY_ID:
+    isTestEnv || !isProdEnv
+      ? z.string().default('dev-access-key')
+      : z.string().min(1),
+  S3_SECRET_ACCESS_KEY:
+    isTestEnv || !isProdEnv
+      ? z.string().default('dev-secret-key')
+      : z.string().min(1),
+  S3_FORCE_PATH_STYLE: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return undefined;
+      }
+      return formatEnvValue(value).toLowerCase() === 'true';
+    }, z.boolean())
+    .optional(),
+  PRESIGN_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  CONSULTATION_FILE_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10485760),
   THROTTLE_ENABLED: z
     .preprocess((value) => {
       if (value === undefined || value === null || value === '') {

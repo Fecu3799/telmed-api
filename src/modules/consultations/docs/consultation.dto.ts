@@ -55,6 +55,20 @@ export class ConsultationDto {
   @ApiPropertyOptional({ example: 'Notas internas' })
   notes?: string | null;
 
+  @ApiPropertyOptional({ example: 'livekit' })
+  videoProvider?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'consultation_c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a',
+  })
+  videoRoomName?: string | null;
+
+  @ApiPropertyOptional({ example: '2025-01-05T14:00:00.000Z' })
+  videoCreatedAt?: string | null;
+
+  @ApiPropertyOptional({ example: '2025-01-05T14:02:00.000Z' })
+  lastActivityAt?: string | null;
+
   @ApiProperty({ example: '2025-01-01T12:00:00.000Z' })
   createdAt!: string;
 

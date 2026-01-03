@@ -528,6 +528,7 @@ export class ConsultationQueueService {
           data: {
             status: ConsultationStatus.in_progress,
             startedAt: existing.startedAt ?? this.clock.now(),
+            lastActivityAt: this.clock.now(),
           },
         });
         return this.toStartResponse(updatedQueue, resumed);
@@ -542,11 +543,13 @@ export class ConsultationQueueService {
       startedAt: Date;
       appointmentId?: string | null;
       queueItemId?: string | null;
+      lastActivityAt?: Date;
     } = {
       doctorUserId: queue.doctorUserId,
       patientUserId: queue.patientUserId,
       status: ConsultationStatus.in_progress,
       startedAt: this.clock.now(),
+      lastActivityAt: this.clock.now(),
     };
 
     if (isAppointmentEntry) {

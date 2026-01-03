@@ -74,6 +74,10 @@ Problem Details example:
 - Waiting room contract: `docs/frontend/consultation-queue.md`
 - Payments MVP: `docs/payments.md`
 
+## Consultations live
+
+- Live consultations (LiveKit + chat + files): `docs/frontend/consultations.md`
+
 ## Examples
 
 ### PATCH /patients/me/identity

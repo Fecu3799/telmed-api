@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -17,14 +18,17 @@ import {
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiExtraModels,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { AuditAction, UserRole } from '@prisma/client';
 import { ProblemDetailsDto } from '../../common/docs/problem-details.dto';
@@ -34,9 +38,22 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { Actor } from '../../common/types/actor.type';
 import { ConsultationDto } from './docs/consultation.dto';
+import { ConsultationAdminDto } from './docs/consultation-admin.dto';
+import { LiveKitTokenDto } from './docs/livekit-token.dto';
+import { ConsultationMessagesResponseDto } from './docs/consultation-messages-response.dto';
+import { ConsultationMessageDto } from './docs/consultation-message.dto';
+import {
+  ConsultationFileDownloadDto,
+  ConsultationFilePrepareResponseDto,
+} from './docs/consultation-file.dto';
 import { ConsultationsService } from './consultations.service';
 import { ConsultationPatchDto } from './dto/consultation-patch.dto';
 import { AuditService } from '../../infra/audit/audit.service';
+import { ConsultationRealtimeService } from './consultation-realtime.service';
+import { ConsultationMessagesQueryDto } from './dto/consultation-messages-query.dto';
+import { ConsultationFilePrepareDto } from './dto/consultation-file-prepare.dto';
+import { ConsultationFileConfirmDto } from './dto/consultation-file-confirm.dto';
+import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
 
 @ApiTags('consultations')
 @Controller()
@@ -44,6 +61,8 @@ export class ConsultationsController {
   constructor(
     private readonly consultationsService: ConsultationsService,
     private readonly auditService: AuditService,
+    private readonly consultationRealtimeService: ConsultationRealtimeService,
+    private readonly consultationRealtimeGateway: ConsultationRealtimeGateway,
   ) {}
 
   @Post('appointments/:appointmentId/consultation')
@@ -76,7 +95,15 @@ export class ConsultationsController {
   @Roles(UserRole.patient, UserRole.doctor, UserRole.admin)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get consultation' })
-  @ApiOkResponse({ type: ConsultationDto })
+  @ApiExtraModels(ConsultationDto, ConsultationAdminDto)
+  @ApiOkResponse({
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(ConsultationDto) },
+        { $ref: getSchemaPath(ConsultationAdminDto) },
+      ],
+    },
+  })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
@@ -97,6 +124,9 @@ export class ConsultationsController {
       ip: req.ip,
       userAgent: req.get('user-agent') ?? null,
     });
+    if (actor.role === UserRole.admin) {
+      return this.toAdminView(consultation);
+    }
     return this.withConsultationExtras(consultation);
   }
 
@@ -153,7 +183,138 @@ export class ConsultationsController {
       userAgent: req.get('user-agent') ?? null,
       metadata: { fields: Object.keys(dto ?? {}) },
     });
+    this.consultationRealtimeGateway.emitConsultationClosed(
+      consultation.id,
+      consultation.closedAt ?? new Date(),
+    );
     return this.withConsultationExtras(consultation);
+  }
+
+  @Post('consultations/:id/livekit-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Issue LiveKit token for consultation' })
+  @ApiOkResponse({ type: LiveKitTokenDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async issueLivekitToken(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    return this.consultationRealtimeService.issueLivekitToken(
+      actor,
+      id,
+      (req as Request & { traceId?: string }).traceId ?? undefined,
+    );
+  }
+
+  @Get('consultations/:id/messages')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List consultation messages' })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiOkResponse({ type: ConsultationMessagesResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async listMessages(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Query() query: ConsultationMessagesQueryDto,
+    @Req() req: Request,
+  ) {
+    return this.consultationRealtimeService.listMessages(
+      actor,
+      id,
+      query,
+      (req as Request & { traceId?: string }).traceId ?? undefined,
+    );
+  }
+
+  @Post('consultations/:id/files/prepare')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Prepare consultation file upload' })
+  @ApiBody({ type: ConsultationFilePrepareDto })
+  @ApiCreatedResponse({ type: ConsultationFilePrepareResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async prepareFile(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Body() dto: ConsultationFilePrepareDto,
+    @Req() req: Request,
+  ) {
+    return this.consultationRealtimeService.prepareFileUpload(
+      actor,
+      id,
+      dto,
+      (req as Request & { traceId?: string }).traceId ?? undefined,
+    );
+  }
+
+  @Post('consultations/:id/files/confirm')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Confirm consultation file upload' })
+  @ApiBody({ type: ConsultationFileConfirmDto })
+  @ApiOkResponse({ type: ConsultationMessageDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async confirmFile(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Body() dto: ConsultationFileConfirmDto,
+  ) {
+    const message = await this.consultationRealtimeService.confirmFileUpload(
+      actor,
+      id,
+      dto.fileId,
+    );
+    this.consultationRealtimeGateway.emitMessageCreated(id, message);
+    return message;
+  }
+
+  @Get('consultations/:id/files/:fileId/download')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Download consultation file (presigned URL)' })
+  @ApiOkResponse({ type: ConsultationFileDownloadDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async downloadFile(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Param('fileId') fileId: string,
+    @Req() req: Request,
+  ) {
+    return this.consultationRealtimeService.getDownloadUrl(
+      actor,
+      id,
+      fileId,
+      (req as Request & { traceId?: string }).traceId ?? undefined,
+    );
   }
 
   private withConsultationExtras(consultation: {
@@ -169,6 +330,28 @@ export class ConsultationsController {
     return {
       ...consultation,
       videoUrl: `https://video.telmed.local/consultations/${consultation.id}`,
+    };
+  }
+
+  private toAdminView(consultation: {
+    id: string;
+    status: string;
+    startedAt?: Date | null;
+    closedAt?: Date | null;
+    doctorUserId: string;
+    patientUserId: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: consultation.id,
+      status: consultation.status,
+      startedAt: consultation.startedAt ?? null,
+      closedAt: consultation.closedAt ?? null,
+      doctorUserId: consultation.doctorUserId,
+      patientUserId: consultation.patientUserId,
+      createdAt: consultation.createdAt,
+      updatedAt: consultation.updatedAt,
     };
   }
 }

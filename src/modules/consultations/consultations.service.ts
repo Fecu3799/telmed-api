@@ -141,6 +141,7 @@ export class ConsultationsService {
       data: {
         status: ConsultationStatus.closed,
         closedAt: consultation.closedAt ?? new Date(),
+        lastActivityAt: new Date(),
         summary: dto?.summary ?? consultation.summary ?? null,
         notes: dto?.notes ?? consultation.notes ?? null,
       },
