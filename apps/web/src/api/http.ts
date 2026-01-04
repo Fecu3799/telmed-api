@@ -24,7 +24,8 @@ export interface ApiError extends Error {
   status: number;
 }
 
-const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
+const baseUrl =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
 let currentTraceId: string | null = null;
 
@@ -36,7 +37,9 @@ export function setTraceId(traceId: string | null): void {
   currentTraceId = traceId;
 }
 
-async function parseProblemDetails(response: Response): Promise<ProblemDetails> {
+async function parseProblemDetails(
+  response: Response,
+): Promise<ProblemDetails> {
   try {
     const data = await response.json();
     return {
@@ -89,25 +92,33 @@ export async function http<T>(
   }
 
   // Handle empty responses (e.g., 204 No Content)
-  if (response.status === 204 || response.headers.get('content-length') === '0') {
+  if (
+    response.status === 204 ||
+    response.headers.get('content-length') === '0'
+  ) {
     return undefined as T;
   }
 
   return response.json();
 }
 
-// Token management - dynamic getter (set by AuthContext)
-// This allows the HTTP client to get the active token at request time, not from a cached closure
-let getAccessTokenFn: (() => string | null) | null = null;
+// Token management (will be set by AuthContext)
+let accessToken: string | null = null;
+let accessTokenGetter: (() => string | null) | null = null;
 
-export function setAccessTokenGetter(fn: (() => string | null) | null): void {
-  getAccessTokenFn = fn;
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}
+
+export function setAccessTokenGetter(
+  getter: (() => string | null) | null,
+): void {
+  accessTokenGetter = getter;
 }
 
 export function getAccessToken(): string | null {
-  if (getAccessTokenFn) {
-    return getAccessTokenFn();
+  if (accessTokenGetter) {
+    return accessTokenGetter();
   }
-  return null;
+  return accessToken;
 }
-

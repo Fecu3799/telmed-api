@@ -31,10 +31,11 @@ export async function getPatientIdentity(): Promise<PatientIdentity> {
   return http<PatientIdentity>(endpoints.patientIdentity.get);
 }
 
-export async function patchPatientIdentity(data: PatientIdentityPatch): Promise<PatientIdentity> {
+export async function patchPatientIdentity(
+  data: PatientIdentityPatch,
+): Promise<PatientIdentity> {
   return http<PatientIdentity>(endpoints.patientIdentity.patch, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
 }
-

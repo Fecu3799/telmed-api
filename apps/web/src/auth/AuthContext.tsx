@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from 'react';
 import { setAccessTokenGetter } from '../api/http';
 
 export type ActiveRole = 'doctor' | 'patient';
@@ -40,7 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeRole, setActiveRoleState] = useState<ActiveRole | null>(() => {
     if (import.meta.env.DEV) {
       const stored = localStorage.getItem(STORAGE_KEYS.activeRole);
-      return (stored === 'doctor' || stored === 'patient' ? stored : null) as ActiveRole | null;
+      return (
+        stored === 'doctor' || stored === 'patient' ? stored : null
+      ) as ActiveRole | null;
     }
     return null;
   });
@@ -54,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (activeRole === 'patient') return patientToken;
       return null;
     };
-    
+
     setAccessTokenGetter(getActiveTokenFn);
     return () => {
       setAccessTokenGetter(null);
@@ -140,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (context === undefined) {

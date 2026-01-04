@@ -25,11 +25,14 @@ export const endpoints = {
     create: '/consultations/queue',
     list: '/consultations/queue',
     get: (queueItemId: string) => `/consultations/queue/${queueItemId}`,
-    accept: (queueItemId: string) => `/consultations/queue/${queueItemId}/accept`,
-    reject: (queueItemId: string) => `/consultations/queue/${queueItemId}/reject`,
-    cancel: (queueItemId: string) => `/consultations/queue/${queueItemId}/cancel`,
-    payment: (queueItemId: string) => `/consultations/queue/${queueItemId}/payment`,
+    accept: (queueItemId: string) =>
+      `/consultations/queue/${queueItemId}/accept`,
+    reject: (queueItemId: string) =>
+      `/consultations/queue/${queueItemId}/reject`,
+    cancel: (queueItemId: string) =>
+      `/consultations/queue/${queueItemId}/cancel`,
+    payment: (queueItemId: string) =>
+      `/consultations/queue/${queueItemId}/payment`,
     start: (queueItemId: string) => `/consultations/queue/${queueItemId}/start`,
   },
 } as const;
-

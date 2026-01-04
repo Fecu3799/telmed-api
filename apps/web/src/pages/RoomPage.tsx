@@ -5,14 +5,16 @@ export function RoomPage() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column',
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      minHeight: '100vh',
-      padding: '20px'
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        padding: '20px',
+      }}
+    >
       <div>
         <h1>Consultation Room placeholder</h1>
         <p>Consultation ID: {consultationId}</p>
@@ -25,7 +27,7 @@ export function RoomPage() {
             backgroundColor: '#007bff',
             color: 'white',
             cursor: 'pointer',
-            marginTop: '16px'
+            marginTop: '16px',
           }}
         >
           Back to Lobby
@@ -34,4 +36,3 @@ export function RoomPage() {
     </div>
   );
 }
-

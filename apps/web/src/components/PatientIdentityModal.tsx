@@ -1,6 +1,9 @@
 import { useState, FormEvent } from 'react';
 import { type ProblemDetails } from '../api/http';
-import { type PatientIdentityPatch, patchPatientIdentity } from '../api/patient-identity';
+import {
+  type PatientIdentityPatch,
+  patchPatientIdentity,
+} from '../api/patient-identity';
 
 interface PatientIdentityModalProps {
   isOpen: boolean;
@@ -8,7 +11,11 @@ interface PatientIdentityModalProps {
   onSuccess: () => void;
 }
 
-export function PatientIdentityModal({ isOpen, onClose, onSuccess }: PatientIdentityModalProps) {
+export function PatientIdentityModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: PatientIdentityModalProps) {
   const [formData, setFormData] = useState<PatientIdentityPatch>({
     legalFirstName: '',
     legalLastName: '',
@@ -49,7 +56,11 @@ export function PatientIdentityModal({ isOpen, onClose, onSuccess }: PatientIden
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      const apiError = err as { problemDetails?: ProblemDetails; status?: number; message?: string };
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+        message?: string;
+      };
       if (apiError.problemDetails) {
         setError(apiError.problemDetails);
         if (apiError.problemDetails.errors) {
@@ -99,56 +110,111 @@ export function PatientIdentityModal({ isOpen, onClose, onSuccess }: PatientIden
         <h2 style={{ marginTop: 0 }}>Patient Identity</h2>
 
         {error && (
-          <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#fee', border: '1px solid #fcc', borderRadius: '4px', color: '#c33' }}>
+          <div
+            style={{
+              marginBottom: '16px',
+              padding: '12px',
+              backgroundColor: '#fee',
+              border: '1px solid #fcc',
+              borderRadius: '4px',
+              color: '#c33',
+            }}
+          >
             {error.detail}
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={(e) => void handleSubmit(e)}>
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               First Name *
             </label>
             <input
               type="text"
               value={formData.legalFirstName || ''}
-              onChange={(e) => setFormData({ ...formData, legalFirstName: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, legalFirstName: e.target.value })
+              }
               required
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
             {fieldErrors.legalFirstName && (
-              <div style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}>
+              <div
+                style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}
+              >
                 {fieldErrors.legalFirstName.join(', ')}
               </div>
             )}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Last Name *
             </label>
             <input
               type="text"
               value={formData.legalLastName || ''}
-              onChange={(e) => setFormData({ ...formData, legalLastName: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, legalLastName: e.target.value })
+              }
               required
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
             {fieldErrors.legalLastName && (
-              <div style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}>
+              <div
+                style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}
+              >
                 {fieldErrors.legalLastName.join(', ')}
               </div>
             )}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Document Type
             </label>
             <select
               value={formData.documentType || 'DNI'}
-              onChange={(e) => setFormData({ ...formData, documentType: e.target.value as any })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  documentType: e.target.value as any,
+                })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             >
               <option value="DNI">DNI</option>
               <option value="PASSPORT">PASSPORT</option>
@@ -158,89 +224,177 @@ export function PatientIdentityModal({ isOpen, onClose, onSuccess }: PatientIden
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Document Number
             </label>
             <input
               type="text"
               value={formData.documentNumber || ''}
-              onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              onChange={(e) =>
+                setFormData({ ...formData, documentNumber: e.target.value })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
             {fieldErrors.documentNumber && (
-              <div style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}>
+              <div
+                style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}
+              >
                 {fieldErrors.documentNumber.join(', ')}
               </div>
             )}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Document Country
             </label>
             <input
               type="text"
               value={formData.documentCountry || ''}
-              onChange={(e) => setFormData({ ...formData, documentCountry: e.target.value })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              onChange={(e) =>
+                setFormData({ ...formData, documentCountry: e.target.value })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Birth Date
             </label>
             <input
               type="date"
               value={formData.birthDate || ''}
-              onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              onChange={(e) =>
+                setFormData({ ...formData, birthDate: e.target.value })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Phone
             </label>
             <input
               type="text"
               value={formData.phone || ''}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              onChange={(e) =>
+                setFormData({ ...formData, phone: e.target.value })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
           </div>
 
           <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Address
             </label>
             <input
               type="text"
               value={formData.addressText || ''}
-              onChange={(e) => setFormData({ ...formData, addressText: e.target.value })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              onChange={(e) =>
+                setFormData({ ...formData, addressText: e.target.value })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <div
+            style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}
+          >
             <button
               type="button"
               onClick={handleAutocomplete}
-              style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f5f5f5', cursor: 'pointer' }}
+              style={{
+                padding: '8px 16px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: '#f5f5f5',
+                cursor: 'pointer',
+              }}
             >
               Autocompletar
             </button>
             <button
               type="button"
               onClick={onClose}
-              style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f5f5f5', cursor: 'pointer' }}
+              style={{
+                padding: '8px 16px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: '#f5f5f5',
+                cursor: 'pointer',
+              }}
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              style={{ padding: '8px 16px', border: 'none', borderRadius: '4px', backgroundColor: loading ? '#ccc' : '#007bff', color: 'white', cursor: loading ? 'not-allowed' : 'pointer' }}
+              style={{
+                padding: '8px 16px',
+                border: 'none',
+                borderRadius: '4px',
+                backgroundColor: loading ? '#ccc' : '#007bff',
+                color: 'white',
+                cursor: loading ? 'not-allowed' : 'pointer',
+              }}
             >
               {loading ? 'Guardando...' : 'Guardar'}
             </button>
@@ -250,4 +404,3 @@ export function PatientIdentityModal({ isOpen, onClose, onSuccess }: PatientIden
     </div>
   );
 }
-

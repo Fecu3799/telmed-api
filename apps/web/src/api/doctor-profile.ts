@@ -36,10 +36,11 @@ export async function getDoctorProfile(): Promise<DoctorProfile> {
   return http<DoctorProfile>(endpoints.doctorProfile.get);
 }
 
-export async function putDoctorProfile(data: DoctorProfilePut): Promise<DoctorProfile> {
+export async function putDoctorProfile(
+  data: DoctorProfilePut,
+): Promise<DoctorProfile> {
   return http<DoctorProfile>(endpoints.doctorProfile.put, {
     method: 'PUT',
     body: JSON.stringify(data),
   });
 }
-

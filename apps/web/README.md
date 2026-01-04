@@ -68,20 +68,10 @@ apps/web/
 El frontend usa tokens JWT almacenados en memoria (context) y en `localStorage` solo durante desarrollo.
 
 - Login: `POST /api/v1/auth/login` con `{ email, password }`
-- Register: `POST /api/v1/auth/register` con `{ email, password, role }`
 - Respuesta: `{ user, accessToken, refreshToken }`
 - Headers: `Authorization: Bearer <accessToken>`
 
-### Primer Uso
-
-1. Ve a `http://localhost:5173/login`
-2. En la sección **"Demo Credentials"**:
-   - Click en **"Register Demo Users"** para crear usuarios demo (si no existen)
-   - Click en **"Login Doctor"** o **"Login Patient"** para iniciar sesión
-3. Serás redirigido automáticamente a `/lobby`
-
 Las rutas `/lobby` y `/room` requieren autenticación. Si no hay token, se redirige a `/login`.
-La ruta `/login` es siempre pública y no requiere autenticación.
 
 ## Desarrollo
 
@@ -95,8 +85,6 @@ El Lobby es la pantalla principal para pruebas y desarrollo. Incluye:
 
 ### Demo Credentials
 
-**Nota:** Puedes registrar y loguear usuarios demo desde `/login` (recomendado para primer uso) o desde el Lobby.
-
 El Lobby permite gestionar sesiones separadas para doctor y patient:
 
 1. **Credenciales por defecto:**
@@ -104,8 +92,7 @@ El Lobby permite gestionar sesiones separadas para doctor y patient:
    - Patient: `patient.demo@telmed.test` / `Pass123!`
 
 2. **Registro de usuarios demo:**
-   - Desde `/login`: Usa "Register Demo Users" antes de acceder al Lobby
-   - Desde Lobby: Usa el botón "Register Demo Users" para crear ambos usuarios
+   - Usa el botón "Register Demo Users" para crear ambos usuarios
    - Si ya existen (409), el error se tolera y puedes hacer login directamente
 
 3. **Gestión de sesiones:**

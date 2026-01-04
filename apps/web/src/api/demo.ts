@@ -35,7 +35,10 @@ export async function registerDemoUsers(
     });
     result.doctorCreated = true;
   } catch (err: unknown) {
-    const apiError = err as { problemDetails?: ProblemDetails; status?: number };
+    const apiError = err as {
+      problemDetails?: ProblemDetails;
+      status?: number;
+    };
     if (apiError.status === 409) {
       // Already exists, treat as success
       result.doctorCreated = true;
@@ -68,7 +71,10 @@ export async function registerDemoUsers(
     });
     result.patientCreated = true;
   } catch (err: unknown) {
-    const apiError = err as { problemDetails?: ProblemDetails; status?: number };
+    const apiError = err as {
+      problemDetails?: ProblemDetails;
+      status?: number;
+    };
     if (apiError.status === 409) {
       // Already exists, treat as success
       result.patientCreated = true;
@@ -98,7 +104,9 @@ export async function registerDemoUsers(
 /**
  * Login as doctor and return token
  */
-export async function loginAsDoctor(credentials: LoginRequest): Promise<string> {
+export async function loginAsDoctor(
+  credentials: LoginRequest,
+): Promise<string> {
   const response = await login(credentials);
   if (response.user.role !== 'doctor') {
     throw new Error('User is not a doctor');
@@ -109,11 +117,12 @@ export async function loginAsDoctor(credentials: LoginRequest): Promise<string> 
 /**
  * Login as patient and return token
  */
-export async function loginAsPatient(credentials: LoginRequest): Promise<string> {
+export async function loginAsPatient(
+  credentials: LoginRequest,
+): Promise<string> {
   const response = await login(credentials);
   if (response.user.role !== 'patient') {
     throw new Error('User is not a patient');
   }
   return response.accessToken;
 }
-

@@ -8,7 +8,11 @@ interface DoctorProfileModalProps {
   onSuccess: () => void;
 }
 
-export function DoctorProfileModal({ isOpen, onClose, onSuccess }: DoctorProfileModalProps) {
+export function DoctorProfileModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: DoctorProfileModalProps) {
   const [formData, setFormData] = useState<DoctorProfilePut>({
     firstName: '',
     lastName: '',
@@ -43,7 +47,11 @@ export function DoctorProfileModal({ isOpen, onClose, onSuccess }: DoctorProfile
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      const apiError = err as { problemDetails?: ProblemDetails; status?: number; message?: string };
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+        message?: string;
+      };
       if (apiError.problemDetails) {
         setError(apiError.problemDetails);
         if (apiError.problemDetails.errors) {
@@ -93,110 +101,214 @@ export function DoctorProfileModal({ isOpen, onClose, onSuccess }: DoctorProfile
         <h2 style={{ marginTop: 0 }}>Doctor Profile</h2>
 
         {error && (
-          <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#fee', border: '1px solid #fcc', borderRadius: '4px', color: '#c33' }}>
+          <div
+            style={{
+              marginBottom: '16px',
+              padding: '12px',
+              backgroundColor: '#fee',
+              border: '1px solid #fcc',
+              borderRadius: '4px',
+              color: '#c33',
+            }}
+          >
             {error.detail}
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={(e) => void handleSubmit(e)}>
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               First Name *
             </label>
             <input
               type="text"
               value={formData.firstName}
-              onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, firstName: e.target.value })
+              }
               required
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
             {fieldErrors.firstName && (
-              <div style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}>
+              <div
+                style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}
+              >
                 {fieldErrors.firstName.join(', ')}
               </div>
             )}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Last Name *
             </label>
             <input
               type="text"
               value={formData.lastName}
-              onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, lastName: e.target.value })
+              }
               required
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
             {fieldErrors.lastName && (
-              <div style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}>
+              <div
+                style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}
+              >
                 {fieldErrors.lastName.join(', ')}
               </div>
             )}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Bio
             </label>
             <textarea
               value={formData.bio || ''}
-              onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, bio: e.target.value })
+              }
               rows={3}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Price (cents) *
             </label>
             <input
               type="number"
               value={formData.priceCents}
-              onChange={(e) => setFormData({ ...formData, priceCents: parseInt(e.target.value) || 0 })}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  priceCents: parseInt(e.target.value) || 0,
+                })
+              }
               required
               min={0}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
             {fieldErrors.priceCents && (
-              <div style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}>
+              <div
+                style={{ color: '#c33', fontSize: '14px', marginTop: '4px' }}
+              >
                 {fieldErrors.priceCents.join(', ')}
               </div>
             )}
           </div>
 
           <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
               Currency
             </label>
             <input
               type="text"
               value={formData.currency || 'ARS'}
-              onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              onChange={(e) =>
+                setFormData({ ...formData, currency: e.target.value })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <div
+            style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}
+          >
             <button
               type="button"
               onClick={handleAutocomplete}
-              style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f5f5f5', cursor: 'pointer' }}
+              style={{
+                padding: '8px 16px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: '#f5f5f5',
+                cursor: 'pointer',
+              }}
             >
               Autocompletar
             </button>
             <button
               type="button"
               onClick={onClose}
-              style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f5f5f5', cursor: 'pointer' }}
+              style={{
+                padding: '8px 16px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: '#f5f5f5',
+                cursor: 'pointer',
+              }}
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              style={{ padding: '8px 16px', border: 'none', borderRadius: '4px', backgroundColor: loading ? '#ccc' : '#007bff', color: 'white', cursor: loading ? 'not-allowed' : 'pointer' }}
+              style={{
+                padding: '8px 16px',
+                border: 'none',
+                borderRadius: '4px',
+                backgroundColor: loading ? '#ccc' : '#007bff',
+                color: 'white',
+                cursor: loading ? 'not-allowed' : 'pointer',
+              }}
             >
               {loading ? 'Guardando...' : 'Guardar'}
             </button>
@@ -206,4 +318,3 @@ export function DoctorProfileModal({ isOpen, onClose, onSuccess }: DoctorProfile
     </div>
   );
 }
-

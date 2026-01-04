@@ -8,7 +8,7 @@ import { type ProblemDetails, type ApiError } from '../api/http';
 export function LoginPage() {
   const navigate = useNavigate();
   const { setDoctorToken, setPatientToken, setActiveRole } = useAuth();
-  
+
   // Manual login state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +22,9 @@ export function LoginPage() {
   const [patientPassword, setPatientPassword] = useState('Pass123!');
   const [loadingDemo, setLoadingDemo] = useState(false);
   const [demoError, setDemoError] = useState<ProblemDetails | null>(null);
-  const [registerAvailable, setRegisterAvailable] = useState<boolean | null>(null);
+  const [registerAvailable, setRegisterAvailable] = useState<boolean | null>(
+    null,
+  );
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -88,7 +90,10 @@ export function LoginPage() {
         setDemoError(null);
       }
     } catch (err) {
-      const apiError = err as { problemDetails?: ProblemDetails; status?: number };
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
       if (apiError.status === 404) {
         setRegisterAvailable(false);
         setDemoError({
@@ -178,26 +183,47 @@ export function LoginPage() {
   };
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      minHeight: '100vh',
-      padding: '20px'
-    }}>
-      <div style={{ 
-        width: '100%', 
-        maxWidth: '600px',
-      }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        padding: '20px',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '600px',
+        }}
+      >
         {/* Demo Credentials Section */}
         <div style={sectionStyle}>
-          <h2 style={{ marginTop: 0, marginBottom: '16px' }}>Demo Credentials</h2>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+          <h2 style={{ marginTop: 0, marginBottom: '16px' }}>
+            Demo Credentials
+          </h2>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '16px',
+              marginBottom: '16px',
+            }}
+          >
             <div>
               <h3 style={{ marginTop: 0, fontSize: '16px' }}>Doctor</h3>
               <div style={{ marginBottom: '8px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px' }}>Email</label>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '4px',
+                    fontSize: '14px',
+                  }}
+                >
+                  Email
+                </label>
                 <input
                   type="email"
                   value={doctorEmail}
@@ -209,12 +235,20 @@ export function LoginPage() {
                     border: '1px solid #ccc',
                     borderRadius: '4px',
                     fontSize: '14px',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
                   }}
                 />
               </div>
               <div style={{ marginBottom: '8px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px' }}>Password</label>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '4px',
+                    fontSize: '14px',
+                  }}
+                >
+                  Password
+                </label>
                 <input
                   type="password"
                   value={doctorPassword}
@@ -226,7 +260,7 @@ export function LoginPage() {
                     border: '1px solid #ccc',
                     borderRadius: '4px',
                     fontSize: '14px',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
                   }}
                 />
               </div>
@@ -234,7 +268,15 @@ export function LoginPage() {
             <div>
               <h3 style={{ marginTop: 0, fontSize: '16px' }}>Patient</h3>
               <div style={{ marginBottom: '8px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px' }}>Email</label>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '4px',
+                    fontSize: '14px',
+                  }}
+                >
+                  Email
+                </label>
                 <input
                   type="email"
                   value={patientEmail}
@@ -246,12 +288,20 @@ export function LoginPage() {
                     border: '1px solid #ccc',
                     borderRadius: '4px',
                     fontSize: '14px',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
                   }}
                 />
               </div>
               <div style={{ marginBottom: '8px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px' }}>Password</label>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '4px',
+                    fontSize: '14px',
+                  }}
+                >
+                  Password
+                </label>
                 <input
                   type="password"
                   value={patientPassword}
@@ -263,7 +313,7 @@ export function LoginPage() {
                     border: '1px solid #ccc',
                     borderRadius: '4px',
                     fontSize: '14px',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
                   }}
                 />
               </div>
@@ -271,16 +321,23 @@ export function LoginPage() {
           </div>
 
           {demoError && (
-            <div style={{ 
-              marginBottom: '16px', 
-              padding: '12px',
-              backgroundColor: '#fee',
-              border: '1px solid #fcc',
-              borderRadius: '4px',
-              color: '#c33',
-              fontSize: '14px'
-            }}>
-              <div style={{ fontWeight: '500', marginBottom: demoError.errors ? '8px' : 0 }}>
+            <div
+              style={{
+                marginBottom: '16px',
+                padding: '12px',
+                backgroundColor: '#fee',
+                border: '1px solid #fcc',
+                borderRadius: '4px',
+                color: '#c33',
+                fontSize: '14px',
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: '500',
+                  marginBottom: demoError.errors ? '8px' : 0,
+                }}
+              >
                 {demoError.detail}
               </div>
               {demoError.errors && (
@@ -293,8 +350,15 @@ export function LoginPage() {
                 </ul>
               )}
               {demoError.status === 404 && (
-                <div style={{ marginTop: '8px', fontSize: '13px', fontStyle: 'italic' }}>
-                  The register endpoint may not be available. You can still login if users already exist.
+                <div
+                  style={{
+                    marginTop: '8px',
+                    fontSize: '13px',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  The register endpoint may not be available. You can still
+                  login if users already exist.
                 </div>
               )}
             </div>
@@ -302,35 +366,45 @@ export function LoginPage() {
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             <button
-              onClick={handleRegisterDemo}
+              onClick={() => void handleRegisterDemo()}
               disabled={loadingDemo || registerAvailable === false}
               style={{
                 ...buttonStyle,
-                backgroundColor: loadingDemo || registerAvailable === false ? '#ccc' : '#28a745',
-                cursor: loadingDemo || registerAvailable === false ? 'not-allowed' : 'pointer'
+                backgroundColor:
+                  loadingDemo || registerAvailable === false
+                    ? '#ccc'
+                    : '#28a745',
+                cursor:
+                  loadingDemo || registerAvailable === false
+                    ? 'not-allowed'
+                    : 'pointer',
               }}
-              title={registerAvailable === false ? 'Register endpoint not available' : ''}
+              title={
+                registerAvailable === false
+                  ? 'Register endpoint not available'
+                  : ''
+              }
             >
               {loadingDemo ? 'Registering...' : 'Register Demo Users'}
             </button>
             <button
-              onClick={handleLoginDoctor}
+              onClick={() => void handleLoginDoctor()}
               disabled={loadingDemo}
               style={{
                 ...buttonStyle,
                 backgroundColor: loadingDemo ? '#ccc' : '#007bff',
-                cursor: loadingDemo ? 'not-allowed' : 'pointer'
+                cursor: loadingDemo ? 'not-allowed' : 'pointer',
               }}
             >
               Login Doctor
             </button>
             <button
-              onClick={handleLoginPatient}
+              onClick={() => void handleLoginPatient()}
               disabled={loadingDemo}
               style={{
                 ...buttonStyle,
                 backgroundColor: loadingDemo ? '#ccc' : '#007bff',
-                cursor: loadingDemo ? 'not-allowed' : 'pointer'
+                cursor: loadingDemo ? 'not-allowed' : 'pointer',
               }}
             >
               Login Patient
@@ -342,9 +416,16 @@ export function LoginPage() {
         <div style={sectionStyle}>
           <h2 style={{ marginTop: 0, marginBottom: '16px' }}>Manual Login</h2>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={(e) => void handleSubmit(e)}>
             <div style={{ marginBottom: '16px' }}>
-              <label htmlFor="email" style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+              <label
+                htmlFor="email"
+                style={{
+                  display: 'block',
+                  marginBottom: '4px',
+                  fontWeight: '500',
+                }}
+              >
                 Email
               </label>
               <input
@@ -360,13 +441,20 @@ export function LoginPage() {
                   border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
 
             <div style={{ marginBottom: '24px' }}>
-              <label htmlFor="password" style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+              <label
+                htmlFor="password"
+                style={{
+                  display: 'block',
+                  marginBottom: '4px',
+                  fontWeight: '500',
+                }}
+              >
                 Password
               </label>
               <input
@@ -382,21 +470,28 @@ export function LoginPage() {
                   border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
 
             {error && (
-              <div style={{ 
-                marginBottom: '16px', 
-                padding: '12px',
-                backgroundColor: '#fee',
-                border: '1px solid #fcc',
-                borderRadius: '4px',
-                color: '#c33'
-              }}>
-                <div style={{ fontWeight: '500', marginBottom: error.errors ? '8px' : 0 }}>
+              <div
+                style={{
+                  marginBottom: '16px',
+                  padding: '12px',
+                  backgroundColor: '#fee',
+                  border: '1px solid #fcc',
+                  borderRadius: '4px',
+                  color: '#c33',
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: '500',
+                    marginBottom: error.errors ? '8px' : 0,
+                  }}
+                >
                   {error.detail}
                 </div>
                 {error.errors && (
@@ -423,7 +518,7 @@ export function LoginPage() {
                 borderRadius: '4px',
                 fontSize: '16px',
                 fontWeight: '500',
-                cursor: loading ? 'not-allowed' : 'pointer'
+                cursor: loading ? 'not-allowed' : 'pointer',
               }}
             >
               {loading ? 'Logging in...' : 'Login'}

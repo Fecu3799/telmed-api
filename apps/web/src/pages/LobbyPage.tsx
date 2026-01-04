@@ -2,9 +2,20 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { login, register, getMe, type AuthMeResponse } from '../api/auth';
-import { getPatientIdentity, type PatientIdentity } from '../api/patient-identity';
+import {
+  getPatientIdentity,
+  type PatientIdentity,
+} from '../api/patient-identity';
 import { getDoctorProfile, type DoctorProfile } from '../api/doctor-profile';
-import { createQueue, getQueue, listQueue, acceptQueue, payForQueue, startQueue, type ConsultationQueueItem } from '../api/queue';
+import {
+  createQueue,
+  getQueue,
+  listQueue,
+  acceptQueue,
+  payForQueue,
+  startQueue,
+  type ConsultationQueueItem,
+} from '../api/queue';
 import { type ProblemDetails } from '../api/http';
 import { PatientIdentityModal } from '../components/PatientIdentityModal';
 import { DoctorProfileModal } from '../components/DoctorProfileModal';
@@ -28,23 +39,29 @@ export function LobbyPage() {
   const [patientPassword, setPatientPassword] = useState('Pass123!');
 
   // Session status
-  const [sessionStatus, setSessionStatus] = useState<AuthMeResponse | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<AuthMeResponse | null>(
+    null,
+  );
   const [loadingSession, setLoadingSession] = useState(false);
 
   // Patient identity
-  const [patientIdentity, setPatientIdentity] = useState<PatientIdentity | null>(null);
+  const [patientIdentity, setPatientIdentity] =
+    useState<PatientIdentity | null>(null);
   const [loadingIdentity, setLoadingIdentity] = useState(false);
   const [identityModalOpen, setIdentityModalOpen] = useState(false);
 
   // Doctor profile
-  const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
+  const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(
+    null,
+  );
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   // Emergency (Patient)
   const [emergencyDoctorUserId, setEmergencyDoctorUserId] = useState('');
   const [emergencyReason, setEmergencyReason] = useState('');
-  const [emergencyQueue, setEmergencyQueue] = useState<ConsultationQueueItem | null>(null);
+  const [emergencyQueue, setEmergencyQueue] =
+    useState<ConsultationQueueItem | null>(null);
   const [loadingEmergency, setLoadingEmergency] = useState(false);
 
   // Emergency (Doctor)
@@ -54,31 +71,26 @@ export function LobbyPage() {
   // Error states
   const [error, setError] = useState<ProblemDetails | null>(null);
 
-  // Load session status when activeRole or tokens change
+  // Load session status when activeRole changes
   useEffect(() => {
     const loadSessionStatus = async () => {
-      const activeToken = getActiveToken();
-      if (!activeToken) {
+      if (!getActiveToken()) {
         setSessionStatus(null);
-        setLoadingSession(false);
         return;
       }
 
-      // Clear previous state when switching roles
-      setSessionStatus(null);
       setLoadingSession(true);
-      
       try {
         const status = await getMe();
         setSessionStatus(status);
-      } catch (err) {
+      } catch {
         setSessionStatus(null);
       } finally {
         setLoadingSession(false);
       }
     };
 
-    loadSessionStatus();
+    void loadSessionStatus();
   }, [activeRole, doctorToken, patientToken, getActiveToken]);
 
   // Load patient identity when activeRole is patient
@@ -102,7 +114,7 @@ export function LobbyPage() {
       }
     };
 
-    loadIdentity();
+    void loadIdentity();
   }, [activeRole, patientToken]);
 
   // Load doctor profile when activeRole is doctor
@@ -126,7 +138,7 @@ export function LobbyPage() {
       }
     };
 
-    loadProfile();
+    void loadProfile();
   }, [activeRole, doctorToken]);
 
   // Load queue when activeRole is doctor
@@ -141,41 +153,51 @@ export function LobbyPage() {
       try {
         const items = await listQueue(false);
         setQueueItems(items);
-      } catch (err) {
+      } catch {
         setQueueItems([]);
       } finally {
         setLoadingQueue(false);
       }
     };
 
-    loadQueue();
+    void loadQueue();
   }, [activeRole, doctorToken]);
 
   const handleLoginDoctor = async () => {
     setError(null);
     try {
-      const response = await login({ email: doctorEmail, password: doctorPassword });
+      const response = await login({
+        email: doctorEmail,
+        password: doctorPassword,
+      });
       setDoctorToken(response.accessToken);
       if (!activeRole) {
         setActiveRole('doctor');
       }
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
-      setError(apiError.problemDetails || { status: 500, detail: 'Login failed' });
+      setError(
+        apiError.problemDetails || { status: 500, detail: 'Login failed' },
+      );
     }
   };
 
   const handleLoginPatient = async () => {
     setError(null);
     try {
-      const response = await login({ email: patientEmail, password: patientPassword });
+      const response = await login({
+        email: patientEmail,
+        password: patientPassword,
+      });
       setPatientToken(response.accessToken);
       if (!activeRole) {
         setActiveRole('patient');
       }
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
-      setError(apiError.problemDetails || { status: 500, detail: 'Login failed' });
+      setError(
+        apiError.problemDetails || { status: 500, detail: 'Login failed' },
+      );
     }
   };
 
@@ -184,7 +206,11 @@ export function LobbyPage() {
     try {
       // Register doctor
       try {
-        await register({ email: doctorEmail, password: doctorPassword, role: 'doctor' });
+        await register({
+          email: doctorEmail,
+          password: doctorPassword,
+          role: 'doctor',
+        });
       } catch (err: unknown) {
         const apiError = err as { problemDetails?: ProblemDetails };
         if (apiError.problemDetails?.status !== 409) {
@@ -194,7 +220,11 @@ export function LobbyPage() {
 
       // Register patient
       try {
-        await register({ email: patientEmail, password: patientPassword, role: 'patient' });
+        await register({
+          email: patientEmail,
+          password: patientPassword,
+          role: 'patient',
+        });
       } catch (err: unknown) {
         const apiError = err as { problemDetails?: ProblemDetails };
         if (apiError.problemDetails?.status !== 409) {
@@ -203,7 +233,12 @@ export function LobbyPage() {
       }
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
-      setError(apiError.problemDetails || { status: 500, detail: 'Registration failed' });
+      setError(
+        apiError.problemDetails || {
+          status: 500,
+          detail: 'Registration failed',
+        },
+      );
     }
   };
 
@@ -223,7 +258,12 @@ export function LobbyPage() {
       setEmergencyQueue(queue);
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
-      setError(apiError.problemDetails || { status: 500, detail: 'Failed to create emergency' });
+      setError(
+        apiError.problemDetails || {
+          status: 500,
+          detail: 'Failed to create emergency',
+        },
+      );
     } finally {
       setLoadingEmergency(false);
     }
@@ -242,7 +282,12 @@ export function LobbyPage() {
       setEmergencyQueue(updated);
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
-      setError(apiError.problemDetails || { status: 500, detail: 'Failed to create payment' });
+      setError(
+        apiError.problemDetails || {
+          status: 500,
+          detail: 'Failed to create payment',
+        },
+      );
     } finally {
       setLoadingEmergency(false);
     }
@@ -255,7 +300,7 @@ export function LobbyPage() {
     try {
       const updated = await getQueue(emergencyQueue.id);
       setEmergencyQueue(updated);
-    } catch (err) {
+    } catch {
       // Ignore errors
     } finally {
       setLoadingEmergency(false);
@@ -271,7 +316,12 @@ export function LobbyPage() {
       setQueueItems(items);
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
-      setError(apiError.problemDetails || { status: 500, detail: 'Failed to accept queue' });
+      setError(
+        apiError.problemDetails || {
+          status: 500,
+          detail: 'Failed to accept queue',
+        },
+      );
     } finally {
       setLoadingQueue(false);
     }
@@ -285,7 +335,12 @@ export function LobbyPage() {
       navigate(`/room/${result.consultation.id}`);
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
-      setError(apiError.problemDetails || { status: 500, detail: 'Failed to start consultation' });
+      setError(
+        apiError.problemDetails || {
+          status: 500,
+          detail: 'Failed to start consultation',
+        },
+      );
     } finally {
       setLoadingQueue(false);
     }
@@ -296,7 +351,7 @@ export function LobbyPage() {
     try {
       const items = await listQueue(false);
       setQueueItems(items);
-    } catch (err) {
+    } catch {
       // Ignore errors
     } finally {
       setLoadingQueue(false);
@@ -326,7 +381,16 @@ export function LobbyPage() {
       <h1>TelMed Lobby (Alpha v0)</h1>
 
       {error && (
-        <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#fee', border: '1px solid #fcc', borderRadius: '4px', color: '#c33' }}>
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: '#fee',
+            border: '1px solid #fcc',
+            borderRadius: '4px',
+            color: '#c33',
+          }}
+        >
           {error.detail}
           {error.errors && (
             <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
@@ -347,14 +411,20 @@ export function LobbyPage() {
           <button
             onClick={() => setActiveRole('doctor')}
             disabled={!doctorToken}
-            style={{ ...buttonStyle, backgroundColor: activeRole === 'doctor' ? '#28a745' : '#6c757d' }}
+            style={{
+              ...buttonStyle,
+              backgroundColor: activeRole === 'doctor' ? '#28a745' : '#6c757d',
+            }}
           >
             Use Doctor Session
           </button>
           <button
             onClick={() => setActiveRole('patient')}
             disabled={!patientToken}
-            style={{ ...buttonStyle, backgroundColor: activeRole === 'patient' ? '#28a745' : '#6c757d' }}
+            style={{
+              ...buttonStyle,
+              backgroundColor: activeRole === 'patient' ? '#28a745' : '#6c757d',
+            }}
           >
             Use Patient Session
           </button>
@@ -367,57 +437,101 @@ export function LobbyPage() {
       {/* Demo Credentials */}
       <div style={sectionStyle}>
         <h2>Demo Credentials</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '16px',
+            marginBottom: '16px',
+          }}
+        >
           <div>
             <h3>Doctor</h3>
             <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', marginBottom: '4px' }}>Email</label>
+              <label style={{ display: 'block', marginBottom: '4px' }}>
+                Email
+              </label>
               <input
                 type="email"
                 value={doctorEmail}
                 onChange={(e) => setDoctorEmail(e.target.value)}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                }}
               />
             </div>
             <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', marginBottom: '4px' }}>Password</label>
+              <label style={{ display: 'block', marginBottom: '4px' }}>
+                Password
+              </label>
               <input
                 type="password"
                 value={doctorPassword}
                 onChange={(e) => setDoctorPassword(e.target.value)}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                }}
               />
             </div>
-            <button onClick={handleLoginDoctor} style={buttonStyle}>
+            <button
+              onClick={() => void handleLoginDoctor()}
+              style={buttonStyle}
+            >
               Login Doctor
             </button>
           </div>
           <div>
             <h3>Patient</h3>
             <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', marginBottom: '4px' }}>Email</label>
+              <label style={{ display: 'block', marginBottom: '4px' }}>
+                Email
+              </label>
               <input
                 type="email"
                 value={patientEmail}
                 onChange={(e) => setPatientEmail(e.target.value)}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                }}
               />
             </div>
             <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', marginBottom: '4px' }}>Password</label>
+              <label style={{ display: 'block', marginBottom: '4px' }}>
+                Password
+              </label>
               <input
                 type="password"
                 value={patientPassword}
                 onChange={(e) => setPatientPassword(e.target.value)}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                }}
               />
             </div>
-            <button onClick={handleLoginPatient} style={buttonStyle}>
+            <button
+              onClick={() => void handleLoginPatient()}
+              style={buttonStyle}
+            >
               Login Patient
             </button>
           </div>
         </div>
-        <button onClick={handleRegisterDemo} style={{ ...buttonStyle, backgroundColor: '#6c757d' }}>
+        <button
+          onClick={() => void handleRegisterDemo()}
+          style={{ ...buttonStyle, backgroundColor: '#6c757d' }}
+        >
           Register Demo Users
         </button>
       </div>
@@ -429,35 +543,21 @@ export function LobbyPage() {
           <div>Loading...</div>
         ) : sessionStatus ? (
           <div>
-            <div style={{ marginBottom: '8px', padding: '8px', backgroundColor: '#f0f0f0', borderRadius: '4px', fontSize: '13px' }}>
-              <div><strong>Active Role:</strong> {activeRole || 'None'}</div>
-              {(() => {
-                const token = getActiveToken();
-                return token ? <div><strong>Using token:</strong> {token.substring(0, 8)}...</div> : null;
-              })()}
+            <div>
+              <strong>User ID:</strong> {sessionStatus.id}
             </div>
-            <div><strong>User ID:</strong> {sessionStatus.id}</div>
-            <div><strong>Role:</strong> {sessionStatus.role}</div>
+            <div>
+              <strong>Role:</strong> {sessionStatus.role}
+            </div>
             {sessionStatus.hasPatientIdentity !== undefined && (
-              <div><strong>Has Patient Identity:</strong> {sessionStatus.hasPatientIdentity ? 'Yes' : 'No'}</div>
+              <div>
+                <strong>Has Patient Identity:</strong>{' '}
+                {sessionStatus.hasPatientIdentity ? 'Yes' : 'No'}
+              </div>
             )}
           </div>
         ) : (
-          <div>
-            <div>No active session</div>
-            {(() => {
-              const token = getActiveToken();
-              return token ? (
-                <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px', fontSize: '13px' }}>
-                  <div><strong>Active Role:</strong> {activeRole || 'None'}</div>
-                  <div><strong>Using token:</strong> {token.substring(0, 8)}...</div>
-                  <div style={{ marginTop: '4px', fontSize: '12px', color: '#856404' }}>
-                    Token exists but /auth/me failed or returned no data
-                  </div>
-                </div>
-              ) : null;
-            })()}
-          </div>
+          <div>No active session</div>
         )}
       </div>
 
@@ -469,14 +569,27 @@ export function LobbyPage() {
             <div>Loading...</div>
           ) : patientIdentity ? (
             <div>
-              <div style={{ color: '#28a745', marginBottom: '8px' }}>✓ Complete</div>
-              <div><strong>Name:</strong> {patientIdentity.legalFirstName} {patientIdentity.legalLastName}</div>
-              <div><strong>Document:</strong> {patientIdentity.documentType} {patientIdentity.documentNumber}</div>
+              <div style={{ color: '#28a745', marginBottom: '8px' }}>
+                ✓ Complete
+              </div>
+              <div>
+                <strong>Name:</strong> {patientIdentity.legalFirstName}{' '}
+                {patientIdentity.legalLastName}
+              </div>
+              <div>
+                <strong>Document:</strong> {patientIdentity.documentType}{' '}
+                {patientIdentity.documentNumber}
+              </div>
             </div>
           ) : (
             <div>
-              <div style={{ color: '#dc3545', marginBottom: '8px' }}>✗ Incomplete</div>
-              <button onClick={() => setIdentityModalOpen(true)} style={buttonStyle}>
+              <div style={{ color: '#dc3545', marginBottom: '8px' }}>
+                ✗ Incomplete
+              </div>
+              <button
+                onClick={() => setIdentityModalOpen(true)}
+                style={buttonStyle}
+              >
                 Complete Now
               </button>
             </div>
@@ -492,14 +605,28 @@ export function LobbyPage() {
             <div>Loading...</div>
           ) : doctorProfile ? (
             <div>
-              <div style={{ color: '#28a745', marginBottom: '8px' }}>✓ Complete</div>
-              <div><strong>Name:</strong> {doctorProfile.firstName} {doctorProfile.lastName}</div>
-              <div><strong>Price:</strong> ${(doctorProfile.priceCents / 100).toFixed(2)} {doctorProfile.currency}</div>
+              <div style={{ color: '#28a745', marginBottom: '8px' }}>
+                ✓ Complete
+              </div>
+              <div>
+                <strong>Name:</strong> {doctorProfile.firstName}{' '}
+                {doctorProfile.lastName}
+              </div>
+              <div>
+                <strong>Price:</strong> $
+                {(doctorProfile.priceCents / 100).toFixed(2)}{' '}
+                {doctorProfile.currency}
+              </div>
             </div>
           ) : (
             <div>
-              <div style={{ color: '#dc3545', marginBottom: '8px' }}>✗ Incomplete</div>
-              <button onClick={() => setProfileModalOpen(true)} style={buttonStyle}>
+              <div style={{ color: '#dc3545', marginBottom: '8px' }}>
+                ✗ Incomplete
+              </div>
+              <button
+                onClick={() => setProfileModalOpen(true)}
+                style={buttonStyle}
+              >
                 Complete Now
               </button>
             </div>
@@ -512,44 +639,86 @@ export function LobbyPage() {
         <div style={sectionStyle}>
           <h2>Emergency (Patient)</h2>
           <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'block', marginBottom: '4px' }}>Doctor User ID *</label>
+            <label style={{ display: 'block', marginBottom: '4px' }}>
+              Doctor User ID *
+            </label>
             <input
               type="text"
               value={emergencyDoctorUserId}
               onChange={(e) => setEmergencyDoctorUserId(e.target.value)}
               placeholder="UUID del doctor"
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
           </div>
           <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'block', marginBottom: '4px' }}>Reason *</label>
+            <label style={{ display: 'block', marginBottom: '4px' }}>
+              Reason *
+            </label>
             <textarea
               value={emergencyReason}
               onChange={(e) => setEmergencyReason(e.target.value)}
               placeholder="Motivo de la emergencia"
               rows={3}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
             />
           </div>
           <button
-            onClick={handleCreateEmergency}
-            disabled={loadingEmergency || !emergencyDoctorUserId || !emergencyReason}
-            style={{ ...buttonStyle, backgroundColor: loadingEmergency ? '#ccc' : '#007bff' }}
+            onClick={() => void handleCreateEmergency()}
+            disabled={
+              loadingEmergency || !emergencyDoctorUserId || !emergencyReason
+            }
+            style={{
+              ...buttonStyle,
+              backgroundColor: loadingEmergency ? '#ccc' : '#007bff',
+            }}
           >
             Create Emergency
           </button>
 
           {emergencyQueue && (
-            <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
-              <div><strong>Queue ID:</strong> {emergencyQueue.id}</div>
-              <div><strong>Status:</strong> {emergencyQueue.status}</div>
-              <div><strong>Payment Status:</strong> {emergencyQueue.paymentStatus}</div>
+            <div
+              style={{
+                marginTop: '16px',
+                padding: '12px',
+                backgroundColor: '#f5f5f5',
+                borderRadius: '4px',
+              }}
+            >
+              <div>
+                <strong>Queue ID:</strong> {emergencyQueue.id}
+              </div>
+              <div>
+                <strong>Status:</strong> {emergencyQueue.status}
+              </div>
+              <div>
+                <strong>Payment Status:</strong> {emergencyQueue.paymentStatus}
+              </div>
               {emergencyQueue.paymentStatus === 'pending' && (
-                <button onClick={handlePayEmergency} style={{ ...buttonStyle, marginTop: '8px' }}>
+                <button
+                  onClick={() => void handlePayEmergency()}
+                  style={{ ...buttonStyle, marginTop: '8px' }}
+                >
                   Pay
                 </button>
               )}
-              <button onClick={handleRefreshEmergency} style={{ ...buttonStyle, marginTop: '8px', backgroundColor: '#6c757d' }}>
+              <button
+                onClick={() => void handleRefreshEmergency()}
+                style={{
+                  ...buttonStyle,
+                  marginTop: '8px',
+                  backgroundColor: '#6c757d',
+                }}
+              >
                 Refresh Status
               </button>
             </div>
@@ -561,7 +730,11 @@ export function LobbyPage() {
       {activeRole === 'doctor' && (
         <div style={sectionStyle}>
           <h2>Emergency (Doctor)</h2>
-          <button onClick={handleRefreshQueue} disabled={loadingQueue} style={{ ...buttonStyle, marginBottom: '16px' }}>
+          <button
+            onClick={() => void handleRefreshQueue()}
+            disabled={loadingQueue}
+            style={{ ...buttonStyle, marginBottom: '16px' }}
+          >
             Refresh Queue
           </button>
           {loadingQueue ? (
@@ -571,25 +744,52 @@ export function LobbyPage() {
           ) : (
             <div>
               {queueItems.map((item) => (
-                <div key={item.id} style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
-                  <div><strong>Queue ID:</strong> {item.id}</div>
-                  <div><strong>Patient ID:</strong> {item.patientUserId}</div>
-                  <div><strong>Reason:</strong> {item.reason || 'N/A'}</div>
-                  <div><strong>Status:</strong> {item.status}</div>
-                  <div><strong>Entry Type:</strong> {item.entryType}</div>
-                  <div><strong>Payment Status:</strong> {item.paymentStatus}</div>
-                  {item.entryType === 'emergency' && item.status === 'queued' && (
+                <div
+                  key={item.id}
+                  style={{
+                    marginBottom: '16px',
+                    padding: '12px',
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: '4px',
+                  }}
+                >
+                  <div>
+                    <strong>Queue ID:</strong> {item.id}
+                  </div>
+                  <div>
+                    <strong>Patient ID:</strong> {item.patientUserId}
+                  </div>
+                  <div>
+                    <strong>Reason:</strong> {item.reason || 'N/A'}
+                  </div>
+                  <div>
+                    <strong>Status:</strong> {item.status}
+                  </div>
+                  <div>
+                    <strong>Entry Type:</strong> {item.entryType}
+                  </div>
+                  <div>
+                    <strong>Payment Status:</strong> {item.paymentStatus}
+                  </div>
+                  {item.entryType === 'emergency' &&
+                    item.status === 'queued' && (
+                      <button
+                        onClick={() => void handleAcceptQueue(item.id)}
+                        style={{ ...buttonStyle, marginTop: '8px' }}
+                      >
+                        Accept
+                      </button>
+                    )}
+                  {(item.status === 'accepted' ||
+                    (item.entryType === 'emergency' &&
+                      item.paymentStatus === 'paid')) && (
                     <button
-                      onClick={() => handleAcceptQueue(item.id)}
-                      style={{ ...buttonStyle, marginTop: '8px' }}
-                    >
-                      Accept
-                    </button>
-                  )}
-                  {(item.status === 'accepted' || (item.entryType === 'emergency' && item.paymentStatus === 'paid')) && (
-                    <button
-                      onClick={() => handleStartQueue(item.id)}
-                      style={{ ...buttonStyle, marginTop: '8px', backgroundColor: '#28a745' }}
+                      onClick={() => void handleStartQueue(item.id)}
+                      style={{
+                        ...buttonStyle,
+                        marginTop: '8px',
+                        backgroundColor: '#28a745',
+                      }}
                     >
                       Start
                     </button>
@@ -611,13 +811,13 @@ export function LobbyPage() {
             try {
               const identity = await getPatientIdentity();
               setPatientIdentity(identity);
-            } catch (err) {
+            } catch {
               setPatientIdentity(null);
             } finally {
               setLoadingIdentity(false);
             }
           };
-          loadIdentity();
+          void loadIdentity();
         }}
       />
 
@@ -631,13 +831,13 @@ export function LobbyPage() {
             try {
               const profile = await getDoctorProfile();
               setDoctorProfile(profile);
-            } catch (err) {
+            } catch {
               setDoctorProfile(null);
             } finally {
               setLoadingProfile(false);
             }
           };
-          loadProfile();
+          void loadProfile();
         }}
       />
     </div>
