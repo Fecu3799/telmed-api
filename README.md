@@ -30,6 +30,7 @@
 - Frontend API Contract (Scheduling): `docs/frontend/README.md`
 - Architecture Decisions: `docs/decisions/`
 - Payments config: set `MERCADOPAGO_MODE=sandbox` for dev/test, `MERCADOPAGO_MODE=live` for production.
+- Frontend: see `apps/web/README.md` for setup and development instructions.
 
 ## Project setup
 

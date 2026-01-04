@@ -31,6 +31,15 @@ async function bootstrap() {
     }),
   );
 
+  app.enableCors({
+    origin: ['http://localhost:5173'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Trace-Id'],
+    exposedHeaders: ['X-Trace-Id'],
+    credentials: false, // ponelo en true SOLO si usás cookies/sessions por cookie
+    optionsSuccessStatus: 204,
+  });
+
   // Swagger lives at /api/docs and documents the prefixed routes.
   const config = new DocumentBuilder()
     .setTitle('TelmedDelSur - API')
