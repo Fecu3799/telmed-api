@@ -63,6 +63,8 @@ export function LobbyPage() {
   const [emergencyQueue, setEmergencyQueue] =
     useState<ConsultationQueueItem | null>(null);
   const [loadingEmergency, setLoadingEmergency] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Emergency (Doctor)
   const [queueItems, setQueueItems] = useState<ConsultationQueueItem[]>([]);
@@ -250,6 +252,8 @@ export function LobbyPage() {
 
     setLoadingEmergency(true);
     setError(null);
+    setCheckoutUrl(null);
+    setCopied(false);
     try {
       const queue = await createQueue({
         doctorUserId: emergencyDoctorUserId,
@@ -269,14 +273,46 @@ export function LobbyPage() {
     }
   };
 
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    try {
+      // Try modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+      // Fallback: use execCommand
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return success;
+    } catch {
+      return false;
+    }
+  };
+
   const handlePayEmergency = async () => {
     if (!emergencyQueue) return;
 
     setLoadingEmergency(true);
     setError(null);
+    setCopied(false);
     try {
       const payment = await payForQueue(emergencyQueue.id);
-      window.open(payment.checkoutUrl, '_blank');
+      setCheckoutUrl(payment.checkoutUrl);
+
+      // Try to copy to clipboard
+      const copySuccess = await copyToClipboard(payment.checkoutUrl);
+      if (copySuccess) {
+        setCopied(true);
+      }
+
       // Refresh queue status
       const updated = await getQueue(emergencyQueue.id);
       setEmergencyQueue(updated);
@@ -290,6 +326,16 @@ export function LobbyPage() {
       );
     } finally {
       setLoadingEmergency(false);
+    }
+  };
+
+  const handleCopyAgain = async () => {
+    if (!checkoutUrl) return;
+    const success = await copyToClipboard(checkoutUrl);
+    if (success) {
+      setCopied(true);
+      // Reset copied state after 3 seconds
+      setTimeout(() => setCopied(false), 3000);
     }
   };
 
@@ -704,12 +750,64 @@ export function LobbyPage() {
                 <strong>Payment Status:</strong> {emergencyQueue.paymentStatus}
               </div>
               {emergencyQueue.paymentStatus === 'pending' && (
-                <button
-                  onClick={() => void handlePayEmergency()}
-                  style={{ ...buttonStyle, marginTop: '8px' }}
-                >
-                  Pay
-                </button>
+                <>
+                  {!checkoutUrl ? (
+                    <button
+                      onClick={() => void handlePayEmergency()}
+                      disabled={loadingEmergency}
+                      style={{ ...buttonStyle, marginTop: '8px' }}
+                    >
+                      Pay
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: '8px' }}>
+                      {copied && (
+                        <div
+                          style={{
+                            marginBottom: '8px',
+                            padding: '8px',
+                            backgroundColor: '#d4edda',
+                            border: '1px solid #c3e6cb',
+                            borderRadius: '4px',
+                            color: '#155724',
+                          }}
+                        >
+                          ✅ Link copiado, abrilo en incógnito
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '8px',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <input
+                          type="text"
+                          readOnly
+                          value={checkoutUrl}
+                          style={{
+                            flex: 1,
+                            padding: '8px',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                            backgroundColor: '#f8f9fa',
+                          }}
+                          onFocus={(e) => e.target.select()}
+                        />
+                        <button
+                          onClick={() => void handleCopyAgain()}
+                          style={{
+                            ...buttonStyle,
+                            backgroundColor: '#28a745',
+                          }}
+                        >
+                          Copiar de nuevo
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               <button
                 onClick={() => void handleRefreshEmergency()}

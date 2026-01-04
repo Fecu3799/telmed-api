@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "cd ../.. && eslint \"apps/web/src/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0",
+    "lint": "cd ../.. && eslint \"apps/web/src/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0 --fix",
     "typecheck": "tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {},
