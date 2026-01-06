@@ -35,4 +35,9 @@ export const endpoints = {
       `/consultations/queue/${queueItemId}/payment`,
     start: (queueItemId: string) => `/consultations/queue/${queueItemId}/start`,
   },
+  // Consultations
+  consultations: {
+    livekitToken: (consultationId: string) =>
+      `/consultations/${consultationId}/livekit-token`,
+  },
 } as const;

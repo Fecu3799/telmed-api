@@ -3,6 +3,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useLayoutEffect,
   ReactNode,
 } from 'react';
 import { setAccessTokenGetter } from '../api/http';
@@ -28,17 +29,48 @@ const STORAGE_KEYS = {
   activeRole: 'telmed.auth.activeRole',
 } as const;
 
+// Normalize token: remove "Bearer " prefix if present
+// Tokens should be stored without "Bearer " prefix
+function normalizeToken(token: string | null): string | null {
+  if (!token) return null;
+  return token.startsWith('Bearer ') ? token.substring(7) : token;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // Normalize tokens when reading from storage (boot)
+  // CRÍTICO: leer tokens y activeRole del localStorage al boot para sincronizar http client inmediatamente
   const [doctorToken, setDoctorTokenState] = useState<string | null>(() => {
     if (import.meta.env.DEV) {
-      return localStorage.getItem(STORAGE_KEYS.doctorToken);
+      const stored = localStorage.getItem(STORAGE_KEYS.doctorToken);
+      const normalized = normalizeToken(stored);
+      if (import.meta.env.DEV && normalized) {
+        const tokenPreview =
+          normalized.length > 12
+            ? `${normalized.substring(0, 6)}...${normalized.substring(normalized.length - 6)}`
+            : normalized.substring(0, 6);
+        console.log(
+          `[AuthContext] Boot: Loaded doctorToken from storage (${tokenPreview})`,
+        );
+      }
+      return normalized;
     }
     return null;
   });
 
   const [patientToken, setPatientTokenState] = useState<string | null>(() => {
     if (import.meta.env.DEV) {
-      return localStorage.getItem(STORAGE_KEYS.patientToken);
+      const stored = localStorage.getItem(STORAGE_KEYS.patientToken);
+      const normalized = normalizeToken(stored);
+      if (import.meta.env.DEV && normalized) {
+        const tokenPreview =
+          normalized.length > 12
+            ? `${normalized.substring(0, 6)}...${normalized.substring(normalized.length - 6)}`
+            : normalized.substring(0, 6);
+        console.log(
+          `[AuthContext] Boot: Loaded patientToken from storage (${tokenPreview})`,
+        );
+      }
+      return normalized;
     }
     return null;
   });
@@ -46,24 +78,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeRole, setActiveRoleState] = useState<ActiveRole | null>(() => {
     if (import.meta.env.DEV) {
       const stored = localStorage.getItem(STORAGE_KEYS.activeRole);
-      return (
-        stored === 'doctor' || stored === 'patient' ? stored : null
-      ) as ActiveRole | null;
+      const role = stored === 'doctor' || stored === 'patient' ? stored : null;
+      if (import.meta.env.DEV && role) {
+        console.log(
+          `[AuthContext] Boot: Loaded activeRole from storage (${role})`,
+        );
+      }
+      return role as ActiveRole | null;
     }
     return null;
   });
 
   // Sincronizar getter de token activo con HTTP client
-  // Esto permite que el HTTP client obtenga el token correcto en cada request
-  // La función se recrea cuando cambian activeRole, doctorToken o patientToken
-  useEffect(() => {
+  // CRÍTICO: usar useLayoutEffect para sincronizar ANTES del primer render
+  // Esto asegura que el token esté disponible antes de que cualquier request se haga
+  // Se ejecuta inmediatamente al boot y cuando cambia activeRole para sincronizar el token correcto
+  useLayoutEffect(() => {
     const getActiveTokenFn = (): string | null => {
       if (activeRole === 'doctor') return doctorToken;
       if (activeRole === 'patient') return patientToken;
       return null;
     };
 
+    const activeToken = getActiveTokenFn();
+
+    // Sincronizar http client con el token del rol activo
     setAccessTokenGetter(getActiveTokenFn);
+
+    // Debug log (dev only): confirmar sincronización
+    if (import.meta.env.DEV) {
+      if (activeToken) {
+        const tokenPreview =
+          activeToken.length > 12
+            ? `${activeToken.substring(0, 6)}...${activeToken.substring(activeToken.length - 6)}`
+            : activeToken.substring(0, 6);
+        console.log(
+          `[AuthContext] Synced HTTP client with ${activeRole} token (${tokenPreview})`,
+        );
+      } else {
+        console.warn(
+          `[AuthContext] No token available for activeRole=${activeRole} - HTTP client will not send Authorization`,
+        );
+      }
+    }
+
     return () => {
       setAccessTokenGetter(null);
     };
@@ -77,10 +135,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Persistir en localStorage solo en desarrollo
+  // Normalizar tokens antes de guardar (sin "Bearer " prefix)
   useEffect(() => {
     if (import.meta.env.DEV) {
-      if (doctorToken) {
-        localStorage.setItem(STORAGE_KEYS.doctorToken, doctorToken);
+      const normalized = normalizeToken(doctorToken);
+      if (normalized) {
+        localStorage.setItem(STORAGE_KEYS.doctorToken, normalized);
       } else {
         localStorage.removeItem(STORAGE_KEYS.doctorToken);
       }
@@ -89,8 +149,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (import.meta.env.DEV) {
-      if (patientToken) {
-        localStorage.setItem(STORAGE_KEYS.patientToken, patientToken);
+      const normalized = normalizeToken(patientToken);
+      if (normalized) {
+        localStorage.setItem(STORAGE_KEYS.patientToken, normalized);
       } else {
         localStorage.removeItem(STORAGE_KEYS.patientToken);
       }
@@ -107,12 +168,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [activeRole]);
 
+  // Normalizar tokens al setear (remover "Bearer " prefix si existe)
+  // Esto asegura que los tokens siempre se guarden sin el prefix
   const setDoctorToken = (token: string | null) => {
-    setDoctorTokenState(token);
+    setDoctorTokenState(normalizeToken(token));
   };
 
   const setPatientToken = (token: string | null) => {
-    setPatientTokenState(token);
+    setPatientTokenState(normalizeToken(token));
   };
 
   const setActiveRole = (role: ActiveRole | null) => {

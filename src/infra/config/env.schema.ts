@@ -52,18 +52,13 @@ export const envSchema = z.object({
   MERCADOPAGO_MODE: z
     .enum(['sandbox', 'live'])
     .default(isProdEnv ? 'live' : 'sandbox'),
-  LIVEKIT_URL:
-    isTestEnv || !isProdEnv
-      ? z.string().default('wss://livekit.dev')
-      : z.string().min(1),
-  LIVEKIT_API_KEY:
-    isTestEnv || !isProdEnv
-      ? z.string().default('dev_livekit_key')
-      : z.string().min(1),
-  LIVEKIT_API_SECRET:
-    isTestEnv || !isProdEnv
-      ? z.string().default('dev_livekit_secret')
-      : z.string().min(1),
+  LIVEKIT_URL: isTestEnv
+    ? z.string().default('wss://example.test')
+    : z.string().min(1),
+  LIVEKIT_API_KEY: isTestEnv ? z.string().default('test') : z.string().min(1),
+  LIVEKIT_API_SECRET: isTestEnv
+    ? z.string().default('test')
+    : z.string().min(1),
   LIVEKIT_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(600),
   STORAGE_PROVIDER: z.enum(['minio', 's3']).default(isProdEnv ? 's3' : 'minio'),
   S3_ENDPOINT: z.string().min(1).optional(),

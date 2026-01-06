@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { login, register, getMe, type AuthMeResponse } from '../api/auth';
@@ -17,6 +17,7 @@ import {
   type ConsultationQueueItem,
 } from '../api/queue';
 import { type ProblemDetails } from '../api/http';
+import { consultationSocket } from '../api/socket';
 import { PatientIdentityModal } from '../components/PatientIdentityModal';
 import { DoctorProfileModal } from '../components/DoctorProfileModal';
 
@@ -43,6 +44,7 @@ export function LobbyPage() {
     null,
   );
   const [loadingSession, setLoadingSession] = useState(false);
+  const [sessionError, setSessionError] = useState<ProblemDetails | null>(null);
 
   // Patient identity
   const [patientIdentity, setPatientIdentity] =
@@ -65,6 +67,18 @@ export function LobbyPage() {
   const [loadingEmergency, setLoadingEmergency] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [waitingForDoctor, setWaitingForDoctor] = useState(false);
+
+  // WebSocket debug states
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [subscribedQueueId, setSubscribedQueueId] = useState<string | null>(
+    null,
+  );
+  const [lastEvent, setLastEvent] = useState<{
+    type: string;
+    timestamp: string;
+    payload?: unknown;
+  } | null>(null);
 
   // Emergency (Doctor)
   const [queueItems, setQueueItems] = useState<ConsultationQueueItem[]>([]);
@@ -74,19 +88,31 @@ export function LobbyPage() {
   const [error, setError] = useState<ProblemDetails | null>(null);
 
   // Load session status when activeRole changes
+  // Sincroniza http client con el token del rol activo antes de hacer la llamada
   useEffect(() => {
     const loadSessionStatus = async () => {
       if (!getActiveToken()) {
         setSessionStatus(null);
+        setSessionError(null);
         return;
       }
 
       setLoadingSession(true);
+      setSessionError(null);
       try {
         const status = await getMe();
         setSessionStatus(status);
-      } catch {
+        setSessionError(null);
+      } catch (err) {
         setSessionStatus(null);
+        // Show error details for debugging
+        const apiError = err as { problemDetails?: ProblemDetails };
+        setSessionError(
+          apiError.problemDetails || {
+            status: 500,
+            detail: 'Failed to load session status',
+          },
+        );
       } finally {
         setLoadingSession(false);
       }
@@ -164,6 +190,146 @@ export function LobbyPage() {
 
     void loadQueue();
   }, [activeRole, doctorToken]);
+
+  // WebSocket: connect and track connection state
+  useEffect(() => {
+    const token = getActiveToken();
+    if (!token) {
+      consultationSocket.disconnect();
+      setSocketConnected(false);
+      return;
+    }
+
+    // Connect socket with current token
+    consultationSocket.connect(token);
+
+    // Track connection state for debug panel
+    const checkConnection = () => {
+      setSocketConnected(consultationSocket.isConnected());
+    };
+
+    // Check immediately and periodically
+    checkConnection();
+    const interval = setInterval(checkConnection, 1000);
+
+    return () => {
+      clearInterval(interval);
+      consultationSocket.disconnect();
+      setSocketConnected(false);
+    };
+  }, [getActiveToken, activeRole, doctorToken, patientToken]);
+
+  // WebSocket: subscribe to queue and listen for consultation.started event
+  // Event-driven approach: patient subscribes to queueItemId, receives event when doctor starts
+  const queueItemIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Only for patients waiting for consultation to start
+    if (activeRole !== 'patient' || !emergencyQueue?.id) {
+      queueItemIdRef.current = null;
+      setWaitingForDoctor(false);
+      consultationSocket.unsubscribeFromQueue();
+      setSubscribedQueueId(null);
+      return;
+    }
+
+    // Don't listen if consultation is already in progress or finalized
+    if (
+      emergencyQueue.consultationId ||
+      emergencyQueue.status === 'in_progress' ||
+      emergencyQueue.status === 'finalized'
+    ) {
+      queueItemIdRef.current = null;
+      setWaitingForDoctor(false);
+      consultationSocket.unsubscribeFromQueue();
+      setSubscribedQueueId(null);
+      return;
+    }
+
+    // Subscribe to queue item if not already subscribed
+    if (queueItemIdRef.current !== emergencyQueue.id) {
+      queueItemIdRef.current = emergencyQueue.id;
+      setSubscribedQueueId(emergencyQueue.id);
+      setWaitingForDoctor(true);
+
+      // Subscribe to queue item updates via WebSocket
+      if (consultationSocket.isConnected()) {
+        consultationSocket.subscribeToQueue(emergencyQueue.id, (response) => {
+          if (response.ok) {
+            if (import.meta.env.DEV) {
+              console.log('[Socket] Subscribed to queue:', emergencyQueue.id);
+            }
+            setLastEvent({
+              type: 'queue.subscribe',
+              timestamp: new Date().toISOString(),
+              payload: response,
+            });
+          } else {
+            if (import.meta.env.DEV) {
+              console.error(
+                '[Socket] Failed to subscribe to queue:',
+                response.error,
+              );
+            }
+          }
+        });
+      }
+    }
+
+    // Listen for consultation.started event (new event-driven contract)
+    const handleConsultationStarted = (payload: {
+      queueItemId: string;
+      consultationId: string;
+      roomName: string;
+      livekitUrl: string;
+      startedAt: string;
+    }) => {
+      // Verify this event is for our queue item
+      if (payload.queueItemId !== emergencyQueue.id) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            '[Socket] Received consultation.started for different queue:',
+            payload.queueItemId,
+            'expected:',
+            emergencyQueue.id,
+          );
+        }
+        return;
+      }
+
+      if (import.meta.env.DEV) {
+        console.log('[Socket] Received consultation.started:', payload);
+      }
+
+      // Track event for debug panel
+      setLastEvent({
+        type: 'consultation.started',
+        timestamp: new Date().toISOString(),
+        payload,
+      });
+
+      // Navigate automatically to room
+      navigate(`/room/${payload.consultationId}`);
+      setWaitingForDoctor(false);
+      consultationSocket.unsubscribeFromQueue();
+      setSubscribedQueueId(null);
+    };
+
+    consultationSocket.onConsultationStarted(handleConsultationStarted);
+
+    return () => {
+      consultationSocket.offConsultationStarted(handleConsultationStarted);
+      consultationSocket.unsubscribeFromQueue();
+      setSubscribedQueueId(null);
+      setWaitingForDoctor(false);
+    };
+  }, [
+    activeRole,
+    emergencyQueue?.id,
+    emergencyQueue?.consultationId,
+    emergencyQueue?.status,
+    navigate,
+  ]);
 
   const handleLoginDoctor = async () => {
     setError(null);
@@ -260,6 +426,10 @@ export function LobbyPage() {
         reason: emergencyReason,
       });
       setEmergencyQueue(queue);
+      // Store queueItemId in localStorage for dev (optional)
+      if (import.meta.env.DEV) {
+        localStorage.setItem('telmed.queueItemId', queue.id);
+      }
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
       setError(
@@ -587,6 +757,29 @@ export function LobbyPage() {
         <h2>Session Status</h2>
         {loadingSession ? (
           <div>Loading...</div>
+        ) : sessionError ? (
+          <div
+            style={{
+              padding: '12px',
+              backgroundColor: '#fee',
+              border: '1px solid #fcc',
+              borderRadius: '4px',
+              color: '#c33',
+            }}
+          >
+            <strong>Error {sessionError.status}:</strong> {sessionError.detail}
+            {sessionError.errors && (
+              <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                {Object.entries(sessionError.errors).map(
+                  ([field, messages]) => (
+                    <li key={field}>
+                      <strong>{field}:</strong> {messages.join(', ')}
+                    </li>
+                  ),
+                )}
+              </ul>
+            )}
+          </div>
         ) : sessionStatus ? (
           <div>
             <div>
@@ -808,6 +1001,94 @@ export function LobbyPage() {
                     </div>
                   )}
                 </>
+              )}
+              {/* Show waiting state when polling */}
+              {waitingForDoctor && (
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px',
+                    backgroundColor: '#fff3cd',
+                    border: '1px solid #ffc107',
+                    borderRadius: '4px',
+                    color: '#856404',
+                  }}
+                >
+                  Waiting for doctor to start... (WebSocket listening)
+                </div>
+              )}
+              {/* Manual fallback: check queue status manually */}
+              {waitingForDoctor && (
+                <button
+                  onClick={() => {
+                    void (async () => {
+                      if (!emergencyQueue?.id) return;
+                      try {
+                        const updated = await getQueue(emergencyQueue.id);
+                        setEmergencyQueue(updated);
+                        if (updated.consultationId) {
+                          navigate(`/room/${updated.consultationId}`);
+                        }
+                      } catch (err) {
+                        if (import.meta.env.DEV) {
+                          console.error('Manual queue check error:', err);
+                        }
+                      }
+                    })();
+                  }}
+                  style={{
+                    ...buttonStyle,
+                    marginTop: '8px',
+                    backgroundColor: '#6c757d',
+                    fontSize: '12px',
+                    padding: '6px 12px',
+                  }}
+                >
+                  Check Status (Fallback)
+                </button>
+              )}
+              {/* Manual "Enter Room" button - only show if consultation is ready */}
+              {emergencyQueue.consultationId && (
+                <button
+                  onClick={() =>
+                    navigate(`/room/${emergencyQueue.consultationId}`)
+                  }
+                  style={{
+                    ...buttonStyle,
+                    marginTop: '8px',
+                    backgroundColor: '#28a745',
+                  }}
+                >
+                  Enter Room
+                </button>
+              )}
+              {/* Debug panel (dev only) */}
+              {import.meta.env.DEV && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    padding: '12px',
+                    backgroundColor: '#f8f9fa',
+                    border: '1px solid #dee2e6',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                  }}
+                >
+                  <strong>Socket Debug (Dev Only):</strong>
+                  <div style={{ marginTop: '4px' }}>
+                    <strong>Connected:</strong> {socketConnected ? '✅' : '❌'}
+                  </div>
+                  <div>
+                    <strong>Subscribed Queue:</strong>{' '}
+                    {subscribedQueueId || 'None'}
+                  </div>
+                  {lastEvent && (
+                    <div style={{ marginTop: '4px' }}>
+                      <strong>Last Event:</strong> {lastEvent.type} @{' '}
+                      {new Date(lastEvent.timestamp).toLocaleTimeString()}
+                    </div>
+                  )}
+                </div>
               )}
               <button
                 onClick={() => void handleRefreshEmergency()}

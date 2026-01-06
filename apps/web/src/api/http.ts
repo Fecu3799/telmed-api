@@ -24,6 +24,7 @@ export interface ApiError extends Error {
   status: number;
 }
 
+// Support both absolute URLs (http://...) and relative URLs (/api/v1)
 const baseUrl =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
@@ -65,6 +66,9 @@ export async function http<T>(
   const traceId = randomUUID();
   currentTraceId = traceId;
 
+  // Construct URL: endpoints always start with /
+  // If baseUrl is relative (starts with /) or absolute (starts with http), concatenate directly
+  // This works because endpoints always start with /, so /api/v1 + /auth/login = /api/v1/auth/login
   const url = `${baseUrl}${endpoint}`;
   const token = getAccessToken();
 
@@ -75,7 +79,31 @@ export async function http<T>(
   };
 
   if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    // Normalize token: remove "Bearer " prefix if present to avoid duplication
+    // Always add "Bearer " prefix exactly once
+    const normalizedToken = token.startsWith('Bearer ')
+      ? token.substring(7)
+      : token;
+    (headers as Record<string, string>)['Authorization'] =
+      `Bearer ${normalizedToken}`;
+
+    // Debug log (dev only): log if Authorization is being set (without full token)
+    if (import.meta.env.DEV) {
+      const tokenPreview =
+        normalizedToken.length > 12
+          ? `${normalizedToken.substring(0, 6)}...${normalizedToken.substring(normalizedToken.length - 6)}`
+          : normalizedToken.substring(0, 6);
+      console.log(
+        `[http] Setting Authorization header for ${endpoint} (token: ${tokenPreview})`,
+      );
+    }
+  } else {
+    // Debug log (dev only): log if Authorization is NOT being set
+    if (import.meta.env.DEV) {
+      console.warn(
+        `[http] No token available for ${endpoint} - Authorization header will NOT be sent`,
+      );
+    }
   }
 
   const response = await fetch(url, {

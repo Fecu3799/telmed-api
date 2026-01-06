@@ -81,15 +81,24 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     }
 
     const traceId = (request as Request & { traceId?: string }).traceId ?? null;
-    this.logger.error(
-      JSON.stringify({
-        traceId,
-        errorCode: errorCode ?? 'unknown',
-        status,
-        detail,
-        path: request.originalUrl,
-      }),
-    );
+
+    // Enhanced logging for non-production: include stack trace
+    const logData: Record<string, unknown> = {
+      traceId,
+      errorCode: errorCode ?? 'unknown',
+      status,
+      detail,
+      path: request.originalUrl,
+    };
+
+    // In non-production, log full error details including stack
+    if (process.env.NODE_ENV !== 'production' && exception instanceof Error) {
+      logData.errorMessage = exception.message;
+      logData.errorStack = exception.stack;
+      logData.errorName = exception.name;
+    }
+
+    this.logger.error(JSON.stringify(logData));
 
     response.status(status).json(body);
   }

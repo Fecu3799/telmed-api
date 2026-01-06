@@ -3,9 +3,11 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
   NotImplementedException,
+  forwardRef,
 } from '@nestjs/common';
 import {
   AppointmentStatus,
@@ -22,6 +24,9 @@ import type { Actor } from '../../common/types/actor.type';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
 import { PaymentsService } from '../payments/payments.service';
+import type { ConsultationEventsPublisher } from '../consultations/consultation-events-publisher.interface';
+import { LiveKitService } from '../consultations/livekit.service';
+import { getTraceId } from '../../common/request-context';
 import { CancelQueueDto } from './dto/cancel-queue.dto';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
@@ -30,10 +35,15 @@ import { RejectQueueDto } from './dto/reject-queue.dto';
 @Injectable()
 export class ConsultationQueueService {
   private readonly paymentTtlMinutes = 10;
+  private readonly logger = new Logger(ConsultationQueueService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
+    @Inject('ConsultationEventsPublisher')
+    private readonly eventsPublisher: ConsultationEventsPublisher,
+    @Inject(forwardRef(() => LiveKitService))
+    private readonly livekitService: LiveKitService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -531,8 +541,40 @@ export class ConsultationQueueService {
             lastActivityAt: this.clock.now(),
           },
         });
+
+        // Publish consultation.started event (non-blocking, wrapped in try/catch)
+        // This notifies waiting patients that the consultation is ready
+        const roomName = resumed.videoRoomName ?? `consultation_${resumed.id}`;
+        try {
+          const livekitUrl = this.livekitService.getLivekitUrl();
+          this.eventsPublisher.consultationStarted({
+            queueItemId: updatedQueue.id,
+            consultationId: resumed.id,
+            roomName,
+            livekitUrl,
+            startedAt: resumed.startedAt ?? this.clock.now(),
+            traceId: getTraceId(),
+          });
+        } catch (error) {
+          // Log but don't fail: event publishing is non-critical
+          // The consultation is already persisted, so we return success
+          this.logger.warn(
+            JSON.stringify({
+              event: 'consultation_started_event_publish_failed',
+              queueItemId: updatedQueue.id,
+              consultationId: resumed.id,
+              traceId: getTraceId() ?? null,
+              error:
+                error instanceof Error
+                  ? { message: error.message, stack: error.stack }
+                  : String(error),
+            }),
+          );
+        }
+
         return this.toStartResponse(updatedQueue, resumed);
       }
+      // Idempotency: consultation already in_progress, don't emit event again
       return this.toStartResponse(updatedQueue, existing);
     }
 
@@ -561,6 +603,37 @@ export class ConsultationQueueService {
     const consultation = await this.prisma.consultation.create({
       data: consultationData,
     });
+
+    // Publish consultation.started event (non-blocking, wrapped in try/catch)
+    // This notifies waiting patients that the consultation is ready
+    const roomName =
+      consultation.videoRoomName ?? `consultation_${consultation.id}`;
+    try {
+      const livekitUrl = this.livekitService.getLivekitUrl();
+      this.eventsPublisher.consultationStarted({
+        queueItemId: updatedQueue.id,
+        consultationId: consultation.id,
+        roomName,
+        livekitUrl,
+        startedAt: consultation.startedAt ?? this.clock.now(),
+        traceId: getTraceId(),
+      });
+    } catch (error) {
+      // Log but don't fail: event publishing is non-critical
+      // The consultation is already persisted, so we return success
+      this.logger.warn(
+        JSON.stringify({
+          event: 'consultation_started_event_publish_failed',
+          queueItemId: updatedQueue.id,
+          consultationId: consultation.id,
+          traceId: getTraceId() ?? null,
+          error:
+            error instanceof Error
+              ? { message: error.message, stack: error.stack }
+              : String(error),
+        }),
+      );
+    }
 
     return this.toStartResponse(updatedQueue, consultation);
   }

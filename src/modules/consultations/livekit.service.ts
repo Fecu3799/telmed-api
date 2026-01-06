@@ -22,11 +22,28 @@ export class LiveKitService {
     private readonly configService: ConfigService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {
-    this.apiKey = configService.getOrThrow<string>('LIVEKIT_API_KEY');
-    this.apiSecret = configService.getOrThrow<string>('LIVEKIT_API_SECRET');
-    this.livekitUrl = configService.getOrThrow<string>('LIVEKIT_URL');
+    // In test environment, use defaults to avoid requiring LiveKit config
+    if (process.env.NODE_ENV === 'test') {
+      this.apiKey = configService.get<string>('LIVEKIT_API_KEY') ?? 'test_key';
+      this.apiSecret =
+        configService.get<string>('LIVEKIT_API_SECRET') ?? 'test_secret';
+      this.livekitUrl =
+        configService.get<string>('LIVEKIT_URL') ?? 'wss://test.livekit.dev';
+    } else {
+      this.apiKey = configService.getOrThrow<string>('LIVEKIT_API_KEY');
+      this.apiSecret = configService.getOrThrow<string>('LIVEKIT_API_SECRET');
+      this.livekitUrl = configService.getOrThrow<string>('LIVEKIT_URL');
+    }
     this.ttlSeconds =
       configService.get<number>('LIVEKIT_TOKEN_TTL_SECONDS') ?? 600;
+  }
+
+  /**
+   * Get the LiveKit server URL without generating a token.
+   * Useful for WebSocket event payloads.
+   */
+  getLivekitUrl(): string {
+    return this.livekitUrl;
   }
 
   issueToken(input: {

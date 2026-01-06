@@ -1,9 +1,14 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { PrivateRoute } from './components/PrivateRoute';
 import { LoginPage } from './pages/LoginPage';
 import { LobbyPage } from './pages/LobbyPage';
-import { RoomPage } from './pages/RoomPage';
+
+// Lazy load RoomPage to reduce initial bundle size (LiveKit is large)
+const RoomPage = lazy(() =>
+  import('./pages/RoomPage').then((m) => ({ default: m.RoomPage })),
+);
 
 function App() {
   return (
@@ -23,7 +28,22 @@ function App() {
             path="/room/:consultationId"
             element={
               <PrivateRoute>
-                <RoomPage />
+                <Suspense
+                  fallback={
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        minHeight: '100vh',
+                      }}
+                    >
+                      Loading room...
+                    </div>
+                  }
+                >
+                  <RoomPage />
+                </Suspense>
               </PrivateRoute>
             }
           />
