@@ -3,12 +3,15 @@ import {
   Controller,
   Get,
   Headers,
+  Logger,
   Param,
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -47,6 +50,8 @@ import { RejectQueueDto } from './dto/reject-queue.dto';
 @ApiTags('consultations')
 @Controller()
 export class ConsultationQueueController {
+  private readonly logger = new Logger(ConsultationQueueController.name);
+
   constructor(
     private readonly consultationQueueService: ConsultationQueueService,
     private readonly auditService: AuditService,
@@ -98,7 +103,20 @@ export class ConsultationQueueController {
   async getQueue(
     @CurrentUser() actor: Actor,
     @Param('queueItemId') queueItemId: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ) {
+    // Disable caching for dynamic status endpoints
+    // This ensures polling always gets fresh data and doesn't receive 304 Not Modified
+    res.setHeader(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, max-age=0',
+    );
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    // Disable ETag to prevent 304 responses
+    res.removeHeader('ETag');
+
     return this.consultationQueueService.getQueueById(actor, queueItemId);
   }
 
@@ -259,21 +277,53 @@ export class ConsultationQueueController {
     @Param('queueItemId') queueItemId: string,
     @Req() req: Request,
   ) {
+    const traceId = (req as Request & { traceId?: string }).traceId ?? null;
+
+    // Log start request initiation
+    this.logger.log(
+      JSON.stringify({
+        event: 'start_consultation_request',
+        method: 'POST',
+        path: `/api/v1/consultations/queue/${queueItemId}/start`,
+        queueItemId,
+        actorUserId: actor.id,
+        actorRole: actor.role,
+        traceId,
+      }),
+    );
+
     const result = await this.consultationQueueService.startFromQueue(
       actor,
       queueItemId,
+      traceId,
     );
+
     // Audit consultation starts for queue-driven flows.
     await this.auditService.log({
       action: AuditAction.WRITE,
       resourceType: 'Consultation',
       resourceId: result.consultation.id,
       actor,
-      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      traceId,
       ip: req.ip,
       userAgent: req.get('user-agent') ?? null,
       metadata: { queueItemId },
     });
+
+    // Log successful start completion
+    this.logger.log(
+      JSON.stringify({
+        event: 'start_consultation_completed',
+        queueItemId,
+        consultationId: result.consultation.id,
+        queueStatus: result.queueItem.status,
+        consultationStatus: result.consultation.status,
+        actorUserId: actor.id,
+        actorRole: actor.role,
+        traceId,
+      }),
+    );
+
     return result;
   }
 

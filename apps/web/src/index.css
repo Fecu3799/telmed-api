@@ -16,3 +16,47 @@ body {
   min-height: 100vh;
 }
 
+/* Local video PiP: bottom-right on mobile, top-right on desktop */
+.local-video-pip {
+  /* Desktop: top-right (default) */
+  top: 16px;
+  bottom: auto;
+}
+
+@media (max-width: 768px) {
+  .local-video-pip {
+    /* Mobile: bottom-right, above ControlBar */
+    top: auto;
+    bottom: 80px;
+  }
+}
+
+/* RoomLayout grid: responsive layout */
+.room-layout-grid {
+  /* Desktop: side-by-side (default) */
+  grid-template-columns: minmax(520px, 1fr) 380px;
+  grid-template-rows: 1fr 96px;
+  grid-template-areas:
+    "video side"
+    "bottom bottom";
+}
+
+@media (max-width: 1024px) {
+  /* On mobile/tablet, change grid to stack vertically */
+  .room-layout-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr auto 96px !important;
+    grid-template-areas:
+      "video"
+      "side"
+      "bottom" !important;
+  }
+
+  /* Side panel adjustments for mobile */
+  .room-side-panel {
+    max-height: 50vh !important;
+    border-left: none !important;
+    border-top: 1px solid #e5e5e5 !important;
+  }
+}
+

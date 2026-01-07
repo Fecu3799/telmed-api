@@ -446,10 +446,36 @@ export class ConsultationQueueService {
     return this.sortQueueItems(items);
   }
 
-  async startFromQueue(actor: Actor, queueItemId: string) {
+  async startFromQueue(
+    actor: Actor,
+    queueItemId: string,
+    traceId?: string | null,
+  ) {
+    // Log before validation
+    this.logger.log(
+      JSON.stringify({
+        event: 'start_from_queue_begin',
+        queueItemId,
+        actorUserId: actor.id,
+        actorRole: actor.role,
+        traceId: traceId ?? null,
+      }),
+    );
+
     let queue = await this.getQueueById(actor, queueItemId);
 
     if (actor.role === UserRole.doctor && queue.doctorUserId !== actor.id) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'start_from_queue_forbidden',
+          queueItemId,
+          actorUserId: actor.id,
+          actorRole: actor.role,
+          queueDoctorUserId: queue.doctorUserId,
+          reason: 'Doctor does not own queue item',
+          traceId: traceId ?? null,
+        }),
+      );
       throw new ForbiddenException('Forbidden');
     }
 
@@ -458,6 +484,17 @@ export class ConsultationQueueService {
       queue.status === ConsultationQueueStatus.rejected ||
       queue.status === ConsultationQueueStatus.expired
     ) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'start_from_queue_invalid_status',
+          queueItemId,
+          queueStatus: queue.status,
+          actorUserId: actor.id,
+          actorRole: actor.role,
+          reason: 'Queue status invalid',
+          traceId: traceId ?? null,
+        }),
+      );
       throw new ConflictException('Queue status invalid');
     }
 
@@ -530,9 +567,33 @@ export class ConsultationQueueService {
 
     if (existing) {
       if (existing.status === ConsultationStatus.closed) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'start_from_queue_consultation_closed',
+            queueItemId,
+            consultationId: existing.id,
+            actorUserId: actor.id,
+            actorRole: actor.role,
+            reason: 'Consultation already closed',
+            traceId: traceId ?? null,
+          }),
+        );
         throw new ConflictException('Consultation already closed');
       }
       if (existing.status !== ConsultationStatus.in_progress) {
+        // Log before DB update
+        this.logger.log(
+          JSON.stringify({
+            event: 'start_from_queue_resuming_consultation',
+            queueItemId,
+            consultationId: existing.id,
+            previousStatus: existing.status,
+            actorUserId: actor.id,
+            actorRole: actor.role,
+            traceId: traceId ?? null,
+          }),
+        );
+
         const resumed = await this.prisma.consultation.update({
           where: { id: existing.id },
           data: {
@@ -541,6 +602,20 @@ export class ConsultationQueueService {
             lastActivityAt: this.clock.now(),
           },
         });
+
+        // Log after DB update
+        this.logger.log(
+          JSON.stringify({
+            event: 'start_from_queue_consultation_resumed',
+            queueItemId: updatedQueue.id,
+            consultationId: resumed.id,
+            consultationStatus: resumed.status,
+            queueStatus: updatedQueue.status,
+            actorUserId: actor.id,
+            actorRole: actor.role,
+            traceId: traceId ?? null,
+          }),
+        );
 
         // Publish consultation.started event (non-blocking, wrapped in try/catch)
         // This notifies waiting patients that the consultation is ready
@@ -553,7 +628,7 @@ export class ConsultationQueueService {
             roomName,
             livekitUrl,
             startedAt: resumed.startedAt ?? this.clock.now(),
-            traceId: getTraceId(),
+            traceId: traceId ?? getTraceId(),
           });
         } catch (error) {
           // Log but don't fail: event publishing is non-critical
@@ -563,7 +638,7 @@ export class ConsultationQueueService {
               event: 'consultation_started_event_publish_failed',
               queueItemId: updatedQueue.id,
               consultationId: resumed.id,
-              traceId: getTraceId() ?? null,
+              traceId: traceId ?? getTraceId() ?? null,
               error:
                 error instanceof Error
                   ? { message: error.message, stack: error.stack }
@@ -575,6 +650,17 @@ export class ConsultationQueueService {
         return this.toStartResponse(updatedQueue, resumed);
       }
       // Idempotency: consultation already in_progress, don't emit event again
+      this.logger.log(
+        JSON.stringify({
+          event: 'start_from_queue_idempotent',
+          queueItemId,
+          consultationId: existing.id,
+          consultationStatus: existing.status,
+          actorUserId: actor.id,
+          actorRole: actor.role,
+          traceId: traceId ?? null,
+        }),
+      );
       return this.toStartResponse(updatedQueue, existing);
     }
 
@@ -600,9 +686,35 @@ export class ConsultationQueueService {
       consultationData.queueItemId = queue.id;
     }
 
+    // Log before DB create
+    this.logger.log(
+      JSON.stringify({
+        event: 'start_from_queue_creating_consultation',
+        queueItemId: updatedQueue.id,
+        queueStatus: updatedQueue.status,
+        actorUserId: actor.id,
+        actorRole: actor.role,
+        traceId: traceId ?? null,
+      }),
+    );
+
     const consultation = await this.prisma.consultation.create({
       data: consultationData,
     });
+
+    // Log after DB create
+    this.logger.log(
+      JSON.stringify({
+        event: 'start_from_queue_consultation_created',
+        queueItemId: updatedQueue.id,
+        consultationId: consultation.id,
+        consultationStatus: consultation.status,
+        queueStatus: updatedQueue.status,
+        actorUserId: actor.id,
+        actorRole: actor.role,
+        traceId: traceId ?? null,
+      }),
+    );
 
     // Publish consultation.started event (non-blocking, wrapped in try/catch)
     // This notifies waiting patients that the consultation is ready
@@ -616,7 +728,7 @@ export class ConsultationQueueService {
         roomName,
         livekitUrl,
         startedAt: consultation.startedAt ?? this.clock.now(),
-        traceId: getTraceId(),
+        traceId: traceId ?? getTraceId(),
       });
     } catch (error) {
       // Log but don't fail: event publishing is non-critical
@@ -626,7 +738,7 @@ export class ConsultationQueueService {
           event: 'consultation_started_event_publish_failed',
           queueItemId: updatedQueue.id,
           consultationId: consultation.id,
-          traceId: getTraceId() ?? null,
+          traceId: traceId ?? getTraceId() ?? null,
           error:
             error instanceof Error
               ? { message: error.message, stack: error.stack }

@@ -1,34 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  LiveKitRoom,
-  RoomAudioRenderer,
-  ControlBar,
-  GridLayout,
-  ParticipantTile,
-  useTracks,
-} from '@livekit/components-react';
-import { Track } from 'livekit-client';
-
-// Component to render video grid
-function VideoGrid() {
-  const tracks = useTracks(
-    [
-      { source: Track.Source.Camera, withPlaceholder: true },
-      { source: Track.Source.ScreenShare, withPlaceholder: false },
-    ],
-    { onlySubscribed: false },
-  );
-
-  return (
-    <GridLayout tracks={tracks}>
-      <ParticipantTile />
-    </GridLayout>
-  );
-}
+import { LiveKitRoom } from '@livekit/components-react';
 import { getLivekitToken, type LiveKitTokenResponse } from '../api/livekit';
 import { type ProblemDetails } from '../api/http';
 import { useAuth } from '../auth/AuthContext';
+import { RoomLayout } from './room/RoomLayout';
+import { RoomErrorBoundary } from './room/RoomErrorBoundary';
 
 type ConnectionState = 'idle' | 'loading' | 'connected' | 'error';
 
@@ -320,64 +297,172 @@ export function RoomPage() {
 
   // Show video room when connected
   if (connectionState === 'connected' && tokenData) {
-    return (
-      <div
-        style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}
-      >
+    // Debug logs (only in dev)
+    if (import.meta.env.DEV) {
+      console.log('[RoomPage] Rendering LiveKitRoom', {
+        consultationId,
+        activeRole,
+        connectionState,
+        roomName: tokenData.roomName,
+        livekitUrl: tokenData.livekitUrl,
+        hasToken: !!tokenData.token,
+        tokenLength: tokenData.token?.length ?? 0,
+        selectedRole,
+      });
+    }
+
+    // Ensure we have all required data before rendering LiveKitRoom
+    if (!tokenData.livekitUrl || !tokenData.token || !tokenData.roomName) {
+      return (
         <div
           style={{
-            padding: '16px',
-            backgroundColor: '#f5f5f5',
-            borderBottom: '1px solid #ddd',
             display: 'flex',
-            justifyContent: 'space-between',
+            flexDirection: 'column',
+            justifyContent: 'center',
             alignItems: 'center',
+            minHeight: '100vh',
+            padding: '20px',
           }}
         >
-          <div>
-            <h2 style={{ margin: 0 }}>Consultation Room</h2>
-            <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#666' }}>
-              Room: {tokenData.roomName} | Role: {selectedRole} | Token:{' '}
-              {tokenData.token.substring(0, 8)}...
-            </p>
-          </div>
+          <h2>Missing Room Data</h2>
+          <p>Unable to connect: missing server URL, token, or room name.</p>
           <button
             onClick={handleLeave}
             style={{
+              marginTop: '16px',
               padding: '8px 16px',
               border: 'none',
               borderRadius: '4px',
-              backgroundColor: '#dc3545',
+              backgroundColor: '#6c757d',
               color: 'white',
               cursor: 'pointer',
             }}
           >
-            Leave
+            Go Back
           </button>
         </div>
+      );
+    }
 
-        <div style={{ flex: 1, position: 'relative' }}>
+    return (
+      <RoomErrorBoundary>
+        <div
+          style={{
+            width: '100%',
+            height: '100vh',
+            overflow: 'hidden',
+            backgroundColor: '#000',
+          }}
+        >
           <LiveKitRoom
             serverUrl={tokenData.livekitUrl}
             token={tokenData.token}
             video={true}
             audio={true}
             connect={true}
-            onDisconnected={() => {
+            onConnected={() => {
+              if (import.meta.env.DEV) {
+                console.log('[RoomPage] LiveKit connected successfully');
+              }
+            }}
+            onDisconnected={(reason) => {
+              if (import.meta.env.DEV) {
+                console.log('[RoomPage] LiveKit disconnected:', reason);
+              }
               // Don't navigate away automatically, just reset state
               // User can retry or manually go back
               setConnectionState('idle');
               setTokenData(null);
               setSelectedRole(null);
             }}
-            style={{ height: '100%', width: '100%' }}
+            style={{
+              height: '100%',
+              width: '100%',
+            }}
           >
-            <RoomAudioRenderer />
-            <VideoGrid />
-            <ControlBar />
+            {/* All LiveKit-dependent components MUST be inside LiveKitRoom */}
+            <RoomLayout />
           </LiveKitRoom>
+
+          {/* External status bar (outside LiveKitRoom, no LiveKit hooks) */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: '96px',
+              borderTop: '1px solid #404040',
+              backgroundColor: '#0a0a0a',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0 16px',
+              gap: '16px',
+              zIndex: 100,
+              pointerEvents: 'none', // Allow clicks to pass through to LiveKit controls
+            }}
+          >
+            {/* Left: Connection status + IDs */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                minWidth: '200px',
+                pointerEvents: 'auto', // Re-enable pointer events for this section
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '14px',
+                }}
+              >
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: '#22c55e',
+                  }}
+                />
+                <span>
+                  {connectionState === 'connected' ? 'Connected' : 'Connecting'}
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#a3a3a3' }}>
+                Consultation: {consultationId?.substring(0, 8)}...
+              </div>
+              <div style={{ fontSize: '12px', color: '#a3a3a3' }}>
+                Role: {selectedRole || 'N/A'}
+              </div>
+            </div>
+
+            {/* Right: Consultation status / timers placeholder */}
+            <div
+              style={{
+                marginLeft: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                minWidth: '150px',
+                alignItems: 'flex-end',
+                pointerEvents: 'auto', // Re-enable pointer events for this section
+              }}
+            >
+              <div style={{ fontSize: '14px', fontWeight: '500' }}>
+                Status: in_progress
+              </div>
+              <div style={{ fontSize: '12px', color: '#a3a3a3' }}>
+                Duration: [Timer placeholder]
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </RoomErrorBoundary>
     );
   }
 

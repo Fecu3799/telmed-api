@@ -221,14 +221,23 @@ export function LobbyPage() {
 
   // WebSocket: subscribe to queue and listen for consultation.started event
   // Event-driven approach: patient subscribes to queueItemId, receives event when doctor starts
+  //
+  // VALIDATION MANUAL CHECKLIST:
+  // 1. Abrir front como patient, crear emergency
+  // 2. Aunque el socket tarde en conectar, debe terminar suscribiéndose (ver logs en DevTools)
+  // 3. Doctor hace start
+  // 4. Patient recibe `consultation:started` y navega automático a /room/:consultationId
   const queueItemIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Only for patients waiting for consultation to start
     if (activeRole !== 'patient' || !emergencyQueue?.id) {
+      const oldQueueItemId = queueItemIdRef.current;
       queueItemIdRef.current = null;
       setWaitingForDoctor(false);
-      consultationSocket.unsubscribeFromQueue();
+      if (oldQueueItemId) {
+        consultationSocket.unsubscribeFromQueue(oldQueueItemId);
+      }
       setSubscribedQueueId(null);
       return;
     }
@@ -239,41 +248,49 @@ export function LobbyPage() {
       emergencyQueue.status === 'in_progress' ||
       emergencyQueue.status === 'finalized'
     ) {
+      const oldQueueItemId = queueItemIdRef.current;
       queueItemIdRef.current = null;
       setWaitingForDoctor(false);
-      consultationSocket.unsubscribeFromQueue();
+      if (oldQueueItemId) {
+        consultationSocket.unsubscribeFromQueue(oldQueueItemId);
+      }
       setSubscribedQueueId(null);
       return;
     }
 
     // Subscribe to queue item if not already subscribed
+    // Always call subscribeToQueue (it's eventually consistent: will subscribe when socket connects)
     if (queueItemIdRef.current !== emergencyQueue.id) {
+      // Unsubscribe from previous queue item if changing
+      if (queueItemIdRef.current) {
+        consultationSocket.unsubscribeFromQueue(queueItemIdRef.current);
+      }
+
       queueItemIdRef.current = emergencyQueue.id;
       setSubscribedQueueId(emergencyQueue.id);
       setWaitingForDoctor(true);
 
       // Subscribe to queue item updates via WebSocket
-      if (consultationSocket.isConnected()) {
-        consultationSocket.subscribeToQueue(emergencyQueue.id, (response) => {
-          if (response.ok) {
-            if (import.meta.env.DEV) {
-              console.log('[Socket] Subscribed to queue:', emergencyQueue.id);
-            }
-            setLastEvent({
-              type: 'queue.subscribe',
-              timestamp: new Date().toISOString(),
-              payload: response,
-            });
-          } else {
-            if (import.meta.env.DEV) {
-              console.error(
-                '[Socket] Failed to subscribe to queue:',
-                response.error,
-              );
-            }
+      // This is eventually consistent: if socket is not connected yet, it will subscribe on connect
+      consultationSocket.subscribeToQueue(emergencyQueue.id, (response) => {
+        if (response.ok) {
+          if (import.meta.env.DEV) {
+            console.log('[Socket] Subscribed to queue:', emergencyQueue.id);
           }
-        });
-      }
+          setLastEvent({
+            type: 'queue:subscribe',
+            timestamp: new Date().toISOString(),
+            payload: response,
+          });
+        } else {
+          if (import.meta.env.DEV) {
+            console.error(
+              '[Socket] Failed to subscribe to queue:',
+              response.error,
+            );
+          }
+        }
+      });
     }
 
     // Listen for consultation.started event (new event-driven contract)
@@ -288,7 +305,7 @@ export function LobbyPage() {
       if (payload.queueItemId !== emergencyQueue.id) {
         if (import.meta.env.DEV) {
           console.warn(
-            '[Socket] Received consultation.started for different queue:',
+            '[Socket] Received consultation:started for different queue:',
             payload.queueItemId,
             'expected:',
             emergencyQueue.id,
@@ -298,7 +315,7 @@ export function LobbyPage() {
       }
 
       if (import.meta.env.DEV) {
-        console.log('[Socket] Received consultation.started:', payload);
+        console.log('[Socket] Received consultation:started:', payload);
       }
 
       // Track event for debug panel
@@ -311,7 +328,8 @@ export function LobbyPage() {
       // Navigate automatically to room
       navigate(`/room/${payload.consultationId}`);
       setWaitingForDoctor(false);
-      consultationSocket.unsubscribeFromQueue();
+      // Unsubscribe from the queue item that just started
+      consultationSocket.unsubscribeFromQueue(payload.queueItemId);
       setSubscribedQueueId(null);
     };
 
@@ -319,7 +337,10 @@ export function LobbyPage() {
 
     return () => {
       consultationSocket.offConsultationStarted(handleConsultationStarted);
-      consultationSocket.unsubscribeFromQueue();
+      // Unsubscribe from current queue item on cleanup
+      if (queueItemIdRef.current) {
+        consultationSocket.unsubscribeFromQueue(queueItemIdRef.current);
+      }
       setSubscribedQueueId(null);
       setWaitingForDoctor(false);
     };

@@ -25,9 +25,13 @@ import { RedisService } from '../../infra/redis/redis.service';
 import { AuditService } from '../../infra/audit/audit.service';
 import { AuditAction } from '@prisma/client';
 import { getTraceId } from '../../common/request-context';
+import type {
+  QueueSubscribePayload,
+  QueueSubscribedPayload,
+  ConsultationStartedPayload,
+} from './consultation-realtime.events';
 
 type JoinPayload = { consultationId: string };
-type QueueSubscribePayload = { queueItemId: string };
 type PingPayload = { consultationId: string };
 type ChatSendPayload = {
   consultationId: string;
@@ -72,36 +76,46 @@ export class ConsultationRealtimeGateway
   handleConnection(client: Socket) {
     const actor = this.getActor(client);
     const origin = client.handshake.headers.origin ?? 'unknown';
+    const namespace = client.nsp.name;
+    const traceId = getTraceId() ?? null;
     this.logger.log(
       JSON.stringify({
         event: 'ws_connection',
         socketId: client.id,
+        namespace,
         userId: actor?.id ?? null,
         role: actor?.role ?? null,
         origin,
+        traceId,
       }),
     );
   }
 
   handleDisconnect(client: Socket) {
     const actor = this.getActor(client);
+    const namespace = client.nsp.name;
+    const traceId = getTraceId() ?? null;
+    // Note: Socket.IO doesn't provide a reliable way to distinguish client vs server disconnect
+    // in the disconnect handler, so we log a generic reason
     this.logger.log(
       JSON.stringify({
         event: 'ws_disconnection',
         socketId: client.id,
+        namespace,
         userId: actor?.id ?? null,
         role: actor?.role ?? null,
+        traceId,
       }),
     );
   }
 
   /**
    * Subscribe to queue item updates (patient waiting for doctor to start)
-   * Client emits: queue.subscribe { queueItemId }
-   * Server joins socket to room: queue:{queueItemId}
-   * Server emits consultation.started when doctor starts the consultation
+   * Client emits: queue:subscribe { queueItemId }
+   * Server joins socket to room: queueItem:{queueItemId}
+   * Server emits consultation:started when doctor starts the consultation
    */
-  @SubscribeMessage('queue.subscribe')
+  @SubscribeMessage('queue:subscribe')
   async handleQueueSubscribe(
     client: Socket,
     payload: QueueSubscribePayload,
@@ -112,6 +126,23 @@ export class ConsultationRealtimeGateway
       return this.respondError(ack, client, 401, 'Unauthorized');
     }
 
+    const traceId = getTraceId() ?? null;
+    const room = this.queueRoomName(payload.queueItemId);
+
+    // Log request
+    this.logger.log(
+      JSON.stringify({
+        event: 'queue_subscribe_request',
+        socketId: client.id,
+        queueItemId: payload.queueItemId,
+        roomName: room,
+        userId: actor.id,
+        role: actor.role,
+        namespace: client.nsp.name,
+        traceId,
+      }),
+    );
+
     try {
       // Validate actor has access to this queue item
       const queue = await this.queueAccessService.canAccess(
@@ -120,27 +151,72 @@ export class ConsultationRealtimeGateway
       );
 
       // Join socket to queue room for event notifications
-      const room = this.queueRoomName(payload.queueItemId);
       await client.join(room);
 
-      // Observability: log subscription
-      this.logger.log(
-        JSON.stringify({
-          event: 'queue_subscribe',
-          socketId: client.id,
-          queueItemId: payload.queueItemId,
-          userId: actor.id,
-          role: actor.role,
-          traceId: getTraceId() ?? null,
-        }),
-      );
+      // Get client rooms for observability (defensive check)
+      const clientRooms: string[] = [];
+      try {
+        if (this.server?.sockets?.adapter) {
+          const roomSockets = this.server.sockets.adapter.rooms?.get(room);
+          const roomSize = roomSockets?.size ?? 0;
+          // Get all rooms this client is in
+          const allRooms = Array.from(client.rooms);
+          clientRooms.push(...allRooms);
 
+          this.logger.log(
+            JSON.stringify({
+              event: 'queue_subscribe_success',
+              socketId: client.id,
+              queueItemId: payload.queueItemId,
+              roomName: room,
+              userId: actor.id,
+              role: actor.role,
+              roomSize,
+              clientRooms,
+              namespace: client.nsp.name,
+              traceId,
+            }),
+          );
+        }
+      } catch (roomCheckError) {
+        // Non-critical: log but don't fail
+        this.logger.warn(
+          JSON.stringify({
+            event: 'queue_subscribe_room_check_failed',
+            socketId: client.id,
+            queueItemId: payload.queueItemId,
+            roomName: room,
+            error:
+              roomCheckError instanceof Error
+                ? roomCheckError.message
+                : String(roomCheckError),
+            traceId,
+          }),
+        );
+      }
+
+      // Emit confirmation to client
       return this.respondOk(ack, {
         ok: true,
         subscribed: true,
         queueItemId: payload.queueItemId,
       });
     } catch (error) {
+      // Log error with stack trace
+      const errorStack = error instanceof Error ? error.stack : String(error);
+      this.logger.error(
+        JSON.stringify({
+          event: 'queue_subscribe_error',
+          socketId: client.id,
+          queueItemId: payload.queueItemId,
+          roomName: room,
+          userId: actor.id,
+          role: actor.role,
+          error: errorStack,
+          traceId,
+        }),
+      );
+
       // If auth/permission fails, emit error response
       if (
         error instanceof NotFoundException ||
@@ -150,14 +226,6 @@ export class ConsultationRealtimeGateway
         return this.respondException(ack, client, error);
       }
       // For other errors, disconnect for security
-      this.logger.warn(
-        JSON.stringify({
-          event: 'queue_subscribe_error',
-          socketId: client.id,
-          queueItemId: payload.queueItemId,
-          error: String(error),
-        }),
-      );
       client.disconnect();
       return this.respondError(ack, client, 500, 'Internal error');
     }
@@ -310,9 +378,9 @@ export class ConsultationRealtimeGateway
   }
 
   /**
-   * Emit consultation.started event to queue room when doctor starts consultation.
+   * Emit consultation:started event to queue room when doctor starts consultation.
    * Called when a consultation transitions to in_progress (e.g., doctor starts from queue).
-   * @param queueItemId - The queue item ID (to emit to queue:{queueItemId} room)
+   * @param queueItemId - The queue item ID (to emit to queueItem:{queueItemId} room)
    * @param consultationId - The consultation ID
    * @param roomName - Room name for LiveKit (e.g., consultation_<id>)
    * @param livekitUrl - LiveKit server URL
@@ -327,6 +395,31 @@ export class ConsultationRealtimeGateway
     startedAt: Date,
     traceId?: string | null,
   ) {
+    // Defensive check: ensure server is initialized
+    if (!this.server) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'consultation_started_publish_failed',
+          queueItemId,
+          consultationId,
+          reason: 'WebSocket server not initialized',
+          traceId: traceId ?? null,
+        }),
+      );
+      return;
+    }
+
+    // Log publish attempt
+    this.logger.log(
+      JSON.stringify({
+        event: 'consultation_started_publish_attempt',
+        queueItemId,
+        consultationId,
+        roomName,
+        traceId: traceId ?? null,
+      }),
+    );
+
     const payload = {
       queueItemId,
       consultationId,
@@ -337,30 +430,63 @@ export class ConsultationRealtimeGateway
 
     // Emit to queue room (where patient is subscribed)
     const queueRoom = this.queueRoomName(queueItemId);
-    const recipients = this.server.sockets.adapter.rooms.get(queueRoom);
-    const recipientsCount = recipients?.size ?? 0;
+    let queueRoomRecipientsCount = 0;
 
-    this.server.to(queueRoom).emit('consultation.started', payload);
+    try {
+      // Defensive check for adapter and rooms
+      if (
+        this.server.sockets?.adapter?.rooms &&
+        typeof this.server.sockets?.adapter?.rooms.get === 'function'
+      ) {
+        const queueRoomSockets =
+          this.server.sockets.adapter.rooms.get(queueRoom);
+        queueRoomRecipientsCount = queueRoomSockets?.size ?? 0;
+      }
 
-    // Also emit to consultation room for consistency
-    const consultationRoom = this.roomName(consultationId);
-    this.server.to(consultationRoom).emit('consultation.started', payload);
+      // Emit to queue room (always emit, even if count is 0)
+      this.server.to(queueRoom).emit('consultation:started', payload);
 
-    // Observability: log with recipients count
-    this.logger.log(
-      JSON.stringify({
-        event: 'consultation_started_emitted',
-        queueItemId,
-        consultationId,
-        roomName,
-        livekitUrl,
-        startedAt: startedAt.toISOString(),
-        queueRoom,
-        consultationRoom,
-        recipientsCount,
-        traceId: traceId ?? null,
-      }),
-    );
+      // Log success
+      this.logger.log(
+        JSON.stringify({
+          event: 'consultation_started_publish_success',
+          queueItemId,
+          consultationId,
+          roomName,
+          wsQueueRoom: queueRoom,
+          recipientsEstimate: queueRoomRecipientsCount,
+          namespace: '/consultations',
+          traceId: traceId ?? null,
+        }),
+      );
+
+      // Warn if no recipients in queue room (patient might not be connected)
+      if (queueRoomRecipientsCount === 0) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'consultation_started_no_recipients_in_queue_room',
+            queueItemId,
+            consultationId,
+            queueRoom,
+            reason: 'No sockets in queue room - patient may not be subscribed',
+            traceId: traceId ?? null,
+          }),
+        );
+      }
+    } catch (error) {
+      // Log error with stack trace
+      const errorStack = error instanceof Error ? error.stack : String(error);
+      this.logger.error(
+        JSON.stringify({
+          event: 'consultation_started_publish_failed',
+          queueItemId,
+          consultationId,
+          roomName,
+          error: errorStack,
+          traceId: traceId ?? null,
+        }),
+      );
+    }
   }
 
   emitConsultationClosed(consultationId: string, closedAt: Date) {
@@ -381,7 +507,7 @@ export class ConsultationRealtimeGateway
   }
 
   private queueRoomName(queueItemId: string) {
-    return `queue:${queueItemId}`;
+    return `queueItem:${queueItemId}`;
   }
 
   private getActor(client: Socket): Actor | null {

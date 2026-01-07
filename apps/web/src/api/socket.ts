@@ -75,18 +75,24 @@ class ConsultationSocketClient {
       });
     }
 
-    // Handle reconnection: re-subscribe to queue if needed
-    this.socket.on('reconnect', () => {
-      if (config.DEBUG_SOCKET) {
-        console.log(
-          '[Socket] Reconnected, re-subscribing to queue:',
-          this.subscribedQueueItemId,
-        );
-      }
+    // Handle connection (first connect and reconnect): re-subscribe to queue if needed
+    // This ensures subscription happens even if socket was still connecting when subscribeToQueue was called
+    const handleConnect = () => {
       if (this.subscribedQueueItemId && this.socket?.connected) {
+        if (config.DEBUG_SOCKET || import.meta.env.DEV) {
+          console.log(
+            '[Socket] Connected, auto-subscribing to queue:',
+            this.subscribedQueueItemId,
+          );
+        }
+        // Re-subscribe without callback to avoid duplicate logs
         this.subscribeToQueue(this.subscribedQueueItemId);
       }
-    });
+    };
+
+    // Listen to both 'connect' (first connection) and 'reconnect' (after disconnection)
+    this.socket.on('connect', handleConnect);
+    this.socket.on('reconnect', handleConnect);
   }
 
   /**
@@ -145,6 +151,8 @@ class ConsultationSocketClient {
 
   /**
    * Subscribe to queue item updates (patient waiting for doctor to start)
+   * This is "eventually consistent": if socket is not connected yet, the subscription
+   * will be attempted automatically when the socket connects.
    * @param queueItemId - The queue item ID to subscribe to
    * @param callback - Optional callback for ACK response
    */
@@ -157,38 +165,48 @@ class ConsultationSocketClient {
       error?: { status: number; detail: string };
     }) => void,
   ): void {
+    // Always persist the subscription intent, even if not connected yet
+    // This ensures the subscription happens when the socket connects
+    this.subscribedQueueItemId = queueItemId;
+
     if (!this.socket?.connected) {
-      if (callback) {
-        callback({
-          ok: false,
-          error: { status: 500, detail: 'Socket not connected' },
-        });
+      // Socket not connected yet: subscription will happen automatically on connect
+      if (config.DEBUG_SOCKET || import.meta.env.DEV) {
+        console.log(
+          '[Socket] Will subscribe to queue on connect:',
+          queueItemId,
+        );
       }
+      // Don't call callback with error - subscription is deferred, not failed
       return;
     }
 
-    this.subscribedQueueItemId = queueItemId;
-
-    if (config.DEBUG_SOCKET) {
-      console.log('[Socket] Emitting queue.subscribe:', { queueItemId });
+    // Socket is connected: emit subscription immediately
+    if (config.DEBUG_SOCKET || import.meta.env.DEV) {
+      console.log('[Socket] Emitting queue:subscribe:', { queueItemId });
     }
 
     this.socket.emit(
-      'queue.subscribe',
+      'queue:subscribe',
       { queueItemId },
       (response: unknown) => {
-        if (config.DEBUG_SOCKET) {
-          console.log('[Socket] queue.subscribe ACK:', response);
+        const ackResponse = response as {
+          ok: boolean;
+          subscribed?: boolean;
+          queueItemId?: string;
+          error?: { status: number; detail: string };
+        };
+
+        if (config.DEBUG_SOCKET || import.meta.env.DEV) {
+          if (ackResponse.ok) {
+            console.log('[Socket] queue:subscribe ACK success:', ackResponse);
+          } else {
+            console.error('[Socket] queue:subscribe ACK failed:', ackResponse);
+          }
         }
+
         if (callback) {
-          callback(
-            response as {
-              ok: boolean;
-              subscribed?: boolean;
-              queueItemId?: string;
-              error?: { status: number; detail: string };
-            },
-          );
+          callback(ackResponse);
         }
       },
     );
@@ -196,13 +214,29 @@ class ConsultationSocketClient {
 
   /**
    * Unsubscribe from queue item updates
+   * @param queueItemId - Optional queue item ID to unsubscribe from (for safety: only unsubscribe if matches current)
    */
-  unsubscribeFromQueue(): void {
-    this.subscribedQueueItemId = null;
+  unsubscribeFromQueue(queueItemId?: string): void {
+    // Only unsubscribe if queueItemId matches (or if not provided, always unsubscribe)
+    if (!queueItemId || this.subscribedQueueItemId === queueItemId) {
+      const oldQueueItemId = this.subscribedQueueItemId;
+      this.subscribedQueueItemId = null;
+
+      // Best-effort: emit unsubscribe event to server (even if backend doesn't handle it yet)
+      if (oldQueueItemId && this.socket?.connected) {
+        if (config.DEBUG_SOCKET || import.meta.env.DEV) {
+          console.log('[Socket] Emitting queue:unsubscribe:', {
+            queueItemId: oldQueueItemId,
+          });
+        }
+        // Emit without callback - best-effort, backend may not support it yet
+        this.socket.emit('queue:unsubscribe', { queueItemId: oldQueueItemId });
+      }
+    }
   }
 
   /**
-   * Listen to consultation.started event (new event-driven contract)
+   * Listen to consultation:started event (new event-driven contract)
    * @param callback - Callback when consultation starts
    */
   onConsultationStarted(
@@ -218,16 +252,16 @@ class ConsultationSocketClient {
       return;
     }
 
-    this.socket.on('consultation.started', (payload) => {
-      if (config.DEBUG_SOCKET) {
-        console.log('[Socket] Received consultation.started:', payload);
+    this.socket.on('consultation:started', (payload) => {
+      if (config.DEBUG_SOCKET || import.meta.env.DEV) {
+        console.log('[Socket] Received consultation:started:', payload);
       }
       callback(payload);
     });
   }
 
   /**
-   * Remove consultation.started listener
+   * Remove consultation:started listener
    */
   offConsultationStarted(
     callback?: (payload: {
@@ -243,9 +277,9 @@ class ConsultationSocketClient {
     }
 
     if (callback) {
-      this.socket.off('consultation.started', callback);
+      this.socket.off('consultation:started', callback);
     } else {
-      this.socket.off('consultation.started');
+      this.socket.off('consultation:started');
     }
   }
 

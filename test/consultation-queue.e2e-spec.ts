@@ -457,6 +457,13 @@ describe('Consultation queue (e2e)', () => {
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .expect(200);
 
+    // Verify no-cache headers are set
+    expect(getResponse.headers['cache-control']).toBe(
+      'no-store, no-cache, must-revalidate, max-age=0',
+    );
+    expect(getResponse.headers['pragma']).toBe('no-cache');
+    expect(getResponse.headers['expires']).toBe('0');
+
     expect(getResponse.body.status).toBe('expired');
 
     await request(httpServer(app))
