@@ -22,7 +22,9 @@ model User {
   schedulingConfig       DoctorSchedulingConfig?
   patient                Patient?
   uploadedFiles          FileObject[]
-  consultationMessages   ConsultationMessage[]
+  chatThreadsAsDoctor    ChatThread[]                  @relation("ChatThreadDoctor")
+  chatThreadsAsPatient   ChatThread[]                  @relation("ChatThreadPatient")
+  chatMessages           ChatMessage[]                 @relation("ChatMessageSender")
   paymentsAsDoctor       Payment[]                     @relation("PaymentDoctor")
   paymentsAsPatient      Payment[]                     @relation("PaymentPatient")
   sessions               Session[]
@@ -199,30 +201,11 @@ model Consultation {
   updatedAt      DateTime               @updatedAt @map("updated_at")
   appointment    Appointment?           @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   queueItem      ConsultationQueueItem? @relation(fields: [queueItemId], references: [id], onDelete: SetNull)
-  messages       ConsultationMessage[]
+  chatMessages   ChatMessage[]         @relation("ChatMessageConsultation")
 
   @@index([doctorUserId, createdAt])
   @@index([patientUserId, createdAt])
   @@map("consultations")
-}
-
-model ConsultationMessage {
-  id             String                   @id @default(uuid())
-  consultationId String                   @map("consultation_id")
-  senderUserId   String                   @map("sender_user_id")
-  kind           ConsultationMessageKind
-  text           String?                  @db.Text
-  fileId         String?                  @map("file_id")
-  deliveredAt    DateTime?                @map("delivered_at")
-  createdAt      DateTime                 @default(now()) @map("created_at")
-  updatedAt      DateTime                 @updatedAt @map("updated_at")
-  consultation   Consultation             @relation(fields: [consultationId], references: [id], onDelete: Cascade)
-  sender         User                     @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
-  file           FileObject?              @relation(fields: [fileId], references: [id], onDelete: SetNull)
-
-  @@index([consultationId, createdAt(sort: Desc)])
-  @@index([consultationId, deliveredAt])
-  @@map("consultation_messages")
 }
 
 model FileObject {
@@ -235,7 +218,6 @@ model FileObject {
   uploadedByUserId String                  @map("uploaded_by_user_id")
   createdAt        DateTime                @default(now()) @map("created_at")
   uploadedBy       User                    @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
-  messages         ConsultationMessage[]
 
   @@index([uploadedByUserId, createdAt(sort: Desc)])
   @@map("file_objects")
@@ -416,10 +398,14 @@ enum ConsultationQueuePaymentStatus {
   expired
 }
 
-enum ConsultationMessageKind {
+enum ChatMessageKind {
   text
-  file
   system
+}
+
+enum ChatParticipantRole {
+  doctor
+  patient
 }
 
 enum ConsultationQueueEntryType {
@@ -451,4 +437,61 @@ enum AuditAction {
 
 enum WebhookProvider {
   mercadopago
+}
+
+model ChatThread {
+  id            String        @id @default(uuid())
+  doctorUserId  String        @map("doctor_user_id")
+  patientUserId String        @map("patient_user_id")
+  lastMessageAt DateTime?     @map("last_message_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  doctor        User          @relation("ChatThreadDoctor", fields: [doctorUserId], references: [id], onDelete: Cascade)
+  patient       User          @relation("ChatThreadPatient", fields: [patientUserId], references: [id], onDelete: Cascade)
+  messages      ChatMessage[]
+  policy        ChatPolicy?
+
+  @@unique([doctorUserId, patientUserId])
+  @@index([patientUserId, lastMessageAt])
+  @@index([doctorUserId, lastMessageAt])
+  @@map("chat_threads")
+}
+
+model ChatPolicy {
+  threadId                      String   @id @map("thread_id")
+  patientCanMessage              Boolean  @default(true) @map("patient_can_message")
+  allowedSchedule                Json?    @map("allowed_schedule")
+  dailyLimit                    Int      @default(10) @map("daily_limit")
+  burstLimit                    Int      @default(3) @map("burst_limit")
+  burstWindowSeconds            Int      @default(30) @map("burst_window_seconds")
+  requireRecentConsultation      Boolean  @default(true) @map("require_recent_consultation")
+  recentConsultationWindowHours Int      @default(72) @map("recent_consultation_window_hours")
+  closedByDoctor                 Boolean  @default(false) @map("closed_by_doctor")
+  createdAt                     DateTime @default(now()) @map("created_at")
+  updatedAt                     DateTime @updatedAt @map("updated_at")
+  thread                        ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@map("chat_policies")
+}
+
+model ChatMessage {
+  id                    String              @id @default(uuid())
+  threadId              String              @map("thread_id")
+  senderUserId          String              @map("sender_user_id")
+  senderRole            ChatParticipantRole @map("sender_role")
+  kind                  ChatMessageKind
+  text                  String?             @db.Text
+  clientMessageId       String?             @map("client_message_id")
+  contextConsultationId String?            @map("context_consultation_id")
+  deliveredAt           DateTime?           @map("delivered_at")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+  thread                ChatThread          @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender                 User                @relation("ChatMessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+  contextConsultation   Consultation?       @relation("ChatMessageConsultation", fields: [contextConsultationId], references: [id], onDelete: SetNull)
+
+  @@unique([threadId, senderUserId, clientMessageId])
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([threadId, deliveredAt])
+  @@map("chat_messages")
 }

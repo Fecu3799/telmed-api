@@ -33,12 +33,7 @@ import type {
 
 type JoinPayload = { consultationId: string };
 type PingPayload = { consultationId: string };
-type ChatSendPayload = {
-  consultationId: string;
-  clientMsgId?: string;
-  text: string;
-};
-type ChatDeliveredPayload = { consultationId: string; messageId: string };
+// Removed: ChatSendPayload, ChatDeliveredPayload - chat messages now handled by chats module
 
 /**
  * WebSocket Gateway for consultations namespace
@@ -313,69 +308,8 @@ export class ConsultationRealtimeGateway
     }
   }
 
-  @SubscribeMessage('chat.send')
-  async handleChatSend(
-    client: Socket,
-    payload: ChatSendPayload,
-    ack?: (resp: unknown) => void,
-  ) {
-    const actor = this.getActor(client);
-    if (!actor) {
-      return this.respondError(ack, client, 401, 'Unauthorized');
-    }
-
-    try {
-      const message = await this.realtimeService.createTextMessage(
-        actor,
-        payload.consultationId,
-        payload.text,
-      );
-      const response = {
-        ok: true,
-        clientMsgId: payload.clientMsgId ?? null,
-        message,
-      };
-
-      this.server
-        .to(this.roomName(payload.consultationId))
-        .emit('chat.message_created', { message });
-
-      return this.respondOk(ack, response);
-    } catch (error) {
-      return this.respondException(ack, client, error);
-    }
-  }
-
-  @SubscribeMessage('chat.delivered')
-  async handleDelivered(
-    client: Socket,
-    payload: ChatDeliveredPayload,
-    ack?: (resp: unknown) => void,
-  ) {
-    const actor = this.getActor(client);
-    if (!actor) {
-      return this.respondError(ack, client, 401, 'Unauthorized');
-    }
-
-    try {
-      const message = await this.realtimeService.markMessageDelivered(
-        actor,
-        payload.consultationId,
-        payload.messageId,
-      );
-
-      this.server
-        .to(this.roomName(payload.consultationId))
-        .emit('chat.message_delivered', {
-          messageId: message.id,
-          deliveredAt: message.deliveredAt,
-        });
-
-      return this.respondOk(ack, { ok: true });
-    } catch (error) {
-      return this.respondException(ack, client, error);
-    }
-  }
+  // Removed: chat.send and chat.delivered handlers
+  // Chat messages are now handled by the chats module (ChatsGateway in /chats namespace)
 
   /**
    * Emit consultation:started event to queue room when doctor starts consultation.
@@ -496,11 +430,7 @@ export class ConsultationRealtimeGateway
     });
   }
 
-  emitMessageCreated(consultationId: string, message: unknown) {
-    this.server
-      .to(this.roomName(consultationId))
-      .emit('chat.message_created', { message });
-  }
+  // Removed: emitMessageCreated - chat messages are now handled by chats module (ChatsGateway)
 
   private roomName(consultationId: string) {
     return `consultation:${consultationId}`;

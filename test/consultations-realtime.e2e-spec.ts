@@ -350,7 +350,7 @@ describe('Consultations realtime (e2e)', () => {
       .expect(403);
   });
 
-  it('handles realtime chat and file uploads', async () => {
+  it('handles file uploads', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const patient = await registerAndLogin(app, 'patient');
 
@@ -362,85 +362,8 @@ describe('Consultations realtime (e2e)', () => {
       patient.accessToken,
     );
 
-    const doctorSocket = io(`${baseUrl}/consultations`, {
-      auth: { token: doctor.accessToken },
-      transports: ['websocket'],
-    });
-    const patientSocket = io(`${baseUrl}/consultations`, {
-      auth: { token: patient.accessToken },
-      transports: ['websocket'],
-    });
-
-    await waitForAck<void>((resolve, reject) => {
-      doctorSocket.emit(
-        'consultation.join',
-        { consultationId },
-        (response: { ok: boolean }) => {
-          if (response?.ok) {
-            resolve();
-          } else {
-            reject(new Error('Join failed'));
-          }
-        },
-      );
-    });
-
-    await waitForAck<void>((resolve, reject) => {
-      patientSocket.emit(
-        'consultation.join',
-        { consultationId },
-        (response: { ok: boolean }) => {
-          if (response?.ok) {
-            resolve();
-          } else {
-            reject(new Error('Join failed'));
-          }
-        },
-      );
-    });
-
-    const messageCreated = new Promise<{ id: string }>((resolve) => {
-      patientSocket.on('chat.message_created', (payload) => {
-        resolve(payload.message);
-      });
-    });
-
-    await waitForAck<void>((resolve, reject) => {
-      doctorSocket.emit(
-        'chat.send',
-        { consultationId, clientMsgId: 'msg-1', text: 'Hola' },
-        (response: { ok: boolean }) => {
-          if (response?.ok) {
-            resolve();
-          } else {
-            reject(new Error('Send failed'));
-          }
-        },
-      );
-    });
-
-    const createdMessage = await messageCreated;
-
-    await waitForAck<void>((resolve, reject) => {
-      patientSocket.emit(
-        'chat.delivered',
-        { consultationId, messageId: createdMessage.id },
-        (response: { ok: boolean }) => {
-          if (response?.ok) {
-            resolve();
-          } else {
-            reject(new Error('Delivered failed'));
-          }
-        },
-      );
-    });
-
-    const messagesResponse = await request(httpServer(app))
-      .get(`/api/v1/consultations/${consultationId}/messages`)
-      .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .expect(200);
-
-    expect(messagesResponse.body.items.length).toBeGreaterThan(0);
+    // Removed: chat.send, chat.delivered, and GET /consultations/:id/messages
+    // Chat messages are now handled by the chats module (ChatThread/ChatMessage)
 
     const prepareResponse = await request(httpServer(app))
       .post(`/api/v1/consultations/${consultationId}/files/prepare`)
@@ -460,15 +383,14 @@ describe('Consultations realtime (e2e)', () => {
       .send({ fileId })
       .expect(201);
 
-    expect(confirmResponse.body.kind).toBe('file');
+    // File upload confirmed - file is ready for use
+    // Note: File sharing in consultations is now handled via chat messages (chats module)
+    expect(confirmResponse.body.fileId).toBe(fileId);
 
     await request(httpServer(app))
       .get(`/api/v1/consultations/${consultationId}/files/${fileId}/download`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .expect(200);
-
-    doctorSocket.close();
-    patientSocket.close();
   });
 
   it('patient receives consultation:started event when doctor starts queue', async () => {

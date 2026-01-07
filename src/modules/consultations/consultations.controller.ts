@@ -40,8 +40,7 @@ import type { Actor } from '../../common/types/actor.type';
 import { ConsultationDto } from './docs/consultation.dto';
 import { ConsultationAdminDto } from './docs/consultation-admin.dto';
 import { LiveKitTokenDto } from './docs/livekit-token.dto';
-import { ConsultationMessagesResponseDto } from './docs/consultation-messages-response.dto';
-import { ConsultationMessageDto } from './docs/consultation-message.dto';
+// Removed: ConsultationMessagesResponseDto, ConsultationMessageDto (chat messages now handled by chats module)
 import {
   ConsultationFileDownloadDto,
   ConsultationFilePrepareResponseDto,
@@ -50,7 +49,7 @@ import { ConsultationsService } from './consultations.service';
 import { ConsultationPatchDto } from './dto/consultation-patch.dto';
 import { AuditService } from '../../infra/audit/audit.service';
 import { ConsultationRealtimeService } from './consultation-realtime.service';
-import { ConsultationMessagesQueryDto } from './dto/consultation-messages-query.dto';
+// Removed: ConsultationMessagesQueryDto (chat messages now handled by chats module)
 import { ConsultationFilePrepareDto } from './dto/consultation-file-prepare.dto';
 import { ConsultationFileConfirmDto } from './dto/consultation-file-confirm.dto';
 import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
@@ -213,32 +212,8 @@ export class ConsultationsController {
     );
   }
 
-  @Get('consultations/:id/messages')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.patient, UserRole.doctor)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'List consultation messages' })
-  @ApiQuery({ name: 'cursor', required: false, type: String })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiOkResponse({ type: ConsultationMessagesResponseDto })
-  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
-  @ApiForbiddenResponse({ type: ProblemDetailsDto })
-  @ApiNotFoundResponse({ type: ProblemDetailsDto })
-  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
-  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async listMessages(
-    @CurrentUser() actor: Actor,
-    @Param('id') id: string,
-    @Query() query: ConsultationMessagesQueryDto,
-    @Req() req: Request,
-  ) {
-    return this.consultationRealtimeService.listMessages(
-      actor,
-      id,
-      query,
-      (req as Request & { traceId?: string }).traceId ?? undefined,
-    );
-  }
+  // Removed: GET consultations/:id/messages endpoint
+  // Chat messages are now handled by the chats module (GET /api/v1/chats/threads/:threadId/messages)
 
   @Post('consultations/:id/files/prepare')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -272,7 +247,7 @@ export class ConsultationsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Confirm consultation file upload' })
   @ApiBody({ type: ConsultationFileConfirmDto })
-  @ApiOkResponse({ type: ConsultationMessageDto })
+  @ApiOkResponse()
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
@@ -283,13 +258,13 @@ export class ConsultationsController {
     @Param('id') id: string,
     @Body() dto: ConsultationFileConfirmDto,
   ) {
-    const message = await this.consultationRealtimeService.confirmFileUpload(
+    // File upload confirmed - file is ready for use
+    // Note: File sharing in consultations is now handled via chat messages (chats module)
+    return this.consultationRealtimeService.confirmFileUpload(
       actor,
       id,
       dto.fileId,
     );
-    this.consultationRealtimeGateway.emitMessageCreated(id, message);
-    return message;
   }
 
   @Get('consultations/:id/files/:fileId/download')

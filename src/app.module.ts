@@ -19,6 +19,7 @@ import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { ConsultationQueueModule } from './modules/consultation-queue/consultation-queue.module';
 import { ConsultationsModule } from './modules/consultations/consultations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { ChatsModule } from './modules/chats/chats.module';
 import { ClockModule } from './common/clock/clock.module';
 import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
@@ -69,6 +70,7 @@ import { AppService } from './app.service';
     PaymentsModule,
     ConsultationQueueModule,
     ConsultationsModule,
+    ChatsModule,
   ],
   controllers: [AppController],
   providers: [

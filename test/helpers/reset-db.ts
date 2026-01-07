@@ -2,7 +2,9 @@ import { PrismaClient } from '@prisma/client';
 
 export async function resetDb(prisma: PrismaClient) {
   await prisma.payment.deleteMany();
-  await prisma.consultationMessage.deleteMany();
+  await prisma.chatMessage.deleteMany();
+  await prisma.chatPolicy.deleteMany();
+  await prisma.chatThread.deleteMany();
   await prisma.fileObject.deleteMany();
   await prisma.consultation.deleteMany();
   await prisma.consultationQueueItem.deleteMany();

@@ -9,12 +9,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   AuditAction,
-  ConsultationMessageKind,
   ConsultationStatus,
-  Prisma,
   UserRole,
 } from '@prisma/client';
-import { decodeCursor, encodeCursor } from '../../common/utils/cursor';
+// Removed unused imports: decodeCursor, encodeCursor (were used for ConsultationMessage pagination)
 import type { Actor } from '../../common/types/actor.type';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { StorageService } from '../../infra/storage/storage.service';
@@ -103,160 +101,8 @@ export class ConsultationRealtimeService {
     return tokenResult;
   }
 
-  async listMessages(
-    actor: Actor,
-    consultationId: string,
-    query: { cursor?: string; limit?: number },
-    traceId?: string | null,
-  ) {
-    await this.getConsultationForParticipant(actor, consultationId);
-
-    const limit = Math.min(
-      Math.max(query.limit ?? DEFAULT_MESSAGE_LIMIT, 1),
-      MAX_MESSAGE_LIMIT,
-    );
-
-    let cursor: { createdAt: string; id: string } | null = null;
-    if (query.cursor) {
-      try {
-        cursor = decodeCursor<{ createdAt: string; id: string }>(query.cursor);
-      } catch {
-        throw new UnprocessableEntityException('Invalid cursor');
-      }
-    }
-
-    const where: Prisma.ConsultationMessageWhereInput = {
-      consultationId,
-      ...(cursor
-        ? {
-            OR: [
-              { createdAt: { lt: new Date(cursor.createdAt) } },
-              {
-                createdAt: new Date(cursor.createdAt),
-                id: { lt: cursor.id },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const messages = await this.prisma.consultationMessage.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-      include: {
-        file: {
-          select: { id: true, mimeType: true, sizeBytes: true },
-        },
-      },
-    });
-
-    const hasNext = messages.length > limit;
-    const items = hasNext ? messages.slice(0, limit) : messages;
-    const nextCursor = hasNext
-      ? encodeCursor({
-          createdAt: items[items.length - 1].createdAt.toISOString(),
-          id: items[items.length - 1].id,
-        })
-      : null;
-
-    await this.auditService.log({
-      action: AuditAction.READ,
-      resourceType: 'ConsultationMessage',
-      resourceId: consultationId,
-      actor,
-      traceId: traceId ?? null,
-      metadata: { event: 'list' },
-    });
-
-    return {
-      items,
-      pageInfo: { nextCursor },
-    };
-  }
-
-  async createTextMessage(actor: Actor, consultationId: string, text: string) {
-    const consultation = await this.getConsultationForParticipant(
-      actor,
-      consultationId,
-    );
-
-    if (consultation.status !== ConsultationStatus.in_progress) {
-      throw new ConflictException('Consultation is not in progress');
-    }
-
-    const trimmed = text.trim();
-    if (trimmed.length === 0) {
-      throw new UnprocessableEntityException('Message text is required');
-    }
-    if (trimmed.length > MAX_MESSAGE_LENGTH) {
-      throw new UnprocessableEntityException('Message text too long');
-    }
-
-    // Do not log message contents; only persist for participants.
-    const message = await this.prisma.consultationMessage.create({
-      data: {
-        consultationId: consultation.id,
-        senderUserId: actor.id,
-        kind: ConsultationMessageKind.text,
-        text: trimmed,
-      },
-    });
-
-    await this.prisma.consultation.update({
-      where: { id: consultation.id },
-      data: { lastActivityAt: this.clock.now() },
-    });
-
-    await this.auditService.log({
-      action: AuditAction.WRITE,
-      resourceType: 'ConsultationMessage',
-      resourceId: message.id,
-      actor,
-      metadata: { kind: 'text' },
-    });
-
-    return message;
-  }
-
-  async markMessageDelivered(
-    actor: Actor,
-    consultationId: string,
-    messageId: string,
-  ) {
-    await this.getConsultationForParticipant(actor, consultationId);
-
-    const message = await this.prisma.consultationMessage.findUnique({
-      where: { id: messageId },
-    });
-
-    if (!message || message.consultationId !== consultationId) {
-      throw new NotFoundException('Message not found');
-    }
-
-    if (message.senderUserId === actor.id) {
-      throw new BadRequestException('Cannot deliver own message');
-    }
-
-    if (message.deliveredAt) {
-      return message;
-    }
-
-    const delivered = await this.prisma.consultationMessage.update({
-      where: { id: messageId },
-      data: { deliveredAt: this.clock.now() },
-    });
-
-    await this.auditService.log({
-      action: AuditAction.WRITE,
-      resourceType: 'ConsultationMessage',
-      resourceId: delivered.id,
-      actor,
-      metadata: { event: 'delivered' },
-    });
-
-    return delivered;
-  }
+  // Removed: listMessages, createTextMessage, markMessageDelivered
+  // Chat messages are now handled by the chats module (ChatThread/ChatMessage)
 
   async prepareFileUpload(
     actor: Actor,
@@ -363,19 +209,10 @@ export class ConsultationRealtimeService {
       throw new ConflictException('File does not belong to consultation');
     }
 
-    // TODO: verify sha256/size against the object metadata if needed.
-    const message = await this.prisma.consultationMessage.create({
-      data: {
-        consultationId: consultation.id,
-        senderUserId: actor.id,
-        kind: ConsultationMessageKind.file,
-        fileId: file.id,
-      },
-      include: {
-        file: { select: { id: true, mimeType: true, sizeBytes: true } },
-      },
-    });
-
+    // File upload confirmed - file is ready for use
+    // Note: File sharing in consultations is now handled via chat messages (chats module)
+    // This method now only confirms the file upload without creating a message
+    
     await this.prisma.consultation.update({
       where: { id: consultation.id },
       data: { lastActivityAt: this.clock.now() },
@@ -383,13 +220,22 @@ export class ConsultationRealtimeService {
 
     await this.auditService.log({
       action: AuditAction.WRITE,
-      resourceType: 'ConsultationMessage',
-      resourceId: message.id,
+      resourceType: 'FileObject',
+      resourceId: file.id,
       actor,
-      metadata: { kind: 'file', fileId: file.id },
+      metadata: { consultationId, event: 'file_upload_confirmed' },
     });
 
-    return message;
+    return {
+      id: file.id,
+      consultationId: consultation.id,
+      fileId: file.id,
+      file: {
+        id: file.id,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+      },
+    };
   }
 
   async getDownloadUrl(
