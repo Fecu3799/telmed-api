@@ -34,9 +34,7 @@ type AckResponse<T = unknown> =
   namespace: '/chats',
   cors: { origin: true, credentials: true },
 })
-export class ChatsGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+export class ChatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(ChatsGateway.name);
 
@@ -205,11 +203,19 @@ export class ChatsGateway
     try {
       // Validate payload
       if (!payload.threadId || !payload.text) {
-        return this.respondError(ack, 422, 'Invalid argument: threadId and text required');
+        return this.respondError(
+          ack,
+          422,
+          'Invalid argument: threadId and text required',
+        );
       }
 
       if (payload.kind !== 'text') {
-        return this.respondError(ack, 422, 'Invalid argument: only kind="text" is supported');
+        return this.respondError(
+          ack,
+          422,
+          'Invalid argument: only kind="text" is supported',
+        );
       }
 
       // Create message (includes deduplication, policy checks, etc.)
@@ -376,4 +382,3 @@ export class ChatsGateway
     }
   }
 }
-

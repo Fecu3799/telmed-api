@@ -37,4 +37,3 @@ export class UpdatePolicyDto {
   @IsObject()
   allowedSchedule?: any;
 }
-

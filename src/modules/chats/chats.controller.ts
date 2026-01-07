@@ -56,10 +56,7 @@ export class ChatsController {
   @Get('threads')
   @ApiOperation({ summary: 'List chat threads for current user' })
   @ApiOkResponse()
-  async listThreads(
-    @CurrentUser() actor: Actor,
-    @Req() req: Request,
-  ) {
+  async listThreads(@CurrentUser() actor: Actor, @Req() req: Request) {
     return this.chatsService.listThreads(
       actor,
       (req as Request & { traceId?: string }).traceId ?? null,
@@ -105,4 +102,3 @@ export class ChatsController {
     );
   }
 }
-

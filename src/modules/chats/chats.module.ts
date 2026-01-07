@@ -10,4 +10,3 @@ import { ChatRateLimitService } from './chat-rate-limit.service';
   exports: [ChatsService],
 })
 export class ChatsModule {}
-

@@ -50,7 +50,11 @@ export class ChatsService {
         where: { id: otherUserId },
         include: { patient: true },
       });
-      if (!otherUser || otherUser.role !== UserRole.patient || !otherUser.patient) {
+      if (
+        !otherUser ||
+        otherUser.role !== UserRole.patient ||
+        !otherUser.patient
+      ) {
         throw new NotFoundException('Patient not found');
       }
     } else if (actor.role === UserRole.patient) {
@@ -61,7 +65,11 @@ export class ChatsService {
         where: { id: otherUserId },
         include: { doctorProfile: true },
       });
-      if (!otherUser || otherUser.role !== UserRole.doctor || !otherUser.doctorProfile) {
+      if (
+        !otherUser ||
+        otherUser.role !== UserRole.doctor ||
+        !otherUser.doctorProfile
+      ) {
         throw new NotFoundException('Doctor not found');
       }
     } else {
@@ -243,12 +251,13 @@ export class ChatsService {
 
     const hasNext = messages.length > resolvedLimit;
     const items = hasNext ? messages.slice(0, resolvedLimit) : messages;
-    const endCursor = hasNext && items.length > 0
-      ? encodeCursor({
-          createdAt: items[items.length - 1].createdAt.toISOString(),
-          id: items[items.length - 1].id,
-        })
-      : null;
+    const endCursor =
+      hasNext && items.length > 0
+        ? encodeCursor({
+            createdAt: items[items.length - 1].createdAt.toISOString(),
+            id: items[items.length - 1].id,
+          })
+        : null;
 
     await this.auditService.log({
       action: AuditAction.READ,
@@ -307,7 +316,10 @@ export class ChatsService {
     if (updates.burstLimit !== undefined && updates.burstLimit <= 0) {
       throw new UnprocessableEntityException('burstLimit must be > 0');
     }
-    if (updates.burstWindowSeconds !== undefined && updates.burstWindowSeconds <= 0) {
+    if (
+      updates.burstWindowSeconds !== undefined &&
+      updates.burstWindowSeconds <= 0
+    ) {
       throw new UnprocessableEntityException('burstWindowSeconds must be > 0');
     }
     if (
@@ -451,8 +463,10 @@ export class ChatsService {
     }
 
     // Verify actor is part of thread
-    const isDoctor = actor.role === UserRole.doctor && thread.doctorUserId === actor.id;
-    const isPatient = actor.role === UserRole.patient && thread.patientUserId === actor.id;
+    const isDoctor =
+      actor.role === UserRole.doctor && thread.doctorUserId === actor.id;
+    const isPatient =
+      actor.role === UserRole.patient && thread.patientUserId === actor.id;
 
     if (!isDoctor && !isPatient) {
       throw new ForbiddenException('Forbidden');
@@ -480,7 +494,9 @@ export class ChatsService {
 
     // Validate text for text messages
     if (kind === ChatMessageKind.text && !text) {
-      throw new UnprocessableEntityException('text is required for text messages');
+      throw new UnprocessableEntityException(
+        'text is required for text messages',
+      );
     }
 
     // Check policy for patient messages (doctor can always send)
@@ -540,4 +556,3 @@ export class ChatsService {
     return message;
   }
 }
-

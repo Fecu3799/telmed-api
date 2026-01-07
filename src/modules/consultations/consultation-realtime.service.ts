@@ -7,11 +7,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  AuditAction,
-  ConsultationStatus,
-  UserRole,
-} from '@prisma/client';
+import { AuditAction, ConsultationStatus, UserRole } from '@prisma/client';
 // Removed unused imports: decodeCursor, encodeCursor (were used for ConsultationMessage pagination)
 import type { Actor } from '../../common/types/actor.type';
 import { PrismaService } from '../../infra/prisma/prisma.service';
@@ -212,7 +208,7 @@ export class ConsultationRealtimeService {
     // File upload confirmed - file is ready for use
     // Note: File sharing in consultations is now handled via chat messages (chats module)
     // This method now only confirms the file upload without creating a message
-    
+
     await this.prisma.consultation.update({
       where: { id: consultation.id },
       data: { lastActivityAt: this.clock.now() },

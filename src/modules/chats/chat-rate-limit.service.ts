@@ -89,7 +89,9 @@ export class ChatRateLimitService {
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(0, 0, 0, 0);
-        const ttlSeconds = Math.ceil((tomorrow.getTime() - now.getTime()) / 1000);
+        const ttlSeconds = Math.ceil(
+          (tomorrow.getTime() - now.getTime()) / 1000,
+        );
         await client.expire(key, ttlSeconds);
       }
 
@@ -118,4 +120,3 @@ export class ChatRateLimitService {
     }
   }
 }
-

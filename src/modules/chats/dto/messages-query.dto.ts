@@ -13,4 +13,3 @@ export class MessagesQueryDto {
   @Max(100)
   limit?: number = 50;
 }
-
