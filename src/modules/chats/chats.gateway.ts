@@ -14,7 +14,7 @@ import { ChatsService } from './chats.service';
 import { AuditService } from '../../infra/audit/audit.service';
 import type { Actor } from '../../common/types/actor.type';
 import { getTraceId } from '../../common/request-context';
-import { ChatMessageKind } from '@prisma/client';
+import { ChatMessageKind, UserRole } from '@prisma/client';
 
 type JwtAccessPayload = { sub: string; role: string };
 
@@ -113,7 +113,12 @@ export class ChatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
 
     try {
-      // Verify actor is part of thread
+      // Admin cannot access chat threads
+      if (actor.role === UserRole.admin) {
+        return this.respondError(ack, 403, 'Forbidden');
+      }
+
+      // Load thread
       const thread = await this.prisma.chatThread.findUnique({
         where: { id: payload.threadId },
       });
@@ -123,10 +128,10 @@ export class ChatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       // Verify actor is doctor or patient in this thread
-      if (
-        (actor.role === 'doctor' && thread.doctorUserId !== actor.id) ||
-        (actor.role === 'patient' && thread.patientUserId !== actor.id)
-      ) {
+      const isMember =
+        thread.doctorUserId === actor.id || thread.patientUserId === actor.id;
+
+      if (!isMember) {
         return this.respondError(ack, 403, 'Forbidden');
       }
 
@@ -201,6 +206,11 @@ export class ChatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
 
     try {
+      // Admin cannot send messages
+      if (actor.role === UserRole.admin) {
+        return this.respondError(ack, 403, 'Forbidden');
+      }
+
       // Validate payload
       if (!payload.threadId || !payload.text) {
         return this.respondError(
@@ -216,6 +226,23 @@ export class ChatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
           422,
           'Invalid argument: only kind="text" is supported',
         );
+      }
+
+      // Verify thread exists and actor is a member
+      const thread = await this.prisma.chatThread.findUnique({
+        where: { id: payload.threadId },
+      });
+
+      if (!thread) {
+        return this.respondError(ack, 404, 'Thread not found');
+      }
+
+      // Verify actor is doctor or patient in this thread
+      const isMember =
+        thread.doctorUserId === actor.id || thread.patientUserId === actor.id;
+
+      if (!isMember) {
+        return this.respondError(ack, 403, 'Forbidden');
       }
 
       // Create message (includes deduplication, policy checks, etc.)

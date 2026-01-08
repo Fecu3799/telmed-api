@@ -29,7 +29,7 @@ import { MessagesQueryDto } from './dto/messages-query.dto';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
 
 @ApiTags('chats')
-@Controller('api/v1/chats')
+@Controller('chats')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
