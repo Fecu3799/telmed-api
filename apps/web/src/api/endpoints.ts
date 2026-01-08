@@ -40,4 +40,11 @@ export const endpoints = {
     livekitToken: (consultationId: string) =>
       `/consultations/${consultationId}/livekit-token`,
   },
+  // Chats
+  chats: {
+    threads: '/chats/threads',
+    threadWith: (otherUserId: string) => `/chats/threads/with/${otherUserId}`,
+    threadMessages: (threadId: string) => `/chats/threads/${threadId}/messages`,
+    threadPolicy: (threadId: string) => `/chats/threads/${threadId}/policy`,
+  },
 } as const;
