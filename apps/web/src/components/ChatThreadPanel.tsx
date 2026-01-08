@@ -428,13 +428,13 @@ export function ChatThreadPanel({ threadId, otherUser }: ChatThreadPanelProps) {
             [{new Date(log.timestamp).toLocaleTimeString()}] {log.type}:{' '}
             {log.message}
             {log.data &&
-              typeof log.data === 'object' &&
-              Object.keys(log.data).length > 0 && (
-                <span style={{ color: '#666' }}>
-                  {' '}
-                  {JSON.stringify(log.data).substring(0, 100)}
-                </span>
-              )}
+            typeof log.data === 'object' &&
+            Object.keys(log.data).length > 0 ? (
+              <span style={{ color: '#666' }}>
+                {' '}
+                {JSON.stringify(log.data).substring(0, 100)}
+              </span>
+            ) : null}
           </div>
         ))}
       </div>
