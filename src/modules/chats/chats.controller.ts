@@ -11,6 +11,7 @@ import {
 import type { Request } from 'express';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -27,6 +28,9 @@ import type { Actor } from '../../common/types/actor.type';
 import { ChatsService } from './chats.service';
 import { MessagesQueryDto } from './dto/messages-query.dto';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
+import { ChatThreadDto } from './docs/chat-thread.dto';
+import { MessagesResponseDto } from './docs/messages-response.dto';
+import { ChatPolicyDto } from './docs/chat-policy.dto';
 
 @ApiTags('chats')
 @Controller('chats')
@@ -39,7 +43,7 @@ export class ChatsController {
 
   @Get('threads/with/:otherUserId')
   @ApiOperation({ summary: 'Get or create thread with another user' })
-  @ApiOkResponse()
+  @ApiOkResponse({ type: ChatThreadDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   async getOrCreateThread(
     @CurrentUser() actor: Actor,
@@ -55,7 +59,7 @@ export class ChatsController {
 
   @Get('threads')
   @ApiOperation({ summary: 'List chat threads for current user' })
-  @ApiOkResponse()
+  @ApiOkResponse({ type: [ChatThreadDto] })
   async listThreads(@CurrentUser() actor: Actor, @Req() req: Request) {
     return this.chatsService.listThreads(
       actor,
@@ -65,7 +69,7 @@ export class ChatsController {
 
   @Get('threads/:threadId/messages')
   @ApiOperation({ summary: 'List messages in a thread' })
-  @ApiOkResponse()
+  @ApiOkResponse({ type: MessagesResponseDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   async getMessages(
@@ -85,7 +89,8 @@ export class ChatsController {
 
   @Patch('threads/:threadId/policy')
   @ApiOperation({ summary: 'Update thread policy (doctor only)' })
-  @ApiOkResponse()
+  @ApiBody({ type: UpdatePolicyDto })
+  @ApiOkResponse({ type: ChatPolicyDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   async updatePolicy(

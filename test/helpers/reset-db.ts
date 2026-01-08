@@ -5,6 +5,7 @@ export async function resetDb(prisma: PrismaClient) {
   await prisma.chatMessage.deleteMany();
   await prisma.chatPolicy.deleteMany();
   await prisma.chatThread.deleteMany();
+  await prisma.patientFile.deleteMany();
   await prisma.fileObject.deleteMany();
   await prisma.consultation.deleteMany();
   await prisma.consultationQueueItem.deleteMany();

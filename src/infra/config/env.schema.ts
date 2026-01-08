@@ -89,6 +89,16 @@ export const envSchema = z.object({
     .int()
     .positive()
     .default(10485760),
+  PATIENT_FILE_MAX_BYTES_PATIENT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(20971520), // 20MB
+  PATIENT_FILE_MAX_BYTES_DOCTOR: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(104857600), // 100MB
   THROTTLE_ENABLED: z
     .preprocess((value) => {
       if (value === undefined || value === null || value === '') {

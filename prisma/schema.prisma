@@ -64,6 +64,7 @@ model Patient {
   updatedAt       DateTime            @updatedAt @map("updated_at")
   appointments    Appointment[]
   user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files           PatientFile[]
 
   @@unique([documentType, documentCountry, documentNumber])
   @@map("patients")
@@ -202,6 +203,7 @@ model Consultation {
   appointment    Appointment?           @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   queueItem      ConsultationQueueItem? @relation(fields: [queueItemId], references: [id], onDelete: SetNull)
   chatMessages   ChatMessage[]         @relation("ChatMessageConsultation")
+  relatedFiles   PatientFile[]         @relation("PatientFileConsultation")
 
   @@index([doctorUserId, createdAt])
   @@index([patientUserId, createdAt])
@@ -218,6 +220,7 @@ model FileObject {
   uploadedByUserId String                  @map("uploaded_by_user_id")
   createdAt        DateTime                @default(now()) @map("created_at")
   uploadedBy       User                    @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+  patientFiles     PatientFile[]
 
   @@index([uploadedByUserId, createdAt(sort: Desc)])
   @@map("file_objects")
@@ -494,4 +497,44 @@ model ChatMessage {
   @@index([threadId, createdAt(sort: Desc)])
   @@index([threadId, deliveredAt])
   @@map("chat_messages")
+}
+
+enum PatientFileStatus {
+  pending_upload
+  ready
+  failed
+  deleted
+}
+
+enum PatientFileCategory {
+  lab
+  image
+  prescription
+  other
+}
+
+model PatientFile {
+  id                    String               @id @default(uuid())
+  patientId             String               @map("patient_id")
+  fileObjectId          String               @unique @map("file_object_id")
+  status                PatientFileStatus    @default(pending_upload)
+  originalName          String               @map("original_name")
+  mimeType              String               @map("mime_type")
+  sizeBytes             Int                  @map("size_bytes")
+  sha256                String?              @map("sha256")
+  category              PatientFileCategory  @default(other)
+  notes                 String?              @db.Text
+  uploadedByUserId      String               @map("uploaded_by_user_id")
+  uploadedByRole        UserRole             @map("uploaded_by_role")
+  relatedConsultationId String?              @map("related_consultation_id")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+  patient               Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fileObject            FileObject           @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
+  relatedConsultation   Consultation?        @relation("PatientFileConsultation", fields: [relatedConsultationId], references: [id], onDelete: SetNull)
+
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([patientId, category, createdAt(sort: Desc)])
+  @@index([relatedConsultationId])
+  @@map("patient_files")
 }
