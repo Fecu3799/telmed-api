@@ -37,6 +37,7 @@ export const endpoints = {
   },
   // Consultations
   consultations: {
+    get: (consultationId: string) => `/consultations/${consultationId}`,
     livekitToken: (consultationId: string) =>
       `/consultations/${consultationId}/livekit-token`,
   },

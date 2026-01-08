@@ -15,6 +15,8 @@ interface ChatThreadPanelProps {
     email: string;
     displayName: string | null;
   };
+  autoConnect?: boolean;
+  autoJoin?: boolean;
 }
 
 interface DebugLog {
@@ -38,7 +40,12 @@ function isOptimistic(msg: MessageWithOptimistic): msg is OptimisticMessage {
   return 'optimistic' in msg && msg.optimistic === true;
 }
 
-export function ChatThreadPanel({ threadId, otherUser }: ChatThreadPanelProps) {
+export function ChatThreadPanel({
+  threadId,
+  otherUser,
+  autoConnect = false,
+  autoJoin = false,
+}: ChatThreadPanelProps) {
   const { getActiveToken } = useAuth();
   const [connected, setConnected] = useState(false);
   const [joined, setJoined] = useState(false);
@@ -309,13 +316,24 @@ export function ChatThreadPanel({ threadId, otherUser }: ChatThreadPanelProps) {
     );
   }, [inputText, sending, threadId, addDebugLog]);
 
-  // Connect on mount or when threadId/token changes
+  // Auto-connect on mount if enabled
   useEffect(() => {
-    connectSocket();
+    if (autoConnect) {
+      connectSocket();
+    }
     return () => {
-      disconnectSocket();
+      if (autoConnect) {
+        disconnectSocket();
+      }
     };
-  }, [threadId, connectSocket, disconnectSocket]);
+  }, [threadId, autoConnect, connectSocket, disconnectSocket]);
+
+  // Auto-join when connected if enabled
+  useEffect(() => {
+    if (autoJoin && connected && !joined && socketRef.current?.connected) {
+      joinThread();
+    }
+  }, [autoJoin, connected, joined, joinThread]);
 
   // Scroll to bottom when messages change
   useEffect(() => {

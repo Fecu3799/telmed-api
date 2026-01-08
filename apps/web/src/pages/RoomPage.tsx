@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { LiveKitRoom } from '@livekit/components-react';
 import { getLivekitToken, type LiveKitTokenResponse } from '../api/livekit';
@@ -6,6 +6,9 @@ import { type ProblemDetails } from '../api/http';
 import { useAuth } from '../auth/AuthContext';
 import { RoomLayout } from './room/RoomLayout';
 import { RoomErrorBoundary } from './room/RoomErrorBoundary';
+import { getConsultation, type Consultation } from '../api/consultations';
+import { getOrCreateThread, type ChatThread } from '../api/chats';
+import { ChatDrawer } from '../components/ChatDrawer';
 
 type ConnectionState = 'idle' | 'loading' | 'connected' | 'error';
 
@@ -22,6 +25,11 @@ export function RoomPage() {
     null,
   );
   const hasAutoJoinedRef = useRef(false);
+
+  // Chat state
+  const [consultation, setConsultation] = useState<Consultation | null>(null);
+  const [chatThread, setChatThread] = useState<ChatThread | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   const handleJoin = async (role: 'doctor' | 'patient') => {
     if (!consultationId) {
@@ -127,6 +135,56 @@ export function RoomPage() {
 
     void performJoin();
   }, [consultationId, activeRole, patientToken, connectionState]);
+
+  // Load consultation and resolve chat thread
+  useEffect(() => {
+    const loadConsultationAndThread = async () => {
+      if (!consultationId || !activeRole || connectionState !== 'connected') {
+        return;
+      }
+
+      try {
+        // Get consultation to determine otherUserId
+        const consultationData = await getConsultation(consultationId);
+        setConsultation(consultationData);
+
+        // Determine otherUserId based on role
+        const otherUserId =
+          activeRole === 'doctor'
+            ? consultationData.patientUserId
+            : consultationData.doctorUserId;
+
+        // Get or create thread
+        const thread = await getOrCreateThread(otherUserId);
+        setChatThread(thread);
+        setChatError(null);
+      } catch (err: unknown) {
+        const apiError = err as { problemDetails?: ProblemDetails };
+        if (apiError.problemDetails) {
+          const status = apiError.problemDetails.status;
+          if (status === 401 || status === 403) {
+            setChatError(
+              apiError.problemDetails.detail || 'Chat not available',
+            );
+          } else {
+            setChatError('Failed to load chat');
+          }
+        } else {
+          setChatError('Failed to load chat');
+        }
+        console.error('Failed to load consultation/thread:', err);
+      }
+    };
+
+    void loadConsultationAndThread();
+  }, [consultationId, activeRole, connectionState]);
+
+  // Determine otherUser for chat
+  const chatOtherUser = chatThread
+    ? activeRole === 'doctor'
+      ? chatThread.patient
+      : chatThread.doctor
+    : undefined;
 
   if (!consultationId) {
     return (
@@ -352,6 +410,7 @@ export function RoomPage() {
             height: '100vh',
             overflow: 'hidden',
             backgroundColor: '#000',
+            position: 'relative',
           }}
         >
           <LiveKitRoom
@@ -461,6 +520,15 @@ export function RoomPage() {
               </div>
             </div>
           </div>
+
+          {/* Chat Drawer */}
+          <ChatDrawer
+            threadId={chatThread?.id ?? null}
+            otherUser={chatOtherUser}
+            autoConnect={true}
+            autoJoin={true}
+            error={chatError}
+          />
         </div>
       </RoomErrorBoundary>
     );
