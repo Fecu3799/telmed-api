@@ -25,8 +25,21 @@ export interface ApiError extends Error {
 }
 
 // Support both absolute URLs (http://...) and relative URLs (/api/v1)
-const baseUrl =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
+// Priority: VITE_API_BASE_URL > VITE_LOCAL_API_BASE_URL > window.location.origin
+const baseUrl = (() => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  if (import.meta.env.VITE_LOCAL_API_BASE_URL) {
+    return import.meta.env.VITE_LOCAL_API_BASE_URL;
+  }
+  // Fallback: use window.location.origin + /api/v1 (works with Caddy reverse proxy)
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/v1`;
+  }
+  // SSR fallback (shouldn't happen in this app, but for type safety)
+  return 'http://localhost:3000/api/v1';
+})();
 
 let currentTraceId: string | null = null;
 

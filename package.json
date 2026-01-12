@@ -27,7 +27,13 @@
     "lint:web": "npm run lint --workspace=apps/web",
     "test:integrity": "prisma validate && prisma migrate status && npm run typecheck && npm run lint:check && npm run typecheck:web && npm run lint:web",
     "ngrok": "ngrok start --all",
-    "db:seed": "ts-node scripts/seed-admin.ts"
+    "db:seed": "ts-node scripts/seed-admin.ts",
+    "dev:infra": "./scripts/dev-infra.sh",
+    "dev": "./scripts/dev-up.sh",
+    "dev:ngrok": "./scripts/dev-up.sh --ngrok",
+    "dev:down": "./scripts/dev-down.sh",
+    "dev:down:all": "./scripts/dev-down.sh --down",
+    "dev:status": "./scripts/dev-status.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.962.0",
