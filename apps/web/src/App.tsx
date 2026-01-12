@@ -5,6 +5,7 @@ import { PrivateRoute } from './components/PrivateRoute';
 import { LoginPage } from './pages/LoginPage';
 import { LobbyPage } from './pages/LobbyPage';
 import { ChatsPage } from './pages/ChatsPage';
+import { PatientFilesPage } from './pages/PatientFilesPage';
 
 // Lazy load RoomPage to reduce initial bundle size (LiveKit is large)
 const RoomPage = lazy(() =>
@@ -30,6 +31,14 @@ function App() {
             element={
               <PrivateRoute>
                 <ChatsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/patient-files"
+            element={
+              <PrivateRoute>
+                <PatientFilesPage />
               </PrivateRoute>
             }
           />

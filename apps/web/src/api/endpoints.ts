@@ -48,4 +48,28 @@ export const endpoints = {
     threadMessages: (threadId: string) => `/chats/threads/${threadId}/messages`,
     threadPolicy: (threadId: string) => `/chats/threads/${threadId}/policy`,
   },
+  // Patient Files
+  patientFiles: {
+    // Patient routes (self)
+    list: '/patients/me/files',
+    prepare: '/patients/me/files/prepare',
+    confirm: (patientFileId: string) =>
+      `/patients/me/files/${patientFileId}/confirm`,
+    get: (patientFileId: string) => `/patients/me/files/${patientFileId}`,
+    download: (patientFileId: string) =>
+      `/patients/me/files/${patientFileId}/download`,
+    delete: (patientFileId: string) => `/patients/me/files/${patientFileId}`,
+    // Doctor routes (on behalf of patient)
+    listForPatient: (patientId: string) => `/patients/${patientId}/files`,
+    prepareForPatient: (patientId: string) =>
+      `/patients/${patientId}/files/prepare`,
+    confirmForPatient: (patientId: string, patientFileId: string) =>
+      `/patients/${patientId}/files/${patientFileId}/confirm`,
+    getForPatient: (patientId: string, patientFileId: string) =>
+      `/patients/${patientId}/files/${patientFileId}`,
+    downloadForPatient: (patientId: string, patientFileId: string) =>
+      `/patients/${patientId}/files/${patientFileId}/download`,
+    deleteForPatient: (patientId: string, patientFileId: string) =>
+      `/patients/${patientId}/files/${patientFileId}`,
+  },
 } as const;
