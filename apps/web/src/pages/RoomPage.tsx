@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { LiveKitRoom } from '@livekit/components-react';
 import { getLivekitToken, type LiveKitTokenResponse } from '../api/livekit';
@@ -9,6 +9,7 @@ import { RoomErrorBoundary } from './room/RoomErrorBoundary';
 import { getConsultation, type Consultation } from '../api/consultations';
 import { getOrCreateThread, type ChatThread } from '../api/chats';
 import { ChatDrawer } from '../components/ChatDrawer';
+import { PatientFilesDrawer } from '../components/PatientFilesDrawer';
 
 type ConnectionState = 'idle' | 'loading' | 'connected' | 'error';
 
@@ -529,6 +530,16 @@ export function RoomPage() {
             autoJoin={true}
             error={chatError}
           />
+
+          {/* Patient Files Drawer */}
+          {consultation && (
+            <PatientFilesDrawer
+              patientId={
+                activeRole === 'doctor' ? consultation.patientUserId : undefined
+              }
+              consultationId={consultation.id}
+            />
+          )}
         </div>
       </RoomErrorBoundary>
     );

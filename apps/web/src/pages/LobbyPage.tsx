@@ -877,6 +877,17 @@ export function LobbyPage() {
               </button>
             </div>
           )}
+          <div style={{ marginTop: '12px' }}>
+            <button
+              onClick={() => navigate('/patient-files')}
+              style={{
+                ...buttonStyle,
+                backgroundColor: '#4CAF50',
+              }}
+            >
+              📁 Biblioteca de Archivos
+            </button>
+          </div>
         </div>
       )}
 
