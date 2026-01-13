@@ -25,11 +25,12 @@ interface PerfMetricsResponse {
     user: number;
     system: number;
   };
-  eventLoopLag?: {
+  eventLoopLag: {
     avg: number;
     max: number;
   };
   slowRequests: {
+    count: number;
     last: Array<{
       ts: number;
       method: string;
@@ -51,6 +52,7 @@ interface PerfMetricsResponse {
     }>;
   };
   slowQueries: {
+    count: number;
     last: Array<{
       ts: number;
       model: string;
@@ -121,27 +123,23 @@ export class InternalPerfController implements OnModuleInit, OnModuleDestroy {
       : undefined;
     const uptimeSeconds = process.uptime();
 
-    // Calculate event loop lag
-    let eventLoopLag: { avg: number; max: number } | undefined;
+    const topN = this.config.get<number>('PERF_TOP_N') ?? 20;
+
+    const slowRequests = this.perfService.getSlowRequests(50);
+    const topRoutes = this.perfService.getTopRoutes();
+    const slowQueries = this.perfService.getSlowQueries(50);
+    const topQueries = this.perfService.getTopQueries();
+
+    let eventLoopLag: { avg: number; max: number };
     if (this.eventLoopMonitor) {
       const stats = this.eventLoopMonitor;
-      // Convert nanoseconds to milliseconds
-      // Note: monitorEventLoopDelay doesn't have percentile() method, use mean and max
       eventLoopLag = {
         avg: stats.mean / 1_000_000,
         max: stats.max / 1_000_000,
       };
+    } else {
+      eventLoopLag = { avg: 0, max: 0 };
     }
-
-    const topN = this.config.get<number>('PERF_TOP_N') ?? 20;
-
-    // Get slow requests (last 50, top routes)
-    const slowRequests = this.perfService.getSlowRequests(50);
-    const topRoutes = this.perfService.getTopRoutes();
-
-    // Get slow queries (last 50, top queries)
-    const slowQueries = this.perfService.getSlowQueries(50);
-    const topQueries = this.perfService.getTopQueries();
 
     return {
       uptimeSeconds,
@@ -153,12 +151,13 @@ export class InternalPerfController implements OnModuleInit, OnModuleDestroy {
       },
       cpu: cpuUsage
         ? {
-            user: cpuUsage.user / 1_000_000, // Convert microseconds to seconds
+            user: cpuUsage.user / 1_000_000,
             system: cpuUsage.system / 1_000_000,
           }
         : undefined,
       eventLoopLag,
       slowRequests: {
+        count: slowRequests.length,
         last: slowRequests.map((r) => ({
           ts: r.ts,
           method: r.method,
@@ -172,6 +171,7 @@ export class InternalPerfController implements OnModuleInit, OnModuleDestroy {
         topRoutes: topRoutes.slice(0, topN),
       },
       slowQueries: {
+        count: slowQueries.length,
         last: slowQueries.map((q) => ({
           ts: q.ts,
           model: q.model,

@@ -56,44 +56,57 @@ export class PrismaService
       }
 
       const traceId = getTraceId() ?? null;
-      const target = event.target ?? 'unknown';
-      const [model, action] = target.split('.');
+      const target = event.target ?? '';
 
-      // Extract where summary (sanitized, no sensitive data)
+      let model = 'Prisma';
+      let action = 'query';
+
+      if (target && target.includes('.')) {
+        const parts = target.split('.');
+        if (parts.length >= 2 && parts[0] && parts[1]) {
+          model = parts[0];
+          action = parts[1];
+        } else if (parts[0]) {
+          model = 'Prisma';
+          action = parts[0];
+        }
+      } else if (target && target !== 'unknown') {
+        model = 'Prisma';
+        action = target;
+      }
+
       let whereSummary: string | undefined;
       if (this.queryLogEnabled && event.params) {
         try {
           const params = JSON.parse(event.params);
           if (params.length > 0 && typeof params[0] === 'object') {
-            // Extract just the structure, not the values
-            const keys = Object.keys(params[0]).slice(0, 5); // Limit to 5 keys
-            whereSummary = keys.length > 0 ? `{${keys.join(',')}...}` : undefined;
+            const keys = Object.keys(params[0]).slice(0, 5);
+            whereSummary =
+              keys.length > 0 ? `{${keys.join(',')}...}` : undefined;
           }
         } catch {
           // Ignore parsing errors
         }
       }
 
-      // Record in PerfService if available
       if (this.perfService) {
         this.perfService.recordSlowQuery({
           ts: Date.now(),
-          model: model ?? 'unknown',
-          action: action ?? 'unknown',
+          model,
+          action,
           durationMs,
           traceId,
           whereSummary,
         });
       }
 
-      // Log slow query (structured)
       const payload: Record<string, unknown> = {
         msg: 'slow_query',
         traceId,
         durationMs,
-        model: model ?? 'unknown',
-        action: action ?? 'unknown',
-        target,
+        model,
+        action,
+        target: target || 'unknown',
       };
 
       if (whereSummary) {

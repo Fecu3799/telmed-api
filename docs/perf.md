@@ -56,6 +56,17 @@ PRISMA_QUERY_LOG_ENABLED=false
 PERF_MAX_SLOW_QUERIES=200
 ```
 
+### Benchmark Mode (Throttling)
+
+```env
+# Activar modo benchmark para tests de carga (solo dev/test, default: false)
+THROTTLE_BENCHMARK_MODE=false
+
+# Límites de throttling para benchmark (solo si THROTTLE_BENCHMARK_MODE=true)
+THROTTLE_TTL_SECONDS_DEV=60
+THROTTLE_LIMIT_DEV=1000
+```
+
 ## Comportamiento
 
 ### Requests
@@ -117,6 +128,7 @@ Sin el token (o con token incorrecto), retorna `401 Unauthorized`.
     "max": 8.3
   },
   "slowRequests": {
+    "count": 1,
     "last": [
       {
         "ts": 1234567890,
@@ -142,6 +154,7 @@ Sin el token (o con token incorrecto), retorna `401 Unauthorized`.
     ]
   },
   "slowQueries": {
+    "count": 1,
     "last": [
       {
         "ts": 1234567890,
@@ -171,12 +184,24 @@ Sin el token (o con token incorrecto), retorna `401 Unauthorized`.
 
 ```bash
 # Sin token (si PERF_DEBUG_TOKEN no está configurado)
-curl http://localhost:3000/api/v1/internal/perf
+curl http://localhost:3000/api/v1/internal/perf | jq '.'
 
 # Con token
 curl -H "X-Internal-Debug-Token: your-secret-token-here" \
-  http://localhost:3000/api/v1/internal/perf
+  http://localhost:3000/api/v1/internal/perf | jq '.'
 ```
+
+### Formato de Respuesta Estable
+
+El endpoint siempre devuelve una estructura consistente para facilitar el uso con `jq`:
+
+- `slowRequests.count`: número (0 si no hay)
+- `slowRequests.last`: array (siempre presente, puede estar vacío [])
+- `slowRequests.topRoutes`: array (siempre presente, puede estar vacío [])
+- `slowQueries.count`: número (0 si no hay)
+- `slowQueries.last`: array (siempre presente, puede estar vacío [])
+- `slowQueries.top`: array (siempre presente, puede estar vacío [])
+- `eventLoopLag`: objeto con `avg` y `max` (nunca null, 0 si no disponible)
 
 ## Interpretación de Métricas
 
@@ -256,12 +281,74 @@ Para investigar un problema específico:
    grep "traceId.*abc-123" logs/app.log
    ```
 
+## Benchmark Mode (Solo Desarrollo)
+
+Para ejecutar tests de carga sin recibir errores 429 (Too Many Requests), puedes activar el modo benchmark que aumenta temporalmente los límites de throttling.
+
+### Configuración
+
+```env
+# Activar modo benchmark (solo funciona en dev/test, no en production)
+THROTTLE_BENCHMARK_MODE=true
+
+# Opcional: ajustar límites para benchmark (defaults: 60s, 1000 requests)
+THROTTLE_TTL_SECONDS_DEV=60
+THROTTLE_LIMIT_DEV=1000
+```
+
+### Uso
+
+```bash
+# Activar modo benchmark
+export THROTTLE_BENCHMARK_MODE=true
+export THROTTLE_TTL_SECONDS_DEV=60
+export THROTTLE_LIMIT_DEV=1000
+
+# Reiniciar el servidor para aplicar cambios
+npm run start:dev
+```
+
+### Ejemplo con autocannon
+
+```bash
+export THROTTLE_BENCHMARK_MODE=true
+npm run start:dev
+
+# En otra terminal:
+autocannon -c 10 -d 30 -m GET \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/v1/auth/me
+```
+
+### Prueba rápida con curl
+
+Para verificar que el benchmark mode funciona (sin 429s):
+
+```bash
+# Con benchmark mode activado (THROTTLE_BENCHMARK_MODE=true)
+for i in $(seq 1 200); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    http://localhost:3000/api/v1/auth/me \
+    -H "Authorization: Bearer $TOKEN"
+done | sort | uniq -c
+
+# Esperado con benchmark mode: 200 >> 429 (idealmente 0 o casi 0 429)
+# Esperado sin benchmark mode: muchos 429 después de ~60 requests
+```
+
+**⚠️ IMPORTANTE**: 
+- El modo benchmark **NO funciona en producción** (NODE_ENV=production).
+- En benchmark mode, el throttling se desactiva completamente (todos los requests pasan sin 429).
+- Usar solo para benchmarks locales/desarrollo.
+- Con `THROTTLE_BENCHMARK_MODE=true`, incluso los decoradores `@Throttle()` en controllers son ignorados.
+
 ## Limitaciones
 
 - **Memoria**: Las métricas se almacenan en memoria. En caso de reinicio, se pierden.
 - **Sin persistencia**: No se guardan en base de datos (diseño liviano).
 - **Sin agregación histórica**: Solo muestra datos desde el último reinicio.
 - **Percentiles aproximados**: Se calculan sobre un ring buffer de ~200 muestras por ruta/query.
+- **QueryKey en Prisma**: Puede mostrar "Prisma:query" si el event.target no está disponible (limitación del adapter-pg).
 
 ## Integración con Logging Existente
 

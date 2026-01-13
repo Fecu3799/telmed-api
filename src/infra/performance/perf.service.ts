@@ -52,11 +52,7 @@ export class PerfService {
   private maxSlowQueries: number;
   private topN: number;
 
-  constructor(
-    maxSlowRequests = 200,
-    maxSlowQueries = 200,
-    topN = 20,
-  ) {
+  constructor(maxSlowRequests = 200, maxSlowQueries = 200, topN = 20) {
     this.maxSlowRequests = maxSlowRequests;
     this.maxSlowQueries = maxSlowQueries;
     this.topN = topN;
@@ -117,11 +113,11 @@ export class PerfService {
   }
 
   getSlowRequests(limit = 50): SlowRequestSample[] {
-    return this.slowRequests.slice(-limit).reverse(); // Most recent first
+    return this.slowRequests.slice(-limit).reverse();
   }
 
   getSlowQueries(limit = 50): SlowQuerySample[] {
-    return this.slowQueries.slice(-limit).reverse(); // Most recent first
+    return this.slowQueries.slice(-limit).reverse();
   }
 
   getTopRoutes(): Array<{

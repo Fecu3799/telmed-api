@@ -24,8 +24,7 @@ export class PerfInterceptor implements NestInterceptor {
     private readonly config: ConfigService,
   ) {
     this.enabled = this.config.get<boolean>('PERF_METRICS_ENABLED') ?? true;
-    this.thresholdMs =
-      this.config.get<number>('SLOW_REQ_THRESHOLD_MS') ?? 500;
+    this.thresholdMs = this.config.get<number>('SLOW_REQ_THRESHOLD_MS') ?? 500;
     this.sampleRate = this.config.get<number>('PERF_SAMPLE_RATE') ?? 1.0;
   }
 
@@ -68,7 +67,9 @@ export class PerfInterceptor implements NestInterceptor {
             actorId: actor?.id ?? null,
             userAgent: request.headers['user-agent'],
             ip:
-              (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
+              (request.headers['x-forwarded-for'] as string)
+                ?.split(',')[0]
+                ?.trim() ??
               request.ip ??
               request.socket.remoteAddress,
           });

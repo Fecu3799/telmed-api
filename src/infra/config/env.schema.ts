@@ -107,6 +107,30 @@ export const envSchema = z.object({
       return formatEnvValue(value).toLowerCase() !== 'false';
     }, z.boolean())
     .default(true),
+  THROTTLE_BENCHMARK_MODE: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return false;
+      }
+      return formatEnvValue(value).toLowerCase() === 'true';
+    }, z.boolean())
+    .default(false),
+  THROTTLE_TTL_SECONDS_DEV: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return 60;
+      }
+      return Number(value);
+    }, z.number().int().min(1))
+    .default(60),
+  THROTTLE_LIMIT_DEV: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return 1000;
+      }
+      return Number(value);
+    }, z.number().int().min(1))
+    .default(1000),
   DEBUG_AUTH: z
     .preprocess((value) => {
       if (value === undefined || value === null || value === '') {

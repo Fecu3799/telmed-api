@@ -1,4 +1,5 @@
 import {
+  Logger,
   MiddlewareConsumer,
   Module,
   NestModule,
@@ -27,6 +28,7 @@ import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PerformanceModule } from './infra/performance/performance.module';
+import { BenchmarkThrottlerGuard } from './common/guards/benchmark-throttler.guard';
 
 @Module({
   imports: [
@@ -53,15 +55,51 @@ import { PerformanceModule } from './infra/performance/performance.module';
       : [
           ThrottlerModule.forRootAsync({
             inject: [ConfigService],
-            useFactory: (configService: ConfigService) => ({
-              throttlers: [{ name: 'default', ttl: 60_000, limit: 60 }],
-              storage:
-                configService.get<string>('APP_ENV') === 'test'
-                  ? undefined
-                  : new ThrottlerStorageRedisService(
-                      configService.getOrThrow<string>('REDIS_URL'),
-                    ),
-            }),
+            useFactory: (configService: ConfigService) => {
+              const nodeEnv = process.env.NODE_ENV || 'development';
+              const throttleEnabled =
+                configService.get<boolean>('THROTTLE_ENABLED') ?? true;
+
+              const benchmarkModeValue = configService.get(
+                'THROTTLE_BENCHMARK_MODE',
+              );
+              const benchmarkModeStr =
+                benchmarkModeValue !== undefined && benchmarkModeValue !== null
+                  ? String(benchmarkModeValue)
+                  : 'false';
+              const benchmarkMode = benchmarkModeStr.toLowerCase() === 'true';
+
+              const isBenchmarkMode = benchmarkMode && nodeEnv !== 'production';
+
+              let ttl = 60_000;
+              let limit = 60;
+
+              if (isBenchmarkMode) {
+                const ttlSecondsDev = Number(
+                  configService.get('THROTTLE_TTL_SECONDS_DEV') ?? 60,
+                );
+                const limitDev = Number(
+                  configService.get('THROTTLE_LIMIT_DEV') ?? 1000,
+                );
+                ttl = ttlSecondsDev * 1000;
+                limit = limitDev;
+              }
+
+              const logger = new Logger('ThrottlerModule');
+              logger.log(
+                `Throttler config: nodeEnv=${nodeEnv}, enabled=${throttleEnabled}, benchmarkMode=${benchmarkMode}, ttl=${ttl}ms, limit=${limit}`,
+              );
+
+              return {
+                throttlers: [{ name: 'default', ttl, limit }],
+                storage:
+                  configService.get<string>('APP_ENV') === 'test'
+                    ? undefined
+                    : new ThrottlerStorageRedisService(
+                        configService.getOrThrow<string>('REDIS_URL'),
+                      ),
+              };
+            },
           }),
         ]),
     AuthModule,
@@ -82,7 +120,7 @@ import { PerformanceModule } from './infra/performance/performance.module';
     ...(process.env.NODE_ENV === 'test' ||
     String(process.env.THROTTLE_ENABLED).toLowerCase() === 'false'
       ? []
-      : [{ provide: APP_GUARD, useClass: ThrottlerGuard }]),
+      : [{ provide: APP_GUARD, useClass: BenchmarkThrottlerGuard }]),
   ],
 })
 export class AppModule implements NestModule {
