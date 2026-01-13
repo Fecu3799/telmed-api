@@ -137,6 +137,81 @@ export const envSchema = z.object({
       },
     )
     .default(200),
+  // Performance monitoring
+  SLOW_REQ_THRESHOLD_MS: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return 500;
+      }
+      return Number(value);
+    }, z.number().int().min(0))
+    .default(500),
+  PERF_METRICS_ENABLED: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return !isProdEnv;
+      }
+      return formatEnvValue(value).toLowerCase() === 'true';
+    }, z.boolean())
+    .default(!isProdEnv),
+  PERF_ENDPOINT_ENABLED: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return !isProdEnv;
+      }
+      return formatEnvValue(value).toLowerCase() === 'true';
+    }, z.boolean())
+    .default(!isProdEnv),
+  PERF_DEBUG_TOKEN: z.string().min(1).optional(),
+  PRISMA_QUERY_LOG_ENABLED: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return false;
+      }
+      return formatEnvValue(value).toLowerCase() === 'true';
+    }, z.boolean())
+    .default(false),
+  PRISMA_SLOW_QUERY_MS: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return 200;
+      }
+      return Number(value);
+    }, z.number().int().min(0))
+    .default(200),
+  PERF_MAX_SLOW_REQUESTS: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return 200;
+      }
+      return Number(value);
+    }, z.number().int().min(1))
+    .default(200),
+  PERF_MAX_SLOW_QUERIES: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return 200;
+      }
+      return Number(value);
+    }, z.number().int().min(1))
+    .default(200),
+  PERF_TOP_N: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return 20;
+      }
+      return Number(value);
+    }, z.number().int().min(1))
+    .default(20),
+  PERF_SAMPLE_RATE: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return 1.0;
+      }
+      const num = Number(value);
+      return num >= 0 && num <= 1 ? num : 1.0;
+    }, z.number().min(0).max(1))
+    .default(1.0),
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;

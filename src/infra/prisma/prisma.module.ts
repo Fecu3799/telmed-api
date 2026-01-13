@@ -22,4 +22,7 @@ import { PrismaService } from './prisma.service';
     StorageService,
   ],
 })
-export class PrismaModule {}
+export class PrismaModule {
+  // PrismaService will be injected with PerfService if available via forwardRef
+  // We keep it simple and use Optional injection in PrismaService constructor
+}

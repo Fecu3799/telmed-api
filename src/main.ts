@@ -11,12 +11,24 @@ import { HttpLoggingInterceptor } from './common/interceptors/http-logging.inter
 import { ProblemDetailsFilter } from './common/filters/problem-details.filter';
 import { mapValidationErrors } from './common/utils/validation-errors';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { PerfInterceptor } from './infra/performance/perf.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new ProblemDetailsFilter());
-  app.useGlobalInterceptors(new HttpLoggingInterceptor());
+
+  const configService = app.get(ConfigService);
+  const perfMetricsEnabled =
+    configService.get<boolean>('PERF_METRICS_ENABLED') ?? true;
+
+  // Use PerfInterceptor if metrics enabled, otherwise use HttpLoggingInterceptor
+  if (perfMetricsEnabled) {
+    const perfInterceptor = app.get(PerfInterceptor);
+    app.useGlobalInterceptors(perfInterceptor);
+  } else {
+    app.useGlobalInterceptors(new HttpLoggingInterceptor());
+  }
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -58,7 +70,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const configService = app.get(ConfigService);
   const port = configService.get<number>('APP_PORT') ?? 3000;
   await app.listen(port);
 }
