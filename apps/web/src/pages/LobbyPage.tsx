@@ -624,20 +624,36 @@ export function LobbyPage() {
         }}
       >
         <h1 style={{ margin: 0 }}>TelMed Lobby (Alpha v0)</h1>
-        <button
-          onClick={() => navigate('/chats')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#2196F3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '0.9em',
-          }}
-        >
-          Open Chats
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => navigate('/doctor-search')}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '0.9em',
+            }}
+          >
+            Buscar médicos
+          </button>
+          <button
+            onClick={() => navigate('/chats')}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '0.9em',
+            }}
+          >
+            Open Chats
+          </button>
+        </div>
       </div>
 
       {error && (

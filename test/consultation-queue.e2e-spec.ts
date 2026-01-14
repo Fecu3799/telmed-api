@@ -15,37 +15,10 @@ import { ProblemDetailsFilter } from '../src/common/filters/problem-details.filt
 import { mapValidationErrors } from '../src/common/utils/validation-errors';
 import { PrismaService } from '../src/infra/prisma/prisma.service';
 import { resetDb } from './helpers/reset-db';
+import { ensureTestEnv } from './helpers/ensure-test-env';
 import { FakeClock } from './utils/fake-clock';
 
 const BASE_TIME = new Date('2025-01-05T10:00:00.000Z');
-
-function ensureEnv() {
-  process.env.APP_ENV = process.env.APP_ENV ?? 'test';
-  process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
-  process.env.THROTTLE_ENABLED = process.env.THROTTLE_ENABLED ?? 'false';
-  process.env.APP_PORT = process.env.APP_PORT ?? '0';
-  process.env.JWT_ACCESS_SECRET =
-    process.env.JWT_ACCESS_SECRET ?? 'test_access_secret_123456';
-  process.env.JWT_REFRESH_SECRET =
-    process.env.JWT_REFRESH_SECRET ?? 'test_refresh_secret_123456';
-  process.env.JWT_ACCESS_TTL_SECONDS =
-    process.env.JWT_ACCESS_TTL_SECONDS ?? '900';
-  process.env.JWT_REFRESH_TTL_SECONDS =
-    process.env.JWT_REFRESH_TTL_SECONDS ?? '2592000';
-  process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
-  process.env.MERCADOPAGO_ACCESS_TOKEN =
-    process.env.MERCADOPAGO_ACCESS_TOKEN ?? 'test_mp_access_token';
-  process.env.MERCADOPAGO_WEBHOOK_SECRET =
-    process.env.MERCADOPAGO_WEBHOOK_SECRET ?? 'test_mp_webhook_secret';
-  process.env.DATABASE_URL =
-    process.env.DATABASE_URL_TEST ?? process.env.DATABASE_URL ?? '';
-
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      'DATABASE_URL or DATABASE_URL_TEST must be set for e2e tests',
-    );
-  }
-}
 
 function httpServer(app: INestApplication): Server {
   return app.getHttpServer() as unknown as Server;
@@ -173,7 +146,7 @@ describe('Consultation queue (e2e)', () => {
   let fakeClock: FakeClock;
 
   beforeAll(async () => {
-    ensureEnv();
+    ensureTestEnv();
 
     fakeClock = new FakeClock(new Date(BASE_TIME));
 
@@ -211,7 +184,9 @@ describe('Consultation queue (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('patient creates appointment queue and doctor can start without accept', async () => {

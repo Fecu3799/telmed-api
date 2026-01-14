@@ -48,6 +48,14 @@ export const endpoints = {
     threadMessages: (threadId: string) => `/chats/threads/${threadId}/messages`,
     threadPolicy: (threadId: string) => `/chats/threads/${threadId}/policy`,
   },
+  // Doctor Search
+  doctorSearch: {
+    search: '/doctors/search',
+  },
+  // Specialties
+  specialties: {
+    list: '/specialties',
+  },
   // Patient Files
   patientFiles: {
     // Patient routes (self)
