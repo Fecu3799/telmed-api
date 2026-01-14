@@ -43,7 +43,7 @@ jobs:
 
       DATABASE_URL: 'postgresql://ci_user:ci_pw@localhost:5432/med?schema=public'
       SHADOW_DATABASE_URL: 'postgresql://ci_user:ci_pw@localhost:5432/med_shadow?schema=public'
-      DATABASE_URL_TEST: 'postgresql://ci_user:ci_pw@localhost:5432/med?schema=public'
+      DATABASE_URL_TEST: 'postgresql://ci_user:ci_pw@localhost:5432/med_test?schema=public'
 
       JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
       JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
