@@ -551,3 +551,105 @@ La pantalla "Mis Turnos" permite a pacientes y doctores ver y gestionar sus turn
 - Los estados de pago se actualizan automáticamente vía webhook del backend
 - La paginación sigue el contrato del backend (1-based, pageInfo con hasNextPage/hasPrevPage)
 
+## Mis Pacientes (Doctor)
+
+La pantalla "Mis Pacientes" permite a los doctores ver y gestionar pacientes con los que han tenido contacto clínico.
+
+### Acceso
+
+- **Doctor**: En el Lobby, dentro de "Doctor Profile Checklist", click en "Mis Pacientes"
+- O navegar directamente a `/doctor-patients`
+
+### Funcionalidades
+
+1. **Listar pacientes:**
+   - Muestra pacientes con los que el doctor ha tenido:
+     - Consultas cerradas (status='closed')
+     - Turnos completados o confirmados (status='completed' o 'confirmed')
+   - Los pacientes se deduplican automáticamente
+   - Paginación (10 por página por defecto)
+   - Búsqueda por nombre o email
+
+2. **Información mostrada:**
+   - Nombre completo
+   - Email (si existe)
+   - Última interacción (fecha/hora más reciente)
+   - Último turno (si aplica)
+   - Última consulta (si aplica)
+
+3. **Acciones por paciente:**
+   - **Ver datos**: Muestra información básica del paciente (solo lectura)
+   - **Archivos**: Abre la biblioteca de archivos del paciente (usando endpoints existentes `/patients/:patientId/files`)
+   - **Historia Clínica**: Placeholder UI (funcionalidad próximamente)
+
+### Pruebas Manuales - Flujo Completo
+
+#### 1. Doctor con 0 consultas
+
+1. Login como doctor y activa sesión doctor
+2. Click en "Mis Pacientes" desde el Lobby
+3. Verifica que aparezca el mensaje: "No tenés pacientes con contacto clínico registrado."
+
+#### 2. Doctor con consultas/appointments
+
+1. **Preparación:**
+   - Doctor configura disponibilidad
+   - Paciente crea appointment y lo paga
+   - Doctor inicia consulta desde el appointment
+   - Doctor cierra la consulta (status='closed')
+
+2. **Verificar lista:**
+   - Como doctor, click en "Mis Pacientes"
+   - Verifica que el paciente aparezca en la lista con:
+     - Nombre completo
+     - Email
+     - Última interacción (fecha de cierre de consulta o turno)
+   - Si el mismo paciente tiene múltiples consultas/turnos, debe aparecer solo una vez (deduplicado)
+
+3. **Búsqueda:**
+   - Usa el buscador para filtrar por nombre o email
+   - Verifica que los resultados se filtren correctamente
+
+#### 3. Acciones del paciente
+
+1. **Ver datos:**
+   - Click en "Ver Datos" de un paciente
+   - Verifica que se muestre la información básica (nombre, email, fechas)
+   - Verifica que aparezcan botones para "Ver Archivos" y "Historia Clínica"
+
+2. **Archivos:**
+   - Desde la lista o desde "Ver Datos", click en "Archivos"
+   - Verifica que se abra la biblioteca de archivos del paciente
+   - Verifica que el doctor pueda listar, descargar y subir archivos según los permisos existentes del módulo
+
+3. **Historia Clínica:**
+   - Click en "Historia Clínica"
+   - Verifica que aparezca el placeholder "Próximamente"
+
+#### 4. Paginación
+
+1. Si hay más de 10 pacientes, verifica que aparezcan botones "Anterior" y "Siguiente"
+2. Navega entre páginas y verifica que los datos se carguen correctamente
+3. Verifica el contador de páginas
+
+#### 5. Seguridad
+
+1. **Doctor no puede ver pacientes de otro doctor:**
+   - Como doctor A, verifica que solo aparezcan pacientes con los que doctor A tuvo contacto
+   - Si doctor B tiene pacientes diferentes, no deben aparecer en la lista de doctor A
+
+### Endpoints Utilizados
+
+- `GET /doctors/me/patients` - Listar pacientes con contacto clínico
+- `GET /patients/:patientId/files` - Listar archivos del paciente (doctor)
+- `GET /patients/:patientId/files/:fileId` - Obtener metadata de archivo (doctor)
+- `GET /patients/:patientId/files/:fileId/download` - Descargar archivo (doctor)
+
+### Notas Técnicas
+
+- Solo se muestran pacientes con contacto clínico real (consultas cerradas o turnos completados/confirmados)
+- La deduplicación se hace por `patientUserId`
+- La búsqueda es case-insensitive y busca en nombre y email
+- La paginación sigue el contrato del backend (1-based, pageInfo)
+- El acceso a archivos del paciente usa los endpoints existentes que ya validan que el doctor tenga acceso al paciente
+

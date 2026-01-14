@@ -983,6 +983,15 @@ export function LobbyPage() {
             >
               Mis Turnos
             </button>
+            <button
+              onClick={() => navigate('/doctor-patients')}
+              style={{
+                ...buttonStyle,
+                backgroundColor: '#6f42c1',
+              }}
+            >
+              Mis Pacientes
+            </button>
           </div>
         </div>
       )}

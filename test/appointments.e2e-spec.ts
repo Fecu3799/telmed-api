@@ -539,7 +539,7 @@ describe('Appointments (e2e)', () => {
     const payResponse = await request(httpServer(app))
       .post(`/api/v1/appointments/${appointmentId}/pay`)
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .expect(200);
+      .expect(201);
 
     expect(payResponse.body.checkoutUrl).toBeDefined();
     expect(payResponse.body.id).toBeDefined();
@@ -577,13 +577,13 @@ describe('Appointments (e2e)', () => {
       .post(`/api/v1/appointments/${appointmentId}/pay`)
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .expect(200);
+      .expect(201);
 
     const payResponse2 = await request(httpServer(app))
       .post(`/api/v1/appointments/${appointmentId}/pay`)
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .expect(200);
+      .expect(201);
 
     expect(payResponse1.body.id).toBe(payResponse2.body.id);
     expect(payResponse1.body.checkoutUrl).toBe(payResponse2.body.checkoutUrl);

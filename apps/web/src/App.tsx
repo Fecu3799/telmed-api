@@ -9,6 +9,10 @@ import { PatientFilesPage } from './pages/PatientFilesPage';
 import { DoctorSearchPage } from './pages/DoctorSearchPage';
 import { DoctorProfilePage } from './pages/DoctorProfilePage';
 import { DoctorAvailabilityPage } from './pages/DoctorAvailabilityPage';
+import { DoctorPatientsPage } from './pages/DoctorPatientsPage';
+import { DoctorPatientDetailPage } from './pages/DoctorPatientDetailPage';
+import { DoctorPatientFilesPage } from './pages/DoctorPatientFilesPage';
+import { DoctorPatientHistoryPage } from './pages/DoctorPatientHistoryPage';
 import { AppointmentsPage } from './pages/AppointmentsPage';
 
 // Lazy load RoomPage to reduce initial bundle size (LiveKit is large)
@@ -75,6 +79,38 @@ function App() {
             element={
               <PrivateRoute>
                 <DoctorAvailabilityPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/doctor-patients"
+            element={
+              <PrivateRoute>
+                <DoctorPatientsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/doctor-patients/:patientId"
+            element={
+              <PrivateRoute>
+                <DoctorPatientDetailPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/doctor-patients/:patientId/files"
+            element={
+              <PrivateRoute>
+                <DoctorPatientFilesPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/doctor-patients/:patientId/history"
+            element={
+              <PrivateRoute>
+                <DoctorPatientHistoryPage />
               </PrivateRoute>
             }
           />

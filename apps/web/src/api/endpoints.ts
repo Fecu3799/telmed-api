@@ -20,6 +20,10 @@ export const endpoints = {
     get: '/doctors/me/profile',
     put: '/doctors/me/profile',
   },
+  // Doctor Patients
+  doctorPatients: {
+    list: '/doctors/me/patients',
+  },
   // Consultation Queue
   queue: {
     create: '/consultations/queue',
