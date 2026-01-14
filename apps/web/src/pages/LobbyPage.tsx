@@ -941,6 +941,17 @@ export function LobbyPage() {
               </button>
             </div>
           )}
+          <div style={{ marginTop: '16px' }}>
+            <button
+              onClick={() => navigate('/doctor-availability')}
+              style={{
+                ...buttonStyle,
+                backgroundColor: '#17a2b8',
+              }}
+            >
+              Mi Disponibilidad
+            </button>
+          </div>
         </div>
       )}
 

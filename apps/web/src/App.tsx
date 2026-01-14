@@ -7,6 +7,9 @@ import { LobbyPage } from './pages/LobbyPage';
 import { ChatsPage } from './pages/ChatsPage';
 import { PatientFilesPage } from './pages/PatientFilesPage';
 import { DoctorSearchPage } from './pages/DoctorSearchPage';
+import { DoctorProfilePage } from './pages/DoctorProfilePage';
+import { DoctorAvailabilityPage } from './pages/DoctorAvailabilityPage';
+import { AppointmentsPage } from './pages/AppointmentsPage';
 
 // Lazy load RoomPage to reduce initial bundle size (LiveKit is large)
 const RoomPage = lazy(() =>
@@ -43,16 +46,40 @@ function App() {
               </PrivateRoute>
             }
           />
-          <Route
-            path="/doctor-search"
-            element={
-              <PrivateRoute>
-                <DoctorSearchPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/room/:consultationId"
+              <Route
+                path="/doctor-search"
+                element={
+                  <PrivateRoute>
+                    <DoctorSearchPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/doctor-profile/:doctorUserId"
+                element={
+                  <PrivateRoute>
+                    <DoctorProfilePage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/appointments"
+                element={
+                  <PrivateRoute>
+                    <AppointmentsPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/doctor-availability"
+                element={
+                  <PrivateRoute>
+                    <DoctorAvailabilityPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/room/:consultationId"
             element={
               <PrivateRoute>
                 <Suspense

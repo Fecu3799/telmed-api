@@ -56,6 +56,25 @@ export const endpoints = {
   specialties: {
     list: '/specialties',
   },
+  // Doctor Availability (public)
+  doctorAvailability: {
+    get: (doctorUserId: string) => `/doctors/${doctorUserId}/availability`,
+  },
+  // Availability (doctor management)
+  availability: {
+    listRules: '/doctors/me/availability-rules',
+    updateRules: '/doctors/me/availability-rules',
+    listExceptions: '/doctors/me/availability-exceptions',
+    createException: '/doctors/me/availability-exceptions',
+    deleteException: (id: string) =>
+      `/doctors/me/availability-exceptions/${id}`,
+  },
+  // Appointments
+  appointments: {
+    create: '/appointments',
+    listPatient: '/patients/me/appointments',
+    cancel: (appointmentId: string) => `/appointments/${appointmentId}/cancel`,
+  },
   // Patient Files
   patientFiles: {
     // Patient routes (self)

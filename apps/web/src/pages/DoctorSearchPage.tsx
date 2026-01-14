@@ -9,107 +9,6 @@ import {
 import { getSpecialties, type Specialty } from '../api/specialties';
 import { type ProblemDetails } from '../api/http';
 
-interface DoctorProfileModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  doctor: DoctorSearchItem;
-}
-
-function DoctorProfileModal({
-  isOpen,
-  onClose,
-  doctor,
-}: DoctorProfileModalProps) {
-  if (!isOpen) return null;
-
-  const displayName =
-    doctor.displayName ||
-    (doctor.firstName && doctor.lastName
-      ? `${doctor.firstName} ${doctor.lastName}`
-      : doctor.firstName || doctor.lastName || 'Doctor');
-
-  const priceDisplay = new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: doctor.currency || 'ARS',
-  }).format(doctor.priceCents / 100);
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 1000,
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          backgroundColor: 'white',
-          padding: '24px',
-          borderRadius: '8px',
-          maxWidth: '500px',
-          width: '90%',
-          maxHeight: '90vh',
-          overflow: 'auto',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 style={{ marginTop: 0 }}>Perfil del Médico</h2>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ marginBottom: '8px' }}>
-            <strong>Nombre:</strong> {displayName}
-          </div>
-          <div style={{ marginBottom: '8px' }}>
-            <strong>Precio:</strong> {priceDisplay}
-          </div>
-          {doctor.specialties && doctor.specialties.length > 0 && (
-            <div style={{ marginBottom: '8px' }}>
-              <strong>Especialidades:</strong>{' '}
-              {doctor.specialties.map((s) => s.name).join(', ')}
-            </div>
-          )}
-          {doctor.location && (
-            <div style={{ marginBottom: '8px' }}>
-              <strong>Ubicación:</strong> {doctor.location.lat.toFixed(4)},{' '}
-              {doctor.location.lng.toFixed(4)}
-            </div>
-          )}
-          {doctor.distanceMeters !== null &&
-            doctor.distanceMeters !== undefined && (
-              <div style={{ marginBottom: '8px' }}>
-                <strong>Distancia:</strong>{' '}
-                {(doctor.distanceMeters / 1000).toFixed(2)} km
-              </div>
-            )}
-          <div style={{ marginBottom: '8px' }}>
-            <strong>Estado:</strong> {doctor.verificationStatus}
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Cerrar
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function DoctorSearchPage() {
   const navigate = useNavigate();
   const { getActiveToken } = useAuth();
@@ -130,12 +29,6 @@ export function DoctorSearchPage() {
   // Specialties state
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [loadingSpecialties, setLoadingSpecialties] = useState(false);
-
-  // Selected doctor for modal
-  const [selectedDoctor, setSelectedDoctor] = useState<DoctorSearchItem | null>(
-    null,
-  );
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   // Debounce ref for search query
   const debounceTimerRef = useRef<number | null>(null);
@@ -259,10 +152,12 @@ export function DoctorSearchPage() {
     }
   };
 
-  // Handle view profile
+  // Handle view profile - navigate to doctor profile page
   const handleViewProfile = (doctor: DoctorSearchItem) => {
-    setSelectedDoctor(doctor);
-    setProfileModalOpen(true);
+    // Navigate to doctor profile page with doctor info in state
+    navigate(`/doctor-profile/${doctor.doctorUserId}`, {
+      state: { doctor },
+    });
   };
 
   // Check if 401/403 -> redirect to login
@@ -526,17 +421,6 @@ export function DoctorSearchPage() {
         </>
       )}
 
-      {/* Profile Modal */}
-      {selectedDoctor && (
-        <DoctorProfileModal
-          isOpen={profileModalOpen}
-          onClose={() => {
-            setProfileModalOpen(false);
-            setSelectedDoctor(null);
-          }}
-          doctor={selectedDoctor}
-        />
-      )}
     </div>
   );
 }
