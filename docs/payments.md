@@ -35,8 +35,12 @@
 1) `POST /api/v1/appointments`
    - valida slot y crea `Appointment` con `pending_payment`.
    - crea `Payment` `pending` (TTL 10 min) y devuelve `checkoutUrl`.
-2) Webhook MP (aprobado) -> `Payment.paid`, `Appointment.confirmed`.
-3) Expire-on-read: si `pending_payment` y `paymentExpiresAt < now`, `Appointment.cancelled` y `Payment.expired`.
+2) `POST /api/v1/appointments/:id/pay` (opcional, para pagar appointment existente)
+   - Crea o reutiliza `Payment` `pending` para un appointment en `pending_payment`.
+   - Devuelve `checkoutUrl`. Soporta `Idempotency-Key` header.
+   - Errores: 404 si no existe, 403 si no es dueño, 409 si ya pagado/expirado.
+3) Webhook MP (aprobado) -> `Payment.paid`, `Appointment.confirmed`.
+4) Expire-on-read: si `pending_payment` y `paymentExpiresAt < now`, `Appointment.cancelled` y `Payment.expired`.
 
 ### Emergencia (queue)
 1) `POST /api/v1/consultations/queue` (walk-in)

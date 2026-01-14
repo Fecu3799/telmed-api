@@ -312,6 +312,141 @@ export class AppointmentsService {
     );
   }
 
+  async requestPaymentForAppointment(
+    actor: Actor,
+    appointmentId: string,
+    idempotencyKey?: string | null,
+  ) {
+    if (actor.role !== UserRole.patient && actor.role !== UserRole.admin) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { patient: { select: { userId: true } } },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    // Verify ownership (patient or admin)
+    if (actor.role === UserRole.patient) {
+      if (appointment.patient.userId !== actor.id) {
+        throw new ForbiddenException('Forbidden');
+      }
+    }
+
+    // Verify appointment is in a payable state
+    if (appointment.status !== AppointmentStatus.pending_payment) {
+      throw new ConflictException('Appointment is not in a payable state');
+    }
+
+    // Check if payment window expired
+    if (
+      appointment.paymentExpiresAt &&
+      this.clock.now() > appointment.paymentExpiresAt
+    ) {
+      // Expire the appointment
+      await this.prisma.appointment.update({
+        where: { id: appointmentId },
+        data: {
+          status: AppointmentStatus.cancelled,
+          cancelledAt: this.clock.now(),
+        },
+      });
+      throw new ConflictException('Payment window expired');
+    }
+
+    const doctorProfile = await this.prisma.doctorProfile.findUnique({
+      where: { userId: appointment.doctorUserId },
+      select: { priceCents: true, currency: true },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor not found');
+    }
+
+    // Check for idempotent payment
+    const existingPayment = await this.paymentsService.findIdempotentPayment(
+      appointment.patient.userId,
+      PaymentKind.appointment,
+      idempotencyKey,
+    );
+
+    if (existingPayment) {
+      if (
+        existingPayment.appointmentId &&
+        existingPayment.appointmentId !== appointmentId
+      ) {
+        throw new ConflictException('Idempotency key already used');
+      }
+      if (existingPayment.status === PaymentStatus.paid) {
+        throw new ConflictException('Payment already completed');
+      }
+      return this.toPaymentResponse(existingPayment);
+    }
+
+    // Check for existing payment for this appointment
+    const appointmentPayment = await this.prisma.payment.findFirst({
+      where: {
+        appointmentId: appointment.id,
+        kind: PaymentKind.appointment,
+        status: { in: [PaymentStatus.pending, PaymentStatus.paid] },
+      },
+    });
+
+    if (appointmentPayment) {
+      if (appointmentPayment.status === PaymentStatus.paid) {
+        throw new ConflictException('Payment already completed');
+      }
+      return this.toPaymentResponse(appointmentPayment);
+    }
+
+    // Create new payment preference
+    const preference =
+      await this.paymentsService.createAppointmentPaymentPreference({
+        doctorUserId: appointment.doctorUserId,
+        patientUserId: appointment.patient.userId,
+        appointmentId: appointment.id,
+        amountCents: doctorProfile.priceCents,
+        currency: doctorProfile.currency,
+        idempotencyKey,
+      });
+
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const createdPayment = await tx.payment.create({
+        data: {
+          id: preference.paymentId,
+          provider: PaymentProvider.mercadopago,
+          kind: PaymentKind.appointment,
+          status: PaymentStatus.pending,
+          amountCents: doctorProfile.priceCents,
+          currency: doctorProfile.currency,
+          doctorUserId: appointment.doctorUserId,
+          patientUserId: appointment.patient.userId,
+          appointmentId: appointment.id,
+          queueItemId: null,
+          checkoutUrl: preference.checkoutUrl,
+          providerPreferenceId: preference.providerPreferenceId,
+          idempotencyKey: idempotencyKey ?? null,
+          expiresAt: preference.expiresAt,
+        },
+      });
+
+      await tx.appointment.update({
+        where: { id: appointment.id },
+        data: {
+          paymentExpiresAt: preference.expiresAt,
+        },
+      });
+
+      return createdPayment;
+    });
+
+    return this.toPaymentResponse(payment);
+  }
+
   async cancelAppointment(actor: Actor, id: string, dto: CancelAppointmentDto) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },

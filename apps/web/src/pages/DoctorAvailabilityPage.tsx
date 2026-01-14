@@ -60,9 +60,9 @@ export function DoctorAvailabilityPage() {
 
   // Exception form state
   const [exceptionDate, setExceptionDate] = useState('');
-  const [exceptionType, setExceptionType] = useState<
-    'closed' | 'custom'
-  >('closed');
+  const [exceptionType, setExceptionType] = useState<'closed' | 'custom'>(
+    'closed',
+  );
   const [customWindows, setCustomWindows] = useState<AvailabilityWindow[]>([
     { startTime: '09:00', endTime: '12:00' },
   ]);
@@ -492,7 +492,9 @@ export function DoctorAvailabilityPage() {
                           flexWrap: 'wrap',
                         }}
                       >
-                        <label style={{ display: 'flex', alignItems: 'center' }}>
+                        <label
+                          style={{ display: 'flex', alignItems: 'center' }}
+                        >
                           <input
                             type="checkbox"
                             checked={rule.isActive ?? true}
@@ -596,11 +598,13 @@ export function DoctorAvailabilityPage() {
                 <strong>Error {rulesError.status}:</strong> {rulesError.detail}
                 {rulesError.errors && (
                   <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                    {Object.entries(rulesError.errors).map(([field, messages]) => (
-                      <li key={field}>
-                        <strong>{field}:</strong> {messages.join(', ')}
-                      </li>
-                    ))}
+                    {Object.entries(rulesError.errors).map(
+                      ([field, messages]) => (
+                        <li key={field}>
+                          <strong>{field}:</strong> {messages.join(', ')}
+                        </li>
+                      ),
+                    )}
                   </ul>
                 )}
               </div>
@@ -707,7 +711,9 @@ export function DoctorAvailabilityPage() {
                   marginBottom: '8px',
                 }}
               >
-                <label style={{ fontWeight: 'bold' }}>Ventanas de Horario</label>
+                <label style={{ fontWeight: 'bold' }}>
+                  Ventanas de Horario
+                </label>
                 <button
                   onClick={handleAddCustomWindow}
                   style={{
@@ -738,7 +744,11 @@ export function DoctorAvailabilityPage() {
                     type="time"
                     value={window.startTime}
                     onChange={(e) =>
-                      handleUpdateCustomWindow(index, 'startTime', e.target.value)
+                      handleUpdateCustomWindow(
+                        index,
+                        'startTime',
+                        e.target.value,
+                      )
                     }
                     style={{
                       padding: '4px',
@@ -894,10 +904,7 @@ export function DoctorAvailabilityPage() {
                       <span style={{ color: '#007bff' }}>
                         Horarios especiales:{' '}
                         {exception.customWindows
-                          ?.map(
-                            (w) =>
-                              `${w.startTime}-${w.endTime}`,
-                          )
+                          ?.map((w) => `${w.startTime}-${w.endTime}`)
                           .join(', ')}
                       </span>
                     )}

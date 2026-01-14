@@ -73,6 +73,8 @@ export const endpoints = {
   appointments: {
     create: '/appointments',
     listPatient: '/patients/me/appointments',
+    listDoctor: '/doctors/me/appointments',
+    pay: (appointmentId: string) => `/appointments/${appointmentId}/pay`,
     cancel: (appointmentId: string) => `/appointments/${appointmentId}/cancel`,
   },
   // Patient Files

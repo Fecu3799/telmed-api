@@ -54,7 +54,11 @@ function formatTimeLocal(iso: string): string {
 /**
  * Helper: Check if a date (YYYY-MM-DD) is within leadTime (24h) and horizon (60d)
  */
-function isDateValid(dateStr: string, leadTimeHours = 24, horizonDays = 60): {
+function isDateValid(
+  dateStr: string,
+  leadTimeHours = 24,
+  horizonDays = 60,
+): {
   valid: boolean;
   reason?: string;
 } {
@@ -124,7 +128,8 @@ export function DoctorProfilePage() {
   });
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
-  const [availabilityError, setAvailabilityError] = useState<ProblemDetails | null>(null);
+  const [availabilityError, setAvailabilityError] =
+    useState<ProblemDetails | null>(null);
   const [availabilityMeta, setAvailabilityMeta] = useState<{
     leadTimeHours: number;
     horizonDays: number;
@@ -134,7 +139,8 @@ export function DoctorProfilePage() {
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState<ProblemDetails | null>(null);
-  const [bookingSuccess, setBookingSuccess] = useState<AppointmentWithPayment | null>(null);
+  const [bookingSuccess, setBookingSuccess] =
+    useState<AppointmentWithPayment | null>(null);
 
   // Patient identity modal
   const [showIdentityModal, setShowIdentityModal] = useState(false);
@@ -242,7 +248,11 @@ export function DoctorProfilePage() {
       if (dateFrom && dateTo) {
         const from = getStartOfDayUTC(dateFrom);
         const to = getEndOfDayUTC(dateTo);
-        const updatedResponse = await getDoctorAvailability(doctorUserId, from, to);
+        const updatedResponse = await getDoctorAvailability(
+          doctorUserId,
+          from,
+          to,
+        );
         setSlots(updatedResponse.items);
       }
     } catch (err) {
@@ -274,10 +284,16 @@ export function DoctorProfilePage() {
 
   // Handle 401/403 -> redirect to login
   useEffect(() => {
-    if (availabilityError && (availabilityError.status === 401 || availabilityError.status === 403)) {
+    if (
+      availabilityError &&
+      (availabilityError.status === 401 || availabilityError.status === 403)
+    ) {
       navigate('/login');
     }
-    if (bookingError && (bookingError.status === 401 || bookingError.status === 403)) {
+    if (
+      bookingError &&
+      (bookingError.status === 401 || bookingError.status === 403)
+    ) {
       navigate('/login');
     }
   }, [availabilityError, bookingError, navigate]);
@@ -474,29 +490,34 @@ export function DoctorProfilePage() {
         </div>
 
         {/* Availability Error */}
-        {availabilityError && availabilityError.status !== 401 && availabilityError.status !== 403 && (
-          <div
-            style={{
-              marginBottom: '16px',
-              padding: '12px',
-              backgroundColor: '#fee',
-              border: '1px solid #fcc',
-              borderRadius: '4px',
-              color: '#c33',
-            }}
-          >
-            <strong>Error {availabilityError.status}:</strong> {availabilityError.detail}
-            {availabilityError.errors && (
-              <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                {Object.entries(availabilityError.errors).map(([field, messages]) => (
-                  <li key={field}>
-                    <strong>{field}:</strong> {messages.join(', ')}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+        {availabilityError &&
+          availabilityError.status !== 401 &&
+          availabilityError.status !== 403 && (
+            <div
+              style={{
+                marginBottom: '16px',
+                padding: '12px',
+                backgroundColor: '#fee',
+                border: '1px solid #fcc',
+                borderRadius: '4px',
+                color: '#c33',
+              }}
+            >
+              <strong>Error {availabilityError.status}:</strong>{' '}
+              {availabilityError.detail}
+              {availabilityError.errors && (
+                <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                  {Object.entries(availabilityError.errors).map(
+                    ([field, messages]) => (
+                      <li key={field}>
+                        <strong>{field}:</strong> {messages.join(', ')}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
 
         {/* Loading Availability */}
         {loadingAvailability && (
@@ -539,84 +560,94 @@ export function DoctorProfilePage() {
                 slotsByDate.get(dateKey)!.push(slot);
               }
 
-              return Array.from(slotsByDate.entries()).map(([date, dateSlots]) => (
-                <div key={date} style={{ marginBottom: '24px' }}>
-                  <h4 style={{ marginBottom: '8px', color: '#666' }}>
-                    {new Date(date + 'T00:00:00').toLocaleDateString('es-AR', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </h4>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                      gap: '8px',
-                    }}
-                  >
-                    {dateSlots.map((slot) => {
-                      const isBooking =
-                        bookingSlot === slot.startAt && bookingLoading;
-                      return (
-                        <button
-                          key={slot.startAt}
-                          onClick={() => void handleBookSlot(slot.startAt)}
-                          disabled={isBooking || bookingLoading}
-                          style={{
-                            padding: '12px',
-                            backgroundColor: isBooking ? '#ccc' : '#007bff',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: isBooking ? 'not-allowed' : 'pointer',
-                            fontSize: '14px',
-                          }}
-                        >
-                          {isBooking
-                            ? 'Reservando...'
-                            : formatTimeLocal(slot.startAt)}
-                        </button>
-                      );
-                    })}
+              return Array.from(slotsByDate.entries()).map(
+                ([date, dateSlots]) => (
+                  <div key={date} style={{ marginBottom: '24px' }}>
+                    <h4 style={{ marginBottom: '8px', color: '#666' }}>
+                      {new Date(date + 'T00:00:00').toLocaleDateString(
+                        'es-AR',
+                        {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        },
+                      )}
+                    </h4>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns:
+                          'repeat(auto-fill, minmax(120px, 1fr))',
+                        gap: '8px',
+                      }}
+                    >
+                      {dateSlots.map((slot) => {
+                        const isBooking =
+                          bookingSlot === slot.startAt && bookingLoading;
+                        return (
+                          <button
+                            key={slot.startAt}
+                            onClick={() => void handleBookSlot(slot.startAt)}
+                            disabled={isBooking || bookingLoading}
+                            style={{
+                              padding: '12px',
+                              backgroundColor: isBooking ? '#ccc' : '#007bff',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: isBooking ? 'not-allowed' : 'pointer',
+                              fontSize: '14px',
+                            }}
+                          >
+                            {isBooking
+                              ? 'Reservando...'
+                              : formatTimeLocal(slot.startAt)}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ));
+                ),
+              );
             })()}
           </div>
         )}
       </div>
 
       {/* Booking Error */}
-      {bookingError && bookingError.status !== 401 && bookingError.status !== 403 && (
-        <div
-          style={{
-            marginBottom: '16px',
-            padding: '12px',
-            backgroundColor: '#fee',
-            border: '1px solid #fcc',
-            borderRadius: '4px',
-            color: '#c33',
-          }}
-        >
-          <strong>Error {bookingError.status}:</strong> {bookingError.detail}
-          {bookingError.errors && (
-            <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-              {Object.entries(bookingError.errors).map(([field, messages]) => (
-                <li key={field}>
-                  <strong>{field}:</strong> {messages.join(', ')}
-                </li>
-              ))}
-            </ul>
-          )}
-          {bookingError.status === 409 && (
-            <div style={{ marginTop: '8px' }}>
-              El turno ya fue tomado. Por favor, selecciona otro horario.
-            </div>
-          )}
-        </div>
-      )}
+      {bookingError &&
+        bookingError.status !== 401 &&
+        bookingError.status !== 403 && (
+          <div
+            style={{
+              marginBottom: '16px',
+              padding: '12px',
+              backgroundColor: '#fee',
+              border: '1px solid #fcc',
+              borderRadius: '4px',
+              color: '#c33',
+            }}
+          >
+            <strong>Error {bookingError.status}:</strong> {bookingError.detail}
+            {bookingError.errors && (
+              <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                {Object.entries(bookingError.errors).map(
+                  ([field, messages]) => (
+                    <li key={field}>
+                      <strong>{field}:</strong> {messages.join(', ')}
+                    </li>
+                  ),
+                )}
+              </ul>
+            )}
+            {bookingError.status === 409 && (
+              <div style={{ marginTop: '8px' }}>
+                El turno ya fue tomado. Por favor, selecciona otro horario.
+              </div>
+            )}
+          </div>
+        )}
 
       {/* Booking Success */}
       {bookingSuccess && (
@@ -634,7 +665,9 @@ export function DoctorProfilePage() {
           <div style={{ marginBottom: '12px' }}>
             <div>
               <strong>Fecha:</strong>{' '}
-              {new Date(bookingSuccess.appointment.startAt).toLocaleString('es-AR')}
+              {new Date(bookingSuccess.appointment.startAt).toLocaleString(
+                'es-AR',
+              )}
             </div>
             <div>
               <strong>Estado:</strong> {bookingSuccess.appointment.status}

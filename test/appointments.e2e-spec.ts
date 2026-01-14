@@ -509,4 +509,206 @@ describe('Appointments (e2e)', () => {
     expect(cancelResponse.body.status).toBe('cancelled');
     expect(cancelResponse.body.patientUserId).toBe(patientUserId);
   });
+
+  it('patient can request payment checkout for unpaid appointment', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorMe = await request(httpServer(app))
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+    const doctorUserId = doctorMe.body.id as string;
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await setUtcSchedulingConfig(prisma, doctorUserId);
+
+    const { dateStr, dayOfWeek } = dateParts(2);
+    await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const createResponse = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt: `${dateStr}T09:00:00.000Z` })
+      .expect(201);
+
+    const appointmentId = createResponse.body.appointment.id as string;
+    expect(createResponse.body.appointment.status).toBe('pending_payment');
+
+    const payResponse = await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/pay`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(200);
+
+    expect(payResponse.body.checkoutUrl).toBeDefined();
+    expect(payResponse.body.id).toBeDefined();
+    expect(payResponse.body.status).toBe('pending');
+    expect(payResponse.body.expiresAt).toBeDefined();
+  });
+
+  it('idempotency key returns same payment', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorMe = await request(httpServer(app))
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+    const doctorUserId = doctorMe.body.id as string;
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await setUtcSchedulingConfig(prisma, doctorUserId);
+
+    const { dateStr, dayOfWeek } = dateParts(2);
+    await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const createResponse = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt: `${dateStr}T09:00:00.000Z` })
+      .expect(201);
+
+    const appointmentId = createResponse.body.appointment.id as string;
+    const idempotencyKey = randomUUID();
+
+    const payResponse1 = await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/pay`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .expect(200);
+
+    const payResponse2 = await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/pay`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .expect(200);
+
+    expect(payResponse1.body.id).toBe(payResponse2.body.id);
+    expect(payResponse1.body.checkoutUrl).toBe(payResponse2.body.checkoutUrl);
+  });
+
+  it('other patient cannot request payment for appointment', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorMe = await request(httpServer(app))
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+    const doctorUserId = doctorMe.body.id as string;
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await setUtcSchedulingConfig(prisma, doctorUserId);
+
+    const { dateStr, dayOfWeek } = dateParts(2);
+    await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const createResponse = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt: `${dateStr}T09:00:00.000Z` })
+      .expect(201);
+
+    const appointmentId = createResponse.body.appointment.id as string;
+
+    const intruder = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, intruder.accessToken);
+
+    await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/pay`)
+      .set('Authorization', `Bearer ${intruder.accessToken}`)
+      .expect(403);
+  });
+
+  it('returns 404 for non-existent appointment', async () => {
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const fakeId = randomUUID();
+
+    await request(httpServer(app))
+      .post(`/api/v1/appointments/${fakeId}/pay`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(404);
+  });
+
+  it('returns 409 for already paid appointment', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorMe = await request(httpServer(app))
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+    const doctorUserId = doctorMe.body.id as string;
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await setUtcSchedulingConfig(prisma, doctorUserId);
+
+    const { dateStr, dayOfWeek } = dateParts(2);
+    await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const createResponse = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt: `${dateStr}T09:00:00.000Z` })
+      .expect(201);
+
+    const appointmentId = createResponse.body.appointment.id as string;
+
+    // Mark payment as paid directly in DB (simulating webhook)
+    const payment = await prisma.payment.findFirst({
+      where: { appointmentId },
+    });
+    if (payment) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'paid' },
+      });
+      await prisma.appointment.update({
+        where: { id: appointmentId },
+        data: { status: 'confirmed' },
+      });
+    }
+
+    await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/pay`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(409);
+  });
+
+  it('doctor cannot request payment for appointment', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorMe = await request(httpServer(app))
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+    const doctorUserId = doctorMe.body.id as string;
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await setUtcSchedulingConfig(prisma, doctorUserId);
+
+    const { dateStr, dayOfWeek } = dateParts(2);
+    await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const createResponse = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt: `${dateStr}T09:00:00.000Z` })
+      .expect(201);
+
+    const appointmentId = createResponse.body.appointment.id as string;
+
+    await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/pay`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(403);
+  });
 });

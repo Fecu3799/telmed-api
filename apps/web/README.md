@@ -412,3 +412,142 @@ El sistema permite a los doctores configurar su disponibilidad semanal y excepci
 - El manejo de errores muestra Problem Details con `title`, `detail`, `errors` y `traceId`
 - Las validaciones client-side son suaves (UX), el backend siempre valida también
 
+## Mis Turnos (Appointments)
+
+La pantalla "Mis Turnos" permite a pacientes y doctores ver y gestionar sus turnos programados.
+
+### Acceso
+
+- **Paciente**: En el Lobby, dentro de "Patient Identity Checklist", click en "Mis Turnos"
+- **Doctor**: En el Lobby, dentro de "Doctor Profile Checklist", click en "Mis Turnos"
+- O navegar directamente a `/appointments`
+
+### Funcionalidades
+
+#### Para Pacientes
+
+1. **Listar turnos:**
+   - Por defecto muestra los próximos 30 días
+   - Puedes cambiar el rango de fechas usando los selectores "Desde" y "Hasta"
+   - Los turnos se muestran paginados (20 por página)
+
+2. **Estados de turno:**
+   - **Pendiente de pago**: Muestra advertencia con fecha de expiración del pago
+   - **Programado**: Turno confirmado y pagado
+   - **Cancelado**: Turno cancelado (con motivo si fue proporcionado)
+
+3. **Pago pendiente:**
+   - Si un turno está en estado "Pendiente de pago" y el pago no ha expirado, se muestra un mensaje informativo
+   - Click en el botón "Pagar" para iniciar el pago
+   - Se abre una nueva pestaña con el checkout de Mercado Pago
+   - El estado se actualiza automáticamente cuando el pago se procesa (vía webhook)
+   - Si el pago ya fue completado o expiró, se muestra un error 409
+
+4. **Cancelar turno:**
+   - Click en "Cancelar" para cancelar un turno
+   - Opcionalmente puedes proporcionar un motivo de cancelación
+   - Solo se pueden cancelar turnos que no estén ya cancelados
+
+#### Para Doctores
+
+1. **Listar turnos:**
+   - Mismo formato que pacientes
+   - Muestra el ID del paciente para cada turno
+   - No muestra opciones de pago (solo para pacientes)
+
+2. **Cancelar turno:**
+   - Los doctores pueden cancelar sus turnos de la misma manera que los pacientes
+
+### Pruebas Manuales - Flujo Completo
+
+#### 1. Doctor configura disponibilidad y paciente crea appointment
+
+1. **Como doctor:**
+   - Login como doctor y activa sesión doctor
+   - Navega a "Mi Disponibilidad" desde el Lobby
+   - Configura reglas semanales (ej: Lunes 09:00-12:00)
+   - Guarda las reglas
+
+2. **Como paciente:**
+   - Login como paciente y activa sesión patient
+   - Navega a "Doctor Search"
+   - Busca el doctor y click en "Ver Perfil"
+   - Selecciona un rango de fechas y click en "Buscar Turnos"
+   - Reserva un turno en un slot disponible
+   - Verifica que aparezca el mensaje de éxito con opción de pago
+
+3. **Verificar en "Mis Turnos" (Doctor):**
+   - Cambia a sesión doctor
+   - Click en "Mis Turnos" desde el Lobby
+   - Verifica que el turno aparezca en la lista con:
+     - Fecha/hora correcta
+     - ID del paciente
+     - Estado "Pendiente de pago" o "Programado" según corresponda
+
+#### 2. Paciente ve turno pendiente y estado de pago
+
+1. **Como paciente:**
+   - Activa sesión patient
+   - Click en "Mis Turnos" desde el Lobby
+   - Verifica que el turno reservado aparezca en la lista
+
+2. **Estado "Pendiente de pago":**
+   - Si el turno está en "Pendiente de pago" y el pago no ha expirado:
+     - Deberías ver un mensaje amarillo con la fecha de expiración
+     - El mensaje indica que el pago debe completarse para confirmar el turno
+   - Si el pago ha expirado:
+     - Deberías ver un mensaje rojo indicando que el pago expiró
+     - El turno será cancelado automáticamente
+
+3. **Actualizar estado:**
+   - Después de completar el pago en Mercado Pago (si aplica), el estado se actualiza automáticamente vía webhook
+   - Puedes refrescar la página o cambiar el rango de fechas para ver el estado actualizado
+
+#### 3. Paginación y cambio de rango
+
+1. **Cambiar rango de fechas:**
+   - Usa los selectores "Desde" y "Hasta" para cambiar el rango
+   - El rango por defecto es los próximos 30 días
+   - Al cambiar el rango, la lista se recarga automáticamente
+   - La paginación se reinicia a la página 1
+
+2. **Navegar páginas:**
+   - Si hay más de 20 turnos, aparecen botones "Anterior" y "Siguiente"
+   - El contador muestra "Página X de Y"
+   - Los botones se deshabilitan cuando no hay más páginas
+
+3. **Estado vacío:**
+   - Si no hay turnos en el rango seleccionado, se muestra un mensaje:
+     - Paciente: "No tienes turnos en este rango de fechas."
+     - Doctor: "No tenés turnos en este rango de fechas."
+
+#### 4. Cancelar turno
+
+1. **Como paciente o doctor:**
+   - En la lista de turnos, click en "Cancelar" para un turno que no esté cancelado
+   - Aparece un formulario para ingresar motivo (opcional)
+   - Click en "Confirmar Cancelación"
+   - El turno se cancela y la lista se actualiza automáticamente
+
+2. **Verificar cancelación:**
+   - El turno cancelado muestra:
+     - Estado "Cancelado"
+     - Fecha/hora de cancelación
+     - Motivo (si fue proporcionado)
+   - El botón "Cancelar" desaparece para turnos cancelados
+
+### Endpoints Utilizados
+
+- `GET /patients/me/appointments` - Listar turnos del paciente
+- `GET /doctors/me/appointments` - Listar turnos del doctor
+- `POST /appointments/:id/pay` - Iniciar pago de turno (solo paciente)
+- `POST /appointments/:id/cancel` - Cancelar turno
+
+### Notas Técnicas
+
+- La página detecta automáticamente el rol del usuario (patient/doctor) y muestra la vista correspondiente
+- Los formatos de fecha/hora se muestran en formato local (es-AR)
+- El rango de fechas usa ISO UTC para las queries al backend
+- Los estados de pago se actualizan automáticamente vía webhook del backend
+- La paginación sigue el contrato del backend (1-based, pageInfo con hasNextPage/hasPrevPage)
+

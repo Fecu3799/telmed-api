@@ -420,7 +420,6 @@ export function DoctorSearchPage() {
           </div>
         </>
       )}
-
     </div>
   );
 }

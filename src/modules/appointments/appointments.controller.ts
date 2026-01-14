@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,6 +23,7 @@ import {
   ApiUnprocessableEntityResponse,
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { UserRole } from '@prisma/client';
 import { ProblemDetailsDto } from '../../common/docs/problem-details.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -32,16 +34,22 @@ import type { Actor } from '../../common/types/actor.type';
 import { AppointmentDto } from './docs/appointment.dto';
 import { AppointmentWithPaymentDto } from './docs/appointment-payment.dto';
 import { AppointmentsResponseDto } from './docs/appointments-response.dto';
+import { PaymentCheckoutDto } from '../payments/docs/payment.dto';
 import { AppointmentsService } from './appointments.service';
 import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { ListAppointmentsQueryDto } from './dto/list-appointments-query.dto';
+import { AuditService } from '../../infra/audit/audit.service';
+import { AuditAction } from '@prisma/client';
 
 @ApiTags('appointments')
 @Controller()
 export class AppointmentsController {
-  constructor(private readonly appointmentsService: AppointmentsService) {}
+  constructor(
+    private readonly appointmentsService: AppointmentsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Post('appointments')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -117,6 +125,47 @@ export class AppointmentsController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async listAdmin(@Query() query: AdminAppointmentsQueryDto) {
     return this.appointmentsService.listAdminAppointments(query);
+  }
+
+  @Post('appointments/:id/pay')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.admin)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Request payment checkout for appointment',
+    description:
+      'Creates or retrieves payment checkout URL for an existing appointment. Only available for appointments in pending_payment status.',
+  })
+  @ApiOkResponse({ type: PaymentCheckoutDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async payAppointment(
+    @CurrentUser() actor: Actor,
+    @Param('id') id: string,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+    @Req() req?: Request,
+  ) {
+    const payment = await this.appointmentsService.requestPaymentForAppointment(
+      actor,
+      id,
+      idempotencyKey,
+    );
+    // Audit payment creation for appointment flows
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'Payment',
+      resourceId: payment.id,
+      actor,
+      traceId: (req as Request & { traceId?: string })?.traceId ?? null,
+      ip: req?.ip,
+      userAgent: req?.get('user-agent') ?? null,
+      metadata: { appointmentId: id },
+    });
+    return payment;
   }
 
   @Post('appointments/:id/cancel')

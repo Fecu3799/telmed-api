@@ -893,7 +893,14 @@ export function LobbyPage() {
               </button>
             </div>
           )}
-          <div style={{ marginTop: '12px' }}>
+          <div
+            style={{
+              marginTop: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
             <button
               onClick={() => navigate('/patient-files')}
               style={{
@@ -902,6 +909,15 @@ export function LobbyPage() {
               }}
             >
               📁 Biblioteca de Archivos
+            </button>
+            <button
+              onClick={() => navigate('/appointments')}
+              style={{
+                ...buttonStyle,
+                backgroundColor: '#007bff',
+              }}
+            >
+              Mis Turnos
             </button>
           </div>
         </div>
@@ -941,7 +957,14 @@ export function LobbyPage() {
               </button>
             </div>
           )}
-          <div style={{ marginTop: '16px' }}>
+          <div
+            style={{
+              marginTop: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
             <button
               onClick={() => navigate('/doctor-availability')}
               style={{
@@ -950,6 +973,15 @@ export function LobbyPage() {
               }}
             >
               Mi Disponibilidad
+            </button>
+            <button
+              onClick={() => navigate('/appointments')}
+              style={{
+                ...buttonStyle,
+                backgroundColor: '#007bff',
+              }}
+            >
+              Mis Turnos
             </button>
           </div>
         </div>

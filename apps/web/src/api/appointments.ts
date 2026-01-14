@@ -120,6 +120,47 @@ export async function listPatientAppointments(
 }
 
 /**
+ * List appointments for current doctor
+ * @param from - Start date/time in ISO UTC (required)
+ * @param to - End date/time in ISO UTC (required)
+ * @param page - Page number (1-based, default: 1)
+ * @param limit - Items per page (default: 20)
+ */
+export async function listDoctorAppointments(
+  from: string,
+  to: string,
+  page = 1,
+  limit = 20,
+): Promise<AppointmentsResponse> {
+  const params = new URLSearchParams();
+  params.append('from', from);
+  params.append('to', to);
+  params.append('page', String(page));
+  params.append('limit', String(limit));
+  const url = `${endpoints.appointments.listDoctor}?${params.toString()}`;
+  return http<AppointmentsResponse>(url);
+}
+
+/**
+ * Request payment checkout for an appointment
+ * @param appointmentId - The appointment ID
+ * @param idempotencyKey - Optional idempotency key for deduplication
+ */
+export async function payAppointment(
+  appointmentId: string,
+  idempotencyKey?: string,
+): Promise<PaymentCheckout> {
+  const headers: Record<string, string> = {};
+  if (idempotencyKey) {
+    headers['Idempotency-Key'] = idempotencyKey;
+  }
+  return http<PaymentCheckout>(endpoints.appointments.pay(appointmentId), {
+    method: 'POST',
+    headers,
+  });
+}
+
+/**
  * Cancel an appointment
  * @param appointmentId - The appointment ID
  * @param reason - Optional cancellation reason
