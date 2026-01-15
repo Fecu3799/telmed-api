@@ -22,6 +22,7 @@ import { ConsultationsModule } from './modules/consultations/consultations.modul
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ChatsModule } from './modules/chats/chats.module';
 import { PatientFilesModule } from './modules/patient-files/patient-files.module';
+import { GeoModule } from './modules/geo/geo.module';
 import { ClockModule } from './common/clock/clock.module';
 import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
@@ -113,6 +114,7 @@ import { BenchmarkThrottlerGuard } from './common/guards/benchmark-throttler.gua
     ConsultationsModule,
     ChatsModule,
     PatientFilesModule,
+    GeoModule,
   ],
   controllers: [AppController],
   providers: [

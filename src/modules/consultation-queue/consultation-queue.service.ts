@@ -31,6 +31,7 @@ import { CancelQueueDto } from './dto/cancel-queue.dto';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
 import { RejectQueueDto } from './dto/reject-queue.dto';
+import { GeoEmergencyCoordinator } from '../geo/geo-emergency-coordinator.service';
 
 @Injectable()
 export class ConsultationQueueService {
@@ -45,6 +46,7 @@ export class ConsultationQueueService {
     @Inject(forwardRef(() => LiveKitService))
     private readonly livekitService: LiveKitService,
     @Inject(CLOCK) private readonly clock: Clock,
+    private readonly geoEmergencyCoordinator: GeoEmergencyCoordinator,
   ) {}
 
   async createQueue(actor: Actor, dto: CreateQueueDto) {
@@ -249,16 +251,36 @@ export class ConsultationQueueService {
       throw new ConflictException('Payment already initialized');
     }
 
-    return this.prisma.consultationQueueItem.update({
-      where: { id: queueItemId },
-      data: {
-        status: ConsultationQueueStatus.accepted,
-        acceptedAt: this.clock.now(),
-        acceptedBy: actor.id,
-        paymentStatus: ConsultationQueuePaymentStatus.pending,
-        paymentExpiresAt: this.buildPaymentExpiry(),
-      },
-    });
+    const geoClaim =
+      await this.geoEmergencyCoordinator.reserveAcceptance(queueItemId);
+
+    try {
+      const updated = await this.prisma.consultationQueueItem.update({
+        where: { id: queueItemId },
+        data: {
+          status: ConsultationQueueStatus.accepted,
+          acceptedAt: this.clock.now(),
+          acceptedBy: actor.id,
+          paymentStatus: ConsultationQueuePaymentStatus.pending,
+          paymentExpiresAt: this.buildPaymentExpiry(),
+        },
+      });
+
+      if (geoClaim) {
+        await this.geoEmergencyCoordinator.finalizeAcceptance(
+          geoClaim,
+          updated.id,
+          actor.id,
+        );
+      }
+
+      return updated;
+    } catch (error) {
+      if (geoClaim) {
+        await this.geoEmergencyCoordinator.releaseAcceptance(geoClaim);
+      }
+      throw error;
+    }
   }
 
   async rejectQueue(actor: Actor, queueItemId: string, dto: RejectQueueDto) {

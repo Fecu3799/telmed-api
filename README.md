@@ -30,6 +30,7 @@
 - Frontend API Contract (Scheduling): `docs/frontend/README.md`
 - Architecture Decisions: `docs/decisions/`
 - Payments config: set `MERCADOPAGO_MODE=sandbox` for dev/test, `MERCADOPAGO_MODE=live` for production.
+- Geo emergency quotas: `GEO_EMERGENCY_DAILY_LIMIT` (default 5) and `GEO_EMERGENCY_MONTHLY_LIMIT` (default 30).
 
 ## Project setup
 

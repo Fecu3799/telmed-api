@@ -1,15 +1,20 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { PaymentsModule } from '../payments/payments.module';
 import { ConsultationsModule } from '../consultations/consultations.module';
+import { GeoModule } from '../geo/geo.module';
 import { ConsultationQueueController } from './consultation-queue.controller';
 import { ConsultationQueueService } from './consultation-queue.service';
 import { ConsultationQueueAccessService } from './consultation-queue-access.service';
 
 @Module({
-  imports: [PaymentsModule, forwardRef(() => ConsultationsModule)],
+  imports: [
+    PaymentsModule,
+    forwardRef(() => ConsultationsModule),
+    forwardRef(() => GeoModule),
+  ],
   controllers: [ConsultationQueueController],
   providers: [ConsultationQueueService, ConsultationQueueAccessService],
-  exports: [ConsultationQueueAccessService],
+  exports: [ConsultationQueueAccessService, ConsultationQueueService],
 })
 export class ConsultationQueueModule {
   // ConsultationQueueService injects 'ConsultationEventsPublisher' from ConsultationsModule

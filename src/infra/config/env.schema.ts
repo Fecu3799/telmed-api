@@ -236,6 +236,8 @@ export const envSchema = z.object({
       return num >= 0 && num <= 1 ? num : 1.0;
     }, z.number().min(0).max(1))
     .default(1.0),
+  GEO_EMERGENCY_DAILY_LIMIT: z.coerce.number().int().positive().default(5),
+  GEO_EMERGENCY_MONTHLY_LIMIT: z.coerce.number().int().positive().default(30),
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;
