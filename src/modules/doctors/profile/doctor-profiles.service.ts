@@ -1,17 +1,27 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
+import {
+  GEO_GEOCODER,
+  type GeoGeocodingService,
+} from '../../geo/geo-geocoding.service';
 import { DoctorProfilePatchDto } from './dto/doctor-profile-patch.dto';
 import { DoctorProfilePutDto } from './dto/doctor-profile-put.dto';
 import { DoctorSpecialtiesPutDto } from './dto/doctor-specialties-put.dto';
+import { LocationDto } from './dto/location.dto';
 
 @Injectable()
 export class DoctorProfilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(GEO_GEOCODER)
+    private readonly geocoding: GeoGeocodingService,
+  ) {}
 
   async getProfile(userId: string) {
     const profile = await this.prisma.doctorProfile.findUnique({
@@ -182,6 +192,19 @@ export class DoctorProfilesService {
     return this.getSpecialties(userId);
   }
 
+  async updateLocation(userId: string, dto: LocationDto) {
+    const existing = await this.prisma.doctorProfile.findUnique({
+      where: { userId },
+      select: { userId: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    await this.setLocation(userId, dto.lat, dto.lng);
+    return this.getProfile(userId);
+  }
+
   private async getLocation(userId: string) {
     const rows = await this.prisma.$queryRaw<
       { lat: number | null; lng: number | null }[]
@@ -211,5 +234,21 @@ export class DoctorProfilesService {
         WHERE user_id = ${userId}
       `,
     );
+
+    try {
+      const resolved = await this.geocoding.reverseGeocode(lat, lng);
+      if (resolved) {
+        await this.prisma.doctorProfile.update({
+          where: { userId },
+          data: {
+            city: resolved.city,
+            region: resolved.region,
+            countryCode: resolved.countryCode,
+          },
+        });
+      }
+    } catch {
+      // Avoid failing location updates when geocoding is unavailable.
+    }
   }
 }

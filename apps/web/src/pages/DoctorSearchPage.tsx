@@ -7,11 +7,16 @@ import {
   type DoctorSearchParams,
 } from '../api/doctor-search';
 import { getSpecialties, type Specialty } from '../api/specialties';
+import { createGeoEmergency } from '../api/geo';
 import { type ProblemDetails } from '../api/http';
+import {
+  getStoredPatientLocation,
+  setStoredPatientLocation,
+} from '../utils/patient-location';
 
 export function DoctorSearchPage() {
   const navigate = useNavigate();
-  const { getActiveToken } = useAuth();
+  const { getActiveToken, activeRole } = useAuth();
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,6 +24,7 @@ export function DoctorSearchPage() {
   const [doctors, setDoctors] = useState<DoctorSearchItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ProblemDetails | null>(null);
+  const [emergencyMessage, setEmergencyMessage] = useState<string | null>(null);
 
   // Pagination state (cursor-based, but we track "page" conceptually)
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -160,6 +166,84 @@ export function DoctorSearchPage() {
     });
   };
 
+  const handleSendEmergency = async (doctor: DoctorSearchItem) => {
+    if (!getActiveToken()) {
+      return;
+    }
+    if (activeRole !== 'patient') {
+      setError({
+        status: 422,
+        detail: 'Solo pacientes pueden enviar emergencias',
+      });
+      return;
+    }
+
+    setEmergencyMessage(null);
+    setError(null);
+
+    let location = getStoredPatientLocation();
+    if (!location) {
+      if (!navigator.geolocation) {
+        setError({ status: 422, detail: 'Geolocalización no disponible' });
+        return;
+      }
+
+      const coords = await new Promise<{ lat: number; lng: number } | null>(
+        (resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) =>
+              resolve({
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 5000 },
+          );
+        },
+      );
+
+      if (!coords) {
+        setError({ status: 422, detail: 'No se pudo obtener la ubicación' });
+        return;
+      }
+      location = coords;
+      setStoredPatientLocation(coords);
+    }
+
+    const reason = window.prompt('Motivo de la emergencia')?.trim();
+    if (!reason || reason.length < 2) {
+      setError({ status: 422, detail: 'El motivo es obligatorio' });
+      return;
+    }
+
+    try {
+      const response = await createGeoEmergency({
+        doctorIds: [doctor.doctorUserId],
+        patientLocation: location,
+        note: reason,
+      });
+      setEmergencyMessage(`Emergencia enviada (grupo ${response.groupId})`);
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        console.error(
+          '[geo] emergency failed:',
+          apiError.problemDetails.title,
+          apiError.problemDetails.detail,
+        );
+      }
+      setError(
+        apiError.problemDetails || {
+          status: apiError.status || 500,
+          detail: 'No se pudo enviar la emergencia',
+        },
+      );
+    }
+  };
+
   // Check if 401/403 -> redirect to login
   useEffect(() => {
     if (error && (error.status === 401 || error.status === 403)) {
@@ -282,6 +366,21 @@ export function DoctorSearchPage() {
         </div>
       )}
 
+      {emergencyMessage && (
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: '#e6f7ea',
+            border: '1px solid #b5e3c1',
+            borderRadius: '4px',
+            color: '#2a7a3b',
+          }}
+        >
+          {emergencyMessage}
+        </div>
+      )}
+
       {/* Loading state */}
       {loading && (
         <div style={{ textAlign: 'center', padding: '24px' }}>Cargando...</div>
@@ -370,6 +469,23 @@ export function DoctorSearchPage() {
                   >
                     Ver Perfil
                   </button>
+                  {activeRole === 'patient' && (
+                    <button
+                      onClick={() => void handleSendEmergency(doctor)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 16px',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        marginTop: '8px',
+                      }}
+                    >
+                      Enviar emergencia
+                    </button>
+                  )}
                 </div>
               );
             })}

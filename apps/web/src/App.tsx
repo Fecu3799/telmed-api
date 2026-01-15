@@ -14,6 +14,8 @@ import { DoctorPatientDetailPage } from './pages/DoctorPatientDetailPage';
 import { DoctorPatientFilesPage } from './pages/DoctorPatientFilesPage';
 import { DoctorPatientHistoryPage } from './pages/DoctorPatientHistoryPage';
 import { AppointmentsPage } from './pages/AppointmentsPage';
+import { DoctorLocationPage } from './pages/DoctorLocationPage';
+import { GeoNearbyPage } from './pages/GeoNearbyPage';
 
 // Lazy load RoomPage to reduce initial bundle size (LiveKit is large)
 const RoomPage = lazy(() =>
@@ -83,10 +85,26 @@ function App() {
             }
           />
           <Route
+            path="/doctor-location"
+            element={
+              <PrivateRoute>
+                <DoctorLocationPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/doctor-patients"
             element={
               <PrivateRoute>
                 <DoctorPatientsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/geo-nearby"
+            element={
+              <PrivateRoute>
+                <GeoNearbyPage />
               </PrivateRoute>
             }
           />

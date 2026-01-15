@@ -19,6 +19,7 @@ export const endpoints = {
   doctorProfile: {
     get: '/doctors/me/profile',
     put: '/doctors/me/profile',
+    location: '/doctors/me/location',
   },
   // Doctor Patients
   doctorPatients: {
@@ -55,6 +56,13 @@ export const endpoints = {
   // Doctor Search
   doctorSearch: {
     search: '/doctors/search',
+  },
+  geo: {
+    online: '/doctors/me/geo/online',
+    ping: '/doctors/me/geo/ping',
+    offline: '/doctors/me/geo/offline',
+    nearby: '/geo/doctors/nearby',
+    emergencies: '/geo/emergencies',
   },
   // Specialties
   specialties: {

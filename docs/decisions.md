@@ -53,6 +53,8 @@
   - `JWT_REFRESH_SECRET`
 - Variables internas del workflow (solo CI):
   - `DATABASE_URL`, `DATABASE_URL_TEST`, `SHADOW_DATABASE_URL`
-  - `REDIS_URL`, `APP_ENV`, `NODE_ENV`, `THROTTLE_ENABLED`
+- `REDIS_URL`, `APP_ENV`, `NODE_ENV`, `THROTTLE_ENABLED`
+- `GEO_GEOCODER_PROVIDER`, `GEO_GEOCODER_TIMEOUT_MS`, `GEO_GEOCODER_USER_AGENT`
+- `GEO_EMERGENCY_DAILY_LIMIT`, `GEO_EMERGENCY_MONTHLY_LIMIT`
 - Nota GitGuardian:
   - El usuario/password de Postgres en CI no es prod; marcar el alerta como resolved/ignored en GitGuardian si es necesario.

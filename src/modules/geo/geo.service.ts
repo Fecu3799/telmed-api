@@ -138,6 +138,9 @@ export class GeoService {
           currency: profile.currency,
           verificationStatus: profile.verificationStatus,
           distanceMeters: pair.distanceMeters,
+          city: profile.city ?? null,
+          region: profile.region ?? null,
+          countryCode: profile.countryCode ?? null,
           specialties: specialtiesByDoctor.get(profile.userId) ?? [],
         };
       });
@@ -336,6 +339,9 @@ export class GeoService {
       currency: string;
       verificationStatus: string;
       distanceMeters: number;
+      city: string | null;
+      region: string | null;
+      countryCode: string | null;
       specialties: Array<{ id: string; name: string }>;
     }>,
     page: number,
@@ -386,6 +392,9 @@ export class GeoService {
         priceCents: true,
         currency: true,
         verificationStatus: true,
+        city: true,
+        region: true,
+        countryCode: true,
         user: { select: { displayName: true } },
       },
     });

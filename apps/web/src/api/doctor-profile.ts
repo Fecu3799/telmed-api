@@ -2,7 +2,6 @@ import { http } from './http';
 import { endpoints } from './endpoints';
 
 export interface DoctorProfile {
-  id: string;
   userId: string;
   firstName: string;
   lastName: string;
@@ -10,10 +9,12 @@ export interface DoctorProfile {
   priceCents: number;
   currency: string;
   location: {
-    latitude: number;
-    longitude: number;
-    addressText: string | null;
+    lat: number;
+    lng: number;
   } | null;
+  city?: string | null;
+  region?: string | null;
+  countryCode?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -26,9 +27,8 @@ export interface DoctorProfilePut {
   priceCents: number;
   currency?: string;
   location?: {
-    latitude: number;
-    longitude: number;
-    addressText?: string | null;
+    lat: number;
+    lng: number;
   } | null;
 }
 

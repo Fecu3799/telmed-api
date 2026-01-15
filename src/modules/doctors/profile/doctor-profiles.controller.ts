@@ -22,6 +22,7 @@ import { DoctorSpecialtiesResponseDto } from './docs/doctor-specialty.dto';
 import { DoctorProfilePatchDto } from './dto/doctor-profile-patch.dto';
 import { DoctorProfilePutDto } from './dto/doctor-profile-put.dto';
 import { DoctorSpecialtiesPutDto } from './dto/doctor-specialties-put.dto';
+import { LocationDto } from './dto/location.dto';
 import { DoctorProfilesService } from './doctor-profiles.service';
 
 @ApiTags('doctors')
@@ -69,6 +70,18 @@ export class DoctorProfilesController {
     @Body() dto: DoctorProfilePatchDto,
   ) {
     return this.profilesService.patchProfile(actor.id, dto);
+  }
+
+  @Put('location')
+  @ApiOperation({ summary: 'Update current doctor location' })
+  @ApiBody({ type: LocationDto })
+  @ApiOkResponse({ type: DoctorProfileDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async putLocation(@CurrentUser() actor: Actor, @Body() dto: LocationDto) {
+    return this.profilesService.updateLocation(actor.id, dto);
   }
 
   @Get('specialties')

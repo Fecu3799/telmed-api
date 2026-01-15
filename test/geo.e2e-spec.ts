@@ -149,6 +149,20 @@ describe('Geo emergency flows (e2e)', () => {
       .expect(422);
   });
 
+  it('stores geocoded fields when setting location', async () => {
+    const token = await registerAndLogin(app, 'doctor');
+    await createDoctorProfile(app, token, { lat: -34.6037, lng: -58.3816 });
+
+    const profileResponse = await request(httpServer(app))
+      .get('/api/v1/doctors/me/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(profileResponse.body.city).toBe('Test City');
+    expect(profileResponse.body.region).toBe('Test Region');
+    expect(profileResponse.body.countryCode).toBe('AR');
+  });
+
   it('online/ping/offline updates Redis presence', async () => {
     const token = await registerAndLogin(app, 'doctor');
     await createDoctorProfile(app, token, { lat: -34.6037, lng: -58.3816 });
@@ -208,6 +222,9 @@ describe('Geo emergency flows (e2e)', () => {
     expect(nearbyResponse.body.items).toHaveLength(1);
     expect(nearbyResponse.body.items[0].doctorUserId).toBe(doctorId);
     expect(nearbyResponse.body.items[0]).not.toHaveProperty('location');
+    expect(nearbyResponse.body.items[0].city).toBe('Test City');
+    expect(nearbyResponse.body.items[0].region).toBe('Test Region');
+    expect(nearbyResponse.body.items[0].countryCode).toBe('AR');
 
     await request(httpServer(app))
       .post('/api/v1/doctors/me/geo/offline')
@@ -333,5 +350,38 @@ describe('Geo emergency flows (e2e)', () => {
       )
       .set('Authorization', `Bearer ${doctorTokenB}`)
       .expect(409);
+  });
+
+  it('geo emergencies enforce quota limits', async () => {
+    process.env.GEO_EMERGENCY_DAILY_LIMIT = '1';
+    process.env.GEO_EMERGENCY_MONTHLY_LIMIT = '1';
+
+    const patientToken = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patientToken);
+
+    const doctorToken = await registerAndLogin(app, 'doctor');
+    await createDoctorProfile(app, doctorToken, {
+      lat: -34.6037,
+      lng: -58.3816,
+    });
+    const doctorId = await getUserId(app, doctorToken);
+
+    await request(httpServer(app))
+      .post('/api/v1/geo/emergencies')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        doctorIds: [doctorId],
+        patientLocation: { lat: -34.6037, lng: -58.3816 },
+      })
+      .expect(201);
+
+    await request(httpServer(app))
+      .post('/api/v1/geo/emergencies')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        doctorIds: [doctorId],
+        patientLocation: { lat: -34.6037, lng: -58.3816 },
+      })
+      .expect(429);
   });
 });

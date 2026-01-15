@@ -36,6 +36,15 @@ export class DoctorProfileDto {
   @ApiPropertyOptional({ type: DoctorProfileLocationDto })
   location?: DoctorProfileLocationDto | null;
 
+  @ApiPropertyOptional({ example: 'Buenos Aires' })
+  city?: string | null;
+
+  @ApiPropertyOptional({ example: 'Buenos Aires' })
+  region?: string | null;
+
+  @ApiPropertyOptional({ example: 'AR' })
+  countryCode?: string | null;
+
   @ApiProperty({ example: '2025-01-01T12:00:00.000Z' })
   createdAt!: string;
 

@@ -33,6 +33,15 @@ export class GeoNearbyDoctorDto {
   @ApiProperty({ example: 1200 })
   distanceMeters!: number;
 
+  @ApiPropertyOptional({ example: 'Buenos Aires' })
+  city?: string | null;
+
+  @ApiPropertyOptional({ example: 'Buenos Aires' })
+  region?: string | null;
+
+  @ApiPropertyOptional({ example: 'AR' })
+  countryCode?: string | null;
+
   @ApiProperty({ type: [GeoNearbySpecialtyDto] })
   specialties!: GeoNearbySpecialtyDto[];
 }

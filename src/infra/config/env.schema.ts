@@ -41,6 +41,11 @@ export const envSchema = z.object({
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive(),
 
   REDIS_URL: z.string().min(1),
+  GEO_GEOCODER_PROVIDER: z
+    .enum(['nominatim', 'stub'])
+    .default(isTestEnv ? 'stub' : 'nominatim'),
+  GEO_GEOCODER_TIMEOUT_MS: z.coerce.number().int().min(100).default(2500),
+  GEO_GEOCODER_USER_AGENT: z.string().min(1).default('telmed-api'),
   MERCADOPAGO_ACCESS_TOKEN: isTestEnv
     ? z.string().default('test_mp_access_token')
     : z.string().min(1),
