@@ -45,6 +45,12 @@ export const endpoints = {
     get: (consultationId: string) => `/consultations/${consultationId}`,
     livekitToken: (consultationId: string) =>
       `/consultations/${consultationId}/livekit-token`,
+    close: (consultationId: string) => `/consultations/${consultationId}/close`,
+    active: '/consultations/me/active',
+  },
+  emergencies: {
+    doctor: '/doctors/me/emergencies',
+    patient: '/patients/me/emergencies',
   },
   // Chats
   chats: {
@@ -61,6 +67,7 @@ export const endpoints = {
     online: '/doctors/me/geo/online',
     ping: '/doctors/me/geo/ping',
     offline: '/doctors/me/geo/offline',
+    status: '/doctors/me/geo/status',
     nearby: '/geo/doctors/nearby',
     emergencies: '/geo/emergencies',
   },

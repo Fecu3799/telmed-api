@@ -20,6 +20,7 @@ import { CLOCK, type Clock } from '../../common/clock/clock';
 import type { Actor } from '../../common/types/actor.type';
 import { PaymentsService } from '../payments/payments.service';
 import { PatientsIdentityService } from '../patients-identity/patients-identity.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -35,6 +36,7 @@ export class AppointmentsService {
     private readonly availabilityService: DoctorAvailabilityService,
     private readonly paymentsService: PaymentsService,
     private readonly patientsIdentityService: PatientsIdentityService,
+    private readonly notifications: NotificationsService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -194,13 +196,18 @@ export class AppointmentsService {
       },
     );
 
-    return {
+    const response = {
       appointment: this.toAppointmentResponse({
         ...appointment,
         patientUserId,
       }),
       payment: this.toPaymentResponse(payment),
     };
+
+    // Notify both doctor and patient about new appointment.
+    this.notifications.appointmentsChanged([doctorUserId, patientUserId]);
+
+    return response;
   }
 
   async listPatientAppointments(actor: Actor, query: ListAppointmentsQueryDto) {
@@ -475,6 +482,13 @@ export class AppointmentsService {
         cancellationReason: dto.reason ?? null,
       },
     });
+
+    // Notify both doctor and patient about appointment changes.
+    this.notifications.appointmentsChanged([
+      appointment.doctorUserId,
+      appointment.patient.userId,
+    ]);
+
     return this.toAppointmentResponse({
       ...updated,
       patientUserId: appointment.patient.userId,

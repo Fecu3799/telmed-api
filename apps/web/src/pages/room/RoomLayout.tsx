@@ -11,7 +11,17 @@ import { Track } from 'livekit-client';
  * RoomLayout: All components that require LiveKit room context.
  * This component MUST be rendered inside <LiveKitRoom>.
  */
-export function RoomLayout() {
+type RoomLayoutProps = {
+  activeRole: 'doctor' | 'patient' | null;
+  onCloseConsultation?: () => void;
+  closing?: boolean;
+};
+
+export function RoomLayout({
+  activeRole,
+  onCloseConsultation,
+  closing = false,
+}: RoomLayoutProps) {
   // Get all camera tracks (remote and local)
   const tracks = useTracks(
     [{ source: Track.Source.Camera, withPlaceholder: true }],
@@ -60,6 +70,7 @@ export function RoomLayout() {
         width: '100%',
         height: '100%',
         overflow: 'hidden',
+        position: 'relative',
       }}
     >
       {/* Video area: main stage with remote video + local PiP */}
@@ -218,87 +229,40 @@ export function RoomLayout() {
           </div>
         </div>
 
-        {/* Notes / HCE Section */}
-        <div
-          style={{
-            padding: '20px',
-            borderBottom: '1px solid #e5e5e5',
-            flex: 1,
-          }}
-        >
-          <h3
-            style={{
-              margin: '0 0 12px 0',
-              fontSize: '18px',
-              fontWeight: '600',
-              color: '#171717',
-            }}
-          >
-            Notes / HCE
-          </h3>
-          <textarea
-            placeholder="Enter clinical notes here..."
-            style={{
-              width: '100%',
-              minHeight: '200px',
-              padding: '12px',
-              border: '1px solid #d4d4d4',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontFamily: 'inherit',
-              resize: 'vertical',
-            }}
-          />
-        </div>
-
-        {/* Files Section */}
-        <div
-          style={{
-            padding: '20px',
-            borderBottom: '1px solid #e5e5e5',
-          }}
-        >
-          <h3
-            style={{
-              margin: '0 0 12px 0',
-              fontSize: '18px',
-              fontWeight: '600',
-              color: '#171717',
-            }}
-          >
-            Files
-          </h3>
+        {/* Notes / HCE Section (doctor only) */}
+        {activeRole === 'doctor' && (
           <div
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
+              padding: '20px',
+              borderBottom: '1px solid #e5e5e5',
+              flex: 1,
             }}
           >
-            <div
+            <h3
               style={{
-                padding: '12px',
-                backgroundColor: '#fafafa',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#737373',
+                margin: '0 0 12px 0',
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#171717',
               }}
             >
-              [File upload placeholder]
-            </div>
-            <div
+              Notes / HCE
+            </h3>
+            <textarea
+              placeholder="Enter clinical notes here..."
               style={{
+                width: '100%',
+                minHeight: '200px',
                 padding: '12px',
-                backgroundColor: '#fafafa',
+                border: '1px solid #d4d4d4',
                 borderRadius: '6px',
                 fontSize: '14px',
-                color: '#737373',
+                fontFamily: 'inherit',
+                resize: 'vertical',
               }}
-            >
-              [File list placeholder]
-            </div>
+            />
           </div>
-        </div>
+        )}
 
         {/* Actions Section */}
         <div
@@ -324,20 +288,28 @@ export function RoomLayout() {
               gap: '8px',
             }}
           >
-            <button
-              style={{
-                padding: '10px 16px',
-                border: 'none',
-                borderRadius: '6px',
-                backgroundColor: '#dc2626',
-                color: 'white',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-              }}
-            >
-              End Consultation
-            </button>
+            {activeRole === 'doctor' && onCloseConsultation && (
+              <button
+                onClick={onCloseConsultation}
+                disabled={closing}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  zIndex: 50,
+                  padding: '10px 16px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  backgroundColor: closing ? '#888' : '#dc2626',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: closing ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {closing ? 'Finalizando...' : 'Terminar consulta'}
+              </button>
+            )}
             <button
               style={{
                 padding: '10px 16px',

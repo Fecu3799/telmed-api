@@ -40,6 +40,7 @@ import type { Actor } from '../../common/types/actor.type';
 import { ConsultationDto } from './docs/consultation.dto';
 import { ConsultationAdminDto } from './docs/consultation-admin.dto';
 import { LiveKitTokenDto } from './docs/livekit-token.dto';
+import { ActiveConsultationResponseDto } from './docs/active-consultation.dto';
 // Removed: ConsultationMessagesResponseDto, ConsultationMessageDto (chat messages now handled by chats module)
 import {
   ConsultationFileDownloadDto,
@@ -53,6 +54,7 @@ import { ConsultationRealtimeService } from './consultation-realtime.service';
 import { ConsultationFilePrepareDto } from './dto/consultation-file-prepare.dto';
 import { ConsultationFileConfirmDto } from './dto/consultation-file-confirm.dto';
 import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @ApiTags('consultations')
 @Controller()
@@ -62,6 +64,7 @@ export class ConsultationsController {
     private readonly auditService: AuditService,
     private readonly consultationRealtimeService: ConsultationRealtimeService,
     private readonly consultationRealtimeGateway: ConsultationRealtimeGateway,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Post('appointments/:appointmentId/consultation')
@@ -186,7 +189,35 @@ export class ConsultationsController {
       consultation.id,
       consultation.closedAt ?? new Date(),
     );
+    this.notifications.consultationsChanged([
+      consultation.doctorUserId,
+      consultation.patientUserId,
+    ]);
     return this.withConsultationExtras(consultation);
+  }
+
+  @Get('consultations/me/active')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get active consultation for current user' })
+  @ApiOkResponse({ type: ActiveConsultationResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async getActive(@CurrentUser() actor: Actor) {
+    const active = await this.consultationsService.getActiveForActor(actor);
+    if (!active) {
+      return { consultation: null };
+    }
+    return {
+      consultation: {
+        consultationId: active.id,
+        queueItemId: active.queueItemId ?? null,
+        appointmentId: active.appointmentId ?? null,
+        status: active.status,
+      },
+    };
   }
 
   @Post('consultations/:id/livekit-token')

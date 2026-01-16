@@ -363,6 +363,44 @@ export class DoctorAvailabilityService {
     }
   }
 
+  async isWithinScheduleNow(doctorUserId: string) {
+    const config = await this.getSchedulingConfig(doctorUserId);
+    const now = this.clock.now();
+    const dateStr = this.formatDateInTimeZone(now, config.timezone);
+    const weekday = this.getWeekday(dateStr, config.timezone);
+
+    const rules = await this.prisma.doctorAvailabilityRule.findMany({
+      where: { userId: doctorUserId, isActive: true, dayOfWeek: weekday },
+    });
+
+    if (rules.length === 0) {
+      return false;
+    }
+
+    const exception = await this.prisma.doctorAvailabilityException.findFirst({
+      where: {
+        userId: doctorUserId,
+        date: this.parseDate(dateStr),
+      },
+    });
+
+    if (
+      exception &&
+      exception.type === DoctorAvailabilityExceptionType.closed
+    ) {
+      return false;
+    }
+
+    const windows = this.resolveWindows(exception ?? undefined, rules);
+    const minutesNow = this.getMinutesInTimeZone(now, config.timezone);
+
+    return windows.some((window) => {
+      const start = this.toMinutes(window.startTime);
+      const end = this.toMinutes(window.endTime);
+      return minutesNow >= start && minutesNow < end;
+    });
+  }
+
   private formatDateInTimeZone(date: Date, timeZone: string) {
     const formatter = new Intl.DateTimeFormat('en-CA', {
       timeZone,
@@ -390,6 +428,23 @@ export class DoctorAvailabilityService {
       Sat: 6,
     };
     return map[weekday];
+  }
+
+  private getMinutesInTimeZone(date: Date, timeZone: string) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    const map: Record<string, string> = {};
+    for (const part of parts) {
+      map[part.type] = part.value;
+    }
+    const hour = Number(map.hour ?? '0');
+    const minute = Number(map.minute ?? '0');
+    return hour * 60 + minute;
   }
 
   private getDateRange(from: string, to: string) {

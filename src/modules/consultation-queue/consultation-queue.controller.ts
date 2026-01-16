@@ -40,12 +40,14 @@ import {
   ConsultationQueueConsultationDto,
   ConsultationQueueItemDto,
 } from './docs/consultation-queue.dto';
+import { EmergenciesResponseDto } from './docs/emergency-list.dto';
 import { ConsultationQueueService } from './consultation-queue.service';
 import { PaymentCheckoutDto } from '../payments/docs/payment.dto';
 import { CancelQueueDto } from './dto/cancel-queue.dto';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
 import { RejectQueueDto } from './dto/reject-queue.dto';
+import { ListEmergenciesQueryDto } from './dto/list-emergencies-query.dto';
 
 @ApiTags('consultations')
 @Controller()
@@ -258,6 +260,41 @@ export class ConsultationQueueController {
     return this.consultationQueueService.listQueueForDoctor(
       actor,
       includeClosedFlag,
+    );
+  }
+
+  @Get('doctors/me/emergencies')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List doctor emergencies' })
+  @ApiOkResponse({ type: EmergenciesResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  listDoctorEmergencies(
+    @CurrentUser() actor: Actor,
+    @Query() query: ListEmergenciesQueryDto,
+  ) {
+    return this.consultationQueueService.listEmergenciesForDoctor(actor, query);
+  }
+
+  @Get('patients/me/emergencies')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List patient emergencies' })
+  @ApiOkResponse({ type: EmergenciesResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  listPatientEmergencies(
+    @CurrentUser() actor: Actor,
+    @Query() query: ListEmergenciesQueryDto,
+  ) {
+    return this.consultationQueueService.listEmergenciesForPatient(
+      actor,
+      query,
     );
   }
 

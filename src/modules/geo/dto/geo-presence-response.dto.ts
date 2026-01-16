@@ -12,3 +12,8 @@ export class GeoPresenceOfflineResponseDto {
   @ApiProperty({ example: true })
   success!: boolean;
 }
+
+export class GeoPresenceStatusResponseDto {
+  @ApiProperty({ example: true })
+  online!: boolean;
+}

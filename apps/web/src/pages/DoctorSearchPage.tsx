@@ -25,6 +25,17 @@ export function DoctorSearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ProblemDetails | null>(null);
   const [emergencyMessage, setEmergencyMessage] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [lastEmergencyRequest, setLastEmergencyRequest] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [lastEmergencyResponse, setLastEmergencyResponse] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [lastEmergencyError, setLastEmergencyError] =
+    useState<ProblemDetails | null>(null);
 
   // Pagination state (cursor-based, but we track "page" conceptually)
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -217,11 +228,19 @@ export function DoctorSearchPage() {
     }
 
     try {
+      const requestPayload = {
+        doctorIds: [doctor.doctorUserId],
+        patientLocation: location,
+        note: reason,
+      };
       const response = await createGeoEmergency({
         doctorIds: [doctor.doctorUserId],
         patientLocation: location,
         note: reason,
       });
+      setLastEmergencyRequest(requestPayload);
+      setLastEmergencyResponse(response);
+      setLastEmergencyError(null);
       setEmergencyMessage(`Emergencia enviada (grupo ${response.groupId})`);
     } catch (err) {
       const apiError = err as {
@@ -235,12 +254,18 @@ export function DoctorSearchPage() {
           apiError.problemDetails.detail,
         );
       }
-      setError(
-        apiError.problemDetails || {
-          status: apiError.status || 500,
-          detail: 'No se pudo enviar la emergencia',
-        },
-      );
+      const fallbackError = apiError.problemDetails || {
+        status: apiError.status || 500,
+        detail: 'No se pudo enviar la emergencia',
+      };
+      setLastEmergencyRequest({
+        doctorIds: [doctor.doctorUserId],
+        patientLocation: location,
+        note: reason,
+      });
+      setLastEmergencyResponse(null);
+      setLastEmergencyError(fallbackError);
+      setError(fallbackError);
     }
   };
 
@@ -265,19 +290,34 @@ export function DoctorSearchPage() {
         }}
       >
         <h1 style={{ margin: 0 }}>Buscar Médicos</h1>
-        <button
-          onClick={() => navigate('/lobby')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Volver al Lobby
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setShowDebug((value) => !value)}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            {showDebug ? 'Ocultar debug' : 'Debug'}
+          </button>
+          <button
+            onClick={() => navigate('/lobby')}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Volver al Lobby
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -378,6 +418,40 @@ export function DoctorSearchPage() {
           }}
         >
           {emergencyMessage}
+        </div>
+      )}
+
+      {showDebug && (
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: '#f8f9fa',
+            border: '1px solid #dee2e6',
+            borderRadius: '4px',
+          }}
+        >
+          <strong>Debug envio emergencia</strong>
+          <pre
+            style={{
+              marginTop: '8px',
+              padding: '8px',
+              backgroundColor: '#fff',
+              border: '1px solid #eee',
+              borderRadius: '4px',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {JSON.stringify(
+              {
+                request: lastEmergencyRequest,
+                response: lastEmergencyResponse,
+                error: lastEmergencyError,
+              },
+              null,
+              2,
+            )}
+          </pre>
         </div>
       )}
 

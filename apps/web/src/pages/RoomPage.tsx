@@ -6,7 +6,11 @@ import { type ProblemDetails } from '../api/http';
 import { useAuth } from '../auth/AuthContext';
 import { RoomLayout } from './room/RoomLayout';
 import { RoomErrorBoundary } from './room/RoomErrorBoundary';
-import { getConsultation, type Consultation } from '../api/consultations';
+import {
+  closeConsultation,
+  getConsultation,
+  type Consultation,
+} from '../api/consultations';
 import { getOrCreateThread, type ChatThread } from '../api/chats';
 import { ChatDrawer } from '../components/ChatDrawer';
 import { PatientFilesDrawer } from '../components/PatientFilesDrawer';
@@ -31,6 +35,7 @@ export function RoomPage() {
   const [consultation, setConsultation] = useState<Consultation | null>(null);
   const [chatThread, setChatThread] = useState<ChatThread | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
 
   const handleJoin = async (role: 'doctor' | 'patient') => {
     if (!consultationId) {
@@ -91,6 +96,28 @@ export function RoomPage() {
     setSelectedRole(null);
     setConnectionState('idle');
     hasAutoJoinedRef.current = false;
+  };
+
+  const handleCloseConsultation = async () => {
+    if (!consultationId || activeRole !== 'doctor') {
+      return;
+    }
+    setClosing(true);
+    setError(null);
+    try {
+      await closeConsultation(consultationId);
+      navigate('/lobby');
+    } catch (err) {
+      const apiError = err as { problemDetails?: ProblemDetails };
+      setError(
+        apiError.problemDetails || {
+          status: 500,
+          detail: 'No se pudo finalizar la consulta',
+        },
+      );
+    } finally {
+      setClosing(false);
+    }
   };
 
   // Auto-join for patient: when consultationId is available and role is patient
@@ -441,7 +468,11 @@ export function RoomPage() {
             }}
           >
             {/* All LiveKit-dependent components MUST be inside LiveKitRoom */}
-            <RoomLayout />
+            <RoomLayout
+              activeRole={activeRole}
+              onCloseConsultation={() => void handleCloseConsultation()}
+              closing={closing}
+            />
           </LiveKitRoom>
 
           {/* External status bar (outside LiveKitRoom, no LiveKit hooks) */}

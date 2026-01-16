@@ -11,6 +11,10 @@ export type GeoPresenceOfflineResponse = {
   success: boolean;
 };
 
+export type GeoPresenceStatusResponse = {
+  online: boolean;
+};
+
 export type GeoNearbyDoctor = {
   doctorUserId: string;
   displayName?: string | null;
@@ -90,6 +94,10 @@ export async function goOffline(): Promise<GeoPresenceOfflineResponse> {
   return http<GeoPresenceOfflineResponse>(endpoints.geo.offline, {
     method: 'POST',
   });
+}
+
+export async function getOnlineStatus(): Promise<GeoPresenceStatusResponse> {
+  return http<GeoPresenceStatusResponse>(endpoints.geo.status);
 }
 
 export async function getNearbyDoctors(

@@ -7,6 +7,9 @@ import {
   type PatientIdentity,
 } from '../api/patient-identity';
 import { getDoctorProfile, type DoctorProfile } from '../api/doctor-profile';
+import { getOnlineStatus, goOffline, goOnline, pingOnline } from '../api/geo';
+import { getActiveConsultation } from '../api/consultations';
+import { notificationsSocket } from '../api/notifications-socket';
 import { type ProblemDetails } from '../api/http';
 import { PatientIdentityModal } from '../components/PatientIdentityModal';
 import { DoctorProfileModal } from '../components/DoctorProfileModal';
@@ -48,6 +51,11 @@ export function LobbyPage() {
   );
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [presenceLoading, setPresenceLoading] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
+  const [activeConsultationId, setActiveConsultationId] = useState<
+    string | null
+  >(null);
 
   // Error states
   const [error, setError] = useState<ProblemDetails | null>(null);
@@ -115,6 +123,7 @@ export function LobbyPage() {
     const loadProfile = async () => {
       if (activeRole !== 'doctor' || !doctorToken) {
         setDoctorProfile(null);
+        setIsOnline(false);
         return;
       }
 
@@ -133,6 +142,111 @@ export function LobbyPage() {
 
     void loadProfile();
   }, [activeRole, doctorToken]);
+
+  useEffect(() => {
+    const loadPresenceStatus = async () => {
+      if (activeRole !== 'doctor' || !doctorToken) {
+        setIsOnline(false);
+        return;
+      }
+      try {
+        const status = await getOnlineStatus();
+        setIsOnline(status.online);
+      } catch (err) {
+        const apiError = err as {
+          problemDetails?: ProblemDetails;
+          status?: number;
+        };
+        setError(
+          apiError.problemDetails || {
+            status: apiError.status || 500,
+            detail: 'No se pudo cargar el estado online',
+          },
+        );
+        setIsOnline(false);
+      }
+    };
+
+    void loadPresenceStatus();
+  }, [activeRole, doctorToken]);
+
+  useEffect(() => {
+    const loadActiveConsultation = async () => {
+      if (!getActiveToken()) {
+        setActiveConsultationId(null);
+        return;
+      }
+      try {
+        const response = await getActiveConsultation();
+        setActiveConsultationId(response.consultation?.consultationId ?? null);
+      } catch {
+        setActiveConsultationId(null);
+      }
+    };
+
+    void loadActiveConsultation();
+  }, [activeRole, doctorToken, patientToken, getActiveToken]);
+
+  useEffect(() => {
+    const token = getActiveToken();
+    if (!token) {
+      notificationsSocket.disconnect();
+      return;
+    }
+
+    notificationsSocket.connect(token);
+    const handleConsultationsChanged = () => {
+      void (async () => {
+        try {
+          const response = await getActiveConsultation();
+          setActiveConsultationId(
+            response.consultation?.consultationId ?? null,
+          );
+        } catch {
+          setActiveConsultationId(null);
+        }
+      })();
+    };
+
+    notificationsSocket.onConsultationsChanged(handleConsultationsChanged);
+    return () => {
+      notificationsSocket.offConsultationsChanged(handleConsultationsChanged);
+      notificationsSocket.disconnect();
+    };
+  }, [getActiveToken]);
+
+  useEffect(() => {
+    if (activeRole !== 'doctor' || !isOnline) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(async () => {
+      try {
+        await pingOnline();
+      } catch (err) {
+        const apiError = err as {
+          problemDetails?: ProblemDetails;
+          status?: number;
+        };
+        if (apiError.problemDetails) {
+          console.error(
+            '[geo] ping failed:',
+            apiError.problemDetails.title,
+            apiError.problemDetails.detail,
+          );
+        }
+        setError(
+          apiError.problemDetails || {
+            status: apiError.status || 500,
+            detail: 'No se pudo mantener la presencia online',
+          },
+        );
+        setIsOnline(false);
+      }
+    }, 25000);
+
+    return () => clearInterval(interval);
+  }, [activeRole, isOnline]);
 
   const handleLoginDoctor = async () => {
     setError(null);
@@ -213,6 +327,47 @@ export function LobbyPage() {
     }
   };
 
+  const handleTogglePresence = async () => {
+    setPresenceLoading(true);
+    setError(null);
+    try {
+      if (!isOnline) {
+        await goOnline();
+        setIsOnline(true);
+      } else {
+        await goOffline();
+        setIsOnline(false);
+      }
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        console.error(
+          '[geo] presence update failed:',
+          apiError.problemDetails.title,
+          apiError.problemDetails.detail,
+        );
+      }
+      if (apiError.problemDetails?.status === 422) {
+        setError({
+          status: 422,
+          detail: 'Configurá tu ubicación primero',
+        });
+      } else {
+        setError(
+          apiError.problemDetails || {
+            status: apiError.status || 500,
+            detail: 'No se pudo actualizar la presencia',
+          },
+        );
+      }
+    } finally {
+      setPresenceLoading(false);
+    }
+  };
+
   const sectionStyle = {
     border: '1px solid #ddd',
     borderRadius: '8px',
@@ -257,6 +412,22 @@ export function LobbyPage() {
           >
             Buscar médicos
           </button>
+          {activeConsultationId && (
+            <button
+              onClick={() => navigate(`/room/${activeConsultationId}`)}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#007bff',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.9em',
+              }}
+            >
+              Entrar a consulta
+            </button>
+          )}
           <button
             onClick={() => navigate('/chats')}
             style={{
@@ -592,6 +763,20 @@ export function LobbyPage() {
               gap: '8px',
             }}
           >
+            <button
+              onClick={() => void handleTogglePresence()}
+              disabled={presenceLoading}
+              style={{
+                ...buttonStyle,
+                backgroundColor: isOnline ? '#dc3545' : '#28a745',
+              }}
+            >
+              {presenceLoading
+                ? 'Actualizando...'
+                : isOnline
+                  ? 'Pasar offline'
+                  : 'Pasar online'}
+            </button>
             <button
               onClick={() => navigate('/doctor-availability')}
               style={{

@@ -10,7 +10,7 @@ import {
 import type { LatLngLiteral, LeafletMouseEvent } from 'leaflet';
 import { useAuth } from '../auth/AuthContext';
 import { getDoctorProfile, type DoctorProfile } from '../api/doctor-profile';
-import { goOffline, goOnline, pingOnline, setDoctorLocation } from '../api/geo';
+import { setDoctorLocation } from '../api/geo';
 import { type ProblemDetails } from '../api/http';
 import { initLeafletIcons } from '../utils/leaflet';
 
@@ -35,13 +35,19 @@ function LocationMarker({
   return position ? <Marker position={position} /> : null;
 }
 
-function RecenterMap({ position }: { position: LatLngLiteral | null }) {
+function RecenterMap({
+  position,
+  zoom,
+}: {
+  position: LatLngLiteral | null;
+  zoom: number | null;
+}) {
   const map = useMap();
   useEffect(() => {
     if (position) {
-      map.setView(position, map.getZoom() || 13);
+      map.setView(position, zoom ?? (map.getZoom() || 13));
     }
-  }, [map, position]);
+  }, [map, position, zoom]);
   return null;
 }
 
@@ -52,10 +58,11 @@ export function DoctorLocationPage() {
   const [location, setLocation] = useState<LatLngLiteral | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchTouched, setSearchTouched] = useState(false);
+  const [recenterZoom, setRecenterZoom] = useState<number | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [presenceLoading, setPresenceLoading] = useState(false);
-  const [isOnline, setIsOnline] = useState(false);
   const [error, setError] = useState<ProblemDetails | null>(null);
   const debounceRef = useRef<number | null>(null);
 
@@ -102,6 +109,8 @@ export function DoctorLocationPage() {
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
+      setSearching(false);
+      setSearchTouched(false);
       return;
     }
 
@@ -110,10 +119,12 @@ export function DoctorLocationPage() {
     }
 
     debounceRef.current = window.setTimeout(async () => {
+      setSearching(true);
       try {
         const url = new URL('https://nominatim.openstreetmap.org/search');
-        url.searchParams.set('format', 'jsonv2');
         url.searchParams.set('q', searchQuery.trim());
+        url.searchParams.set('format', 'json');
+        url.searchParams.set('addressdetails', '1');
         url.searchParams.set('limit', '5');
         const response = await fetch(url.toString(), {
           headers: { 'Accept-Language': 'es' },
@@ -126,8 +137,11 @@ export function DoctorLocationPage() {
         setSearchResults(results);
       } catch {
         setSearchResults([]);
+      } finally {
+        setSearching(false);
+        setSearchTouched(true);
       }
-    }, 350);
+    }, 400);
 
     return () => {
       if (debounceRef.current) {
@@ -136,42 +150,12 @@ export function DoctorLocationPage() {
     };
   }, [searchQuery]);
 
-  useEffect(() => {
-    if (!isOnline) return;
-
-    const interval = window.setInterval(async () => {
-      try {
-        await pingOnline();
-      } catch (err) {
-        const apiError = err as {
-          problemDetails?: ProblemDetails;
-          status?: number;
-        };
-        if (apiError.problemDetails) {
-          console.error(
-            '[geo] ping failed:',
-            apiError.problemDetails.title,
-            apiError.problemDetails.detail,
-          );
-        }
-        setError(
-          apiError.problemDetails || {
-            status: apiError.status || 500,
-            detail: 'No se pudo mantener la presencia online',
-          },
-        );
-        setIsOnline(false);
-      }
-    }, 25000);
-
-    return () => clearInterval(interval);
-  }, [isOnline]);
-
   const handleSelectSearch = (result: NominatimResult) => {
     const lat = Number(result.lat);
     const lng = Number(result.lon);
     if (Number.isNaN(lat) || Number.isNaN(lng)) return;
     setLocation({ lat, lng });
+    setRecenterZoom(14);
     setSearchResults([]);
   };
 
@@ -205,38 +189,26 @@ export function DoctorLocationPage() {
     }
   };
 
-  const handleTogglePresence = async () => {
-    setPresenceLoading(true);
-    setError(null);
-    try {
-      if (!isOnline) {
-        await goOnline();
-        setIsOnline(true);
-      } else {
-        await goOffline();
-        setIsOnline(false);
-      }
-    } catch (err) {
-      const apiError = err as {
-        problemDetails?: ProblemDetails;
-        status?: number;
-      };
-      if (apiError.problemDetails) {
-        console.error(
-          '[geo] presence update failed:',
-          apiError.problemDetails.title,
-          apiError.problemDetails.detail,
-        );
-      }
-      setError(
-        apiError.problemDetails || {
-          status: apiError.status || 500,
-          detail: 'No se pudo actualizar la presencia',
-        },
-      );
-    } finally {
-      setPresenceLoading(false);
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      setError({ status: 422, detail: 'Geolocalización no disponible' });
+      return;
     }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setError(null);
+        const nextLocation = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+        setLocation(nextLocation);
+        setRecenterZoom(14);
+      },
+      () => {
+        setError({ status: 422, detail: 'No se pudo obtener la ubicación' });
+      },
+      { enableHighAccuracy: true, timeout: 5000 },
+    );
   };
 
   const cityRegion = profile
@@ -300,6 +272,21 @@ export function DoctorLocationPage() {
           }}
         >
           <h3 style={{ marginTop: 0 }}>Buscar dirección</h3>
+          <button
+            onClick={handleUseMyLocation}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              marginBottom: '12px',
+            }}
+          >
+            Usar mi ubicación
+          </button>
           <input
             type="text"
             placeholder="Buscar dirección..."
@@ -335,6 +322,11 @@ export function DoctorLocationPage() {
               ))}
             </div>
           )}
+          {searchTouched && !searching && searchResults.length === 0 && (
+            <div style={{ marginTop: '8px', color: '#666' }}>
+              No se encontraron resultados.
+            </div>
+          )}
 
           <div style={{ marginTop: '16px' }}>
             <button
@@ -365,28 +357,6 @@ export function DoctorLocationPage() {
                 (loadingProfile ? 'Cargando...' : 'Sin datos')}
             </div>
           </div>
-
-          <div style={{ marginTop: '16px' }}>
-            <button
-              onClick={() => void handleTogglePresence()}
-              disabled={presenceLoading}
-              style={{
-                width: '100%',
-                padding: '10px 16px',
-                backgroundColor: isOnline ? '#dc3545' : '#28a745',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              {presenceLoading
-                ? 'Actualizando...'
-                : isOnline
-                  ? 'Pasar offline'
-                  : 'Pasar online'}
-            </button>
-          </div>
         </div>
 
         <div style={{ borderRadius: '8px', overflow: 'hidden' }}>
@@ -399,8 +369,14 @@ export function DoctorLocationPage() {
               attribution="&copy; OpenStreetMap contributors"
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            <RecenterMap position={location} />
-            <LocationMarker position={location} onSelect={setLocation} />
+            <RecenterMap position={location} zoom={recenterZoom} />
+            <LocationMarker
+              position={location}
+              onSelect={(nextLocation) => {
+                setLocation(nextLocation);
+                setRecenterZoom(null);
+              }}
+            />
           </MapContainer>
         </div>
       </div>

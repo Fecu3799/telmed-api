@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -10,7 +10,15 @@ import {
   type AppointmentsResponse,
   type PaymentCheckout,
 } from '../api/appointments';
+import {
+  listDoctorEmergencies,
+  listPatientEmergencies,
+  type EmergencyItem,
+  type EmergenciesResponse,
+} from '../api/emergencies';
+import { acceptQueue, payForQueue, startQueue } from '../api/queue';
 import { type ProblemDetails } from '../api/http';
+import { notificationsSocket } from '../api/notifications-socket';
 
 function randomUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -83,6 +91,29 @@ export function AppointmentsPage() {
   } | null>(null);
 
   const [dateRange, setDateRange] = useState(() => getDefaultDateRange());
+  const [showDebug, setShowDebug] = useState(false);
+  const [selectedEmergencyId, setSelectedEmergencyId] = useState<string | null>(
+    null,
+  );
+  const [lastAppointmentsLoadedAt, setLastAppointmentsLoadedAt] = useState<
+    string | null
+  >(null);
+  const [lastEmergenciesLoadedAt, setLastEmergenciesLoadedAt] = useState<
+    string | null
+  >(null);
+
+  const [emergencies, setEmergencies] = useState<EmergencyItem[]>([]);
+  const [emergenciesLoading, setEmergenciesLoading] = useState(false);
+  const [emergenciesError, setEmergenciesError] =
+    useState<ProblemDetails | null>(null);
+  const [emergenciesPage, setEmergenciesPage] = useState(1);
+  const [emergenciesPageInfo, setEmergenciesPageInfo] = useState<{
+    page: number;
+    pageSize: number;
+    total: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  } | null>(null);
 
   // Cancel state
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -93,59 +124,141 @@ export function AppointmentsPage() {
   const [payingId, setPayingId] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<ProblemDetails | null>(null);
 
+  const loadAppointments = useCallback(async () => {
+    if (
+      !getActiveToken() ||
+      (activeRole !== 'patient' && activeRole !== 'doctor')
+    ) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response: AppointmentsResponse =
+        activeRole === 'patient'
+          ? await listPatientAppointments(
+              dateRange.from,
+              dateRange.to,
+              page,
+              20,
+            )
+          : await listDoctorAppointments(
+              dateRange.from,
+              dateRange.to,
+              page,
+              20,
+            );
+
+      setAppointments(response.items);
+      setPageInfo(response.pageInfo);
+      setLastAppointmentsLoadedAt(new Date().toISOString());
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        setError(apiError.problemDetails);
+      } else {
+        setError({
+          status: apiError.status || 500,
+          detail: 'Error al cargar turnos',
+        });
+      }
+      setAppointments([]);
+      setPageInfo(null);
+      setLastAppointmentsLoadedAt(new Date().toISOString());
+    } finally {
+      setLoading(false);
+    }
+  }, [activeRole, dateRange.from, dateRange.to, getActiveToken, page]);
+
+  const loadEmergencies = useCallback(async () => {
+    if (
+      !getActiveToken() ||
+      (activeRole !== 'patient' && activeRole !== 'doctor')
+    ) {
+      return;
+    }
+
+    setEmergenciesLoading(true);
+    setEmergenciesError(null);
+
+    try {
+      const response: EmergenciesResponse =
+        activeRole === 'patient'
+          ? await listPatientEmergencies({
+              page: emergenciesPage,
+              pageSize: 20,
+            })
+          : await listDoctorEmergencies({
+              page: emergenciesPage,
+              pageSize: 20,
+            });
+
+      setEmergencies(response.items);
+      setEmergenciesPageInfo(response.pageInfo);
+      setLastEmergenciesLoadedAt(new Date().toISOString());
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        setEmergenciesError(apiError.problemDetails);
+      } else {
+        setEmergenciesError({
+          status: apiError.status || 500,
+          detail: 'Error al cargar emergencias',
+        });
+      }
+      setEmergencies([]);
+      setEmergenciesPageInfo(null);
+      setLastEmergenciesLoadedAt(new Date().toISOString());
+    } finally {
+      setEmergenciesLoading(false);
+    }
+  }, [activeRole, emergenciesPage, getActiveToken]);
+
   // Load appointments
   useEffect(() => {
-    const loadAppointments = async () => {
-      if (
-        !getActiveToken() ||
-        (activeRole !== 'patient' && activeRole !== 'doctor')
-      ) {
-        return;
-      }
+    void loadAppointments();
+  }, [loadAppointments]);
 
-      setLoading(true);
-      setError(null);
+  // Load emergencies
+  useEffect(() => {
+    void loadEmergencies();
+  }, [loadEmergencies]);
 
-      try {
-        const response: AppointmentsResponse =
-          activeRole === 'patient'
-            ? await listPatientAppointments(
-                dateRange.from,
-                dateRange.to,
-                page,
-                20,
-              )
-            : await listDoctorAppointments(
-                dateRange.from,
-                dateRange.to,
-                page,
-                20,
-              );
+  useEffect(() => {
+    const token = getActiveToken();
+    if (!token || (activeRole !== 'patient' && activeRole !== 'doctor')) {
+      notificationsSocket.disconnect();
+      return;
+    }
 
-        setAppointments(response.items);
-        setPageInfo(response.pageInfo);
-      } catch (err) {
-        const apiError = err as {
-          problemDetails?: ProblemDetails;
-          status?: number;
-        };
-        if (apiError.problemDetails) {
-          setError(apiError.problemDetails);
-        } else {
-          setError({
-            status: apiError.status || 500,
-            detail: 'Error al cargar turnos',
-          });
-        }
-        setAppointments([]);
-        setPageInfo(null);
-      } finally {
-        setLoading(false);
-      }
+    notificationsSocket.connect(token);
+
+    const handleAppointmentsChanged = () => {
+      void loadAppointments();
+    };
+    const handleEmergenciesChanged = () => {
+      void loadEmergencies();
     };
 
-    void loadAppointments();
-  }, [dateRange.from, dateRange.to, page, getActiveToken, activeRole]);
+    notificationsSocket.onAppointmentsChanged(handleAppointmentsChanged);
+    notificationsSocket.onEmergenciesChanged(handleEmergenciesChanged);
+    notificationsSocket.onConsultationsChanged(handleEmergenciesChanged);
+
+    return () => {
+      notificationsSocket.offAppointmentsChanged(handleAppointmentsChanged);
+      notificationsSocket.offEmergenciesChanged(handleEmergenciesChanged);
+      notificationsSocket.offConsultationsChanged(handleEmergenciesChanged);
+      notificationsSocket.disconnect();
+    };
+  }, [activeRole, getActiveToken, loadAppointments, loadEmergencies]);
 
   // Handle payment
   const handlePay = async (appointmentId: string) => {
@@ -187,6 +300,84 @@ export function AppointmentsPage() {
       }
     } finally {
       setPayingId(null);
+    }
+  };
+
+  const handleAcceptEmergency = async (queueItemId: string) => {
+    if (!getActiveToken() || activeRole !== 'doctor') {
+      return;
+    }
+    setEmergenciesLoading(true);
+    setEmergenciesError(null);
+    try {
+      await acceptQueue(queueItemId);
+      await loadEmergencies();
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      setEmergenciesError(
+        apiError.problemDetails || {
+          status: apiError.status || 500,
+          detail: 'Error al aceptar emergencia',
+        },
+      );
+    } finally {
+      setEmergenciesLoading(false);
+    }
+  };
+
+  const handlePayEmergency = async (queueItemId: string) => {
+    if (!getActiveToken() || activeRole !== 'patient') {
+      return;
+    }
+    setEmergenciesLoading(true);
+    setEmergenciesError(null);
+    try {
+      const payment = await payForQueue(queueItemId);
+      if (payment.checkoutUrl) {
+        window.open(payment.checkoutUrl, '_blank', 'noopener,noreferrer');
+      }
+      await loadEmergencies();
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      setEmergenciesError(
+        apiError.problemDetails || {
+          status: apiError.status || 500,
+          detail: 'Error al iniciar pago de emergencia',
+        },
+      );
+    } finally {
+      setEmergenciesLoading(false);
+    }
+  };
+
+  const handleStartEmergency = async (queueItemId: string) => {
+    if (!getActiveToken() || activeRole !== 'doctor') {
+      return;
+    }
+    setEmergenciesLoading(true);
+    setEmergenciesError(null);
+    try {
+      const result = await startQueue(queueItemId);
+      navigate(`/room/${result.consultation.id}`);
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      setEmergenciesError(
+        apiError.problemDetails || {
+          status: apiError.status || 500,
+          detail: 'Error al iniciar emergencia',
+        },
+      );
+    } finally {
+      setEmergenciesLoading(false);
     }
   };
 
@@ -267,19 +458,50 @@ export function AppointmentsPage() {
         }}
       >
         <h1 style={{ margin: 0 }}>Mis Turnos</h1>
-        <button
-          onClick={() => navigate('/lobby')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Volver al Lobby
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => {
+              void loadAppointments();
+              void loadEmergencies();
+            }}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Refrescar
+          </button>
+          <button
+            onClick={() => setShowDebug((value) => !value)}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            {showDebug ? 'Ocultar debug' : 'Debug'}
+          </button>
+          <button
+            onClick={() => navigate('/lobby')}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Volver al Lobby
+          </button>
+        </div>
       </div>
 
       {/* Date Range Selector */}
@@ -354,6 +576,272 @@ export function AppointmentsPage() {
           <strong>Error {error.status}:</strong> {error.detail}
         </div>
       )}
+
+      {emergenciesError && (
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: '#fee',
+            border: '1px solid #fcc',
+            borderRadius: '4px',
+            color: '#c33',
+          }}
+        >
+          <strong>Error {emergenciesError.status}:</strong>{' '}
+          {emergenciesError.detail}
+        </div>
+      )}
+
+      {showDebug && (
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: '#f8f9fa',
+            border: '1px solid #dee2e6',
+            borderRadius: '4px',
+          }}
+        >
+          <strong>Debug panel</strong>
+          <div style={{ marginTop: '8px', color: '#555' }}>
+            <div>Ultima carga turnos: {lastAppointmentsLoadedAt ?? 'N/A'}</div>
+            <div>
+              Ultima carga emergencias: {lastEmergenciesLoadedAt ?? 'N/A'}
+            </div>
+            {error && (
+              <div>
+                Turnos error: {error.status} - {error.detail}
+              </div>
+            )}
+            {emergenciesError && (
+              <div>
+                Emergencias error: {emergenciesError.status} -{' '}
+                {emergenciesError.detail}
+              </div>
+            )}
+          </div>
+          {selectedEmergencyId && (
+            <pre
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                backgroundColor: '#fff',
+                border: '1px solid #eee',
+                borderRadius: '4px',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {JSON.stringify(
+                emergencies.find((item) => item.id === selectedEmergencyId) ??
+                  null,
+                null,
+                2,
+              )}
+            </pre>
+          )}
+        </div>
+      )}
+
+      <div
+        style={{
+          marginBottom: '24px',
+          padding: '16px',
+          backgroundColor: '#f5f5f5',
+          borderRadius: '4px',
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Emergencias</h2>
+        {emergenciesLoading ? (
+          <div style={{ textAlign: 'center', padding: '16px' }}>
+            Cargando emergencias...
+          </div>
+        ) : emergencies.length === 0 ? (
+          <div style={{ color: '#666' }}>No hay emergencias.</div>
+        ) : (
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+          >
+            {emergencies.map((emergency) => (
+              <div
+                key={emergency.id}
+                onClick={() => setSelectedEmergencyId(emergency.id)}
+                style={{
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  backgroundColor: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>Fecha:</strong> {formatDateTime(emergency.createdAt)}
+                </div>
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>
+                    {activeRole === 'doctor' ? 'Paciente' : 'Doctor'}:
+                  </strong>{' '}
+                  {emergency.counterparty?.displayName || 'Usuario'}
+                </div>
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>Motivo:</strong> {emergency.reason || 'Sin motivo'}
+                </div>
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>Estado:</strong> {emergency.queueStatus}
+                </div>
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>Pago:</strong> {emergency.paymentStatus}
+                </div>
+                {emergency.specialty && (
+                  <div style={{ marginBottom: '6px', color: '#666' }}>
+                    <strong>Especialidad:</strong> {emergency.specialty}
+                  </div>
+                )}
+                {emergency.priceCents !== null &&
+                  emergency.priceCents !== undefined && (
+                    <div style={{ marginBottom: '6px' }}>
+                      <strong>Precio:</strong>{' '}
+                      {(emergency.priceCents / 100).toFixed(2)}
+                    </div>
+                  )}
+                {activeRole === 'doctor' &&
+                  emergency.queueStatus === 'queued' && (
+                    <button
+                      onClick={() => void handleAcceptEmergency(emergency.id)}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Aceptar
+                    </button>
+                  )}
+                {activeRole === 'doctor' && emergency.canStart && (
+                  <button
+                    onClick={() => void handleStartEmergency(emergency.id)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      marginLeft: '8px',
+                    }}
+                  >
+                    Start
+                  </button>
+                )}
+                {activeRole === 'doctor' && emergency.consultationId && (
+                  <button
+                    onClick={() =>
+                      navigate(`/room/${emergency.consultationId}`)
+                    }
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      marginLeft: '8px',
+                    }}
+                  >
+                    Entrar a consulta
+                  </button>
+                )}
+                {activeRole === 'patient' &&
+                  emergency.paymentStatus === 'pending' && (
+                    <button
+                      onClick={() => void handlePayEmergency(emergency.id)}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Pagar
+                    </button>
+                  )}
+                {activeRole === 'patient' && emergency.consultationId && (
+                  <button
+                    onClick={() =>
+                      navigate(`/room/${emergency.consultationId}`)
+                    }
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      marginLeft: '8px',
+                    }}
+                  >
+                    Entrar
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {emergenciesPageInfo && emergenciesPageInfo.total > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: '12px',
+            }}
+          >
+            <button
+              onClick={() => setEmergenciesPage(emergenciesPage - 1)}
+              disabled={!emergenciesPageInfo.hasPrevPage}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: emergenciesPageInfo.hasPrevPage
+                  ? '#6c757d'
+                  : '#ccc',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: emergenciesPageInfo.hasPrevPage
+                  ? 'pointer'
+                  : 'not-allowed',
+              }}
+            >
+              Anterior
+            </button>
+            <span>Página {emergenciesPageInfo.page}</span>
+            <button
+              onClick={() => setEmergenciesPage(emergenciesPage + 1)}
+              disabled={!emergenciesPageInfo.hasNextPage}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: emergenciesPageInfo.hasNextPage
+                  ? '#007bff'
+                  : '#ccc',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: emergenciesPageInfo.hasNextPage
+                  ? 'pointer'
+                  : 'not-allowed',
+              }}
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Loading state */}
       {loading && (

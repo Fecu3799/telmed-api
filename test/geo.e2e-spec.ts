@@ -260,6 +260,10 @@ describe('Geo emergency flows (e2e)', () => {
     const doctorIds: string[] = [];
     for (const token of doctorTokens) {
       await createDoctorProfile(app, token, { lat: -34.6037, lng: -58.3816 });
+      await request(httpServer(app))
+        .post('/api/v1/doctors/me/geo/online')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(201);
       doctorIds.push(await getUserId(app, token));
     }
 
@@ -308,10 +312,18 @@ describe('Geo emergency flows (e2e)', () => {
       lat: -34.6037,
       lng: -58.3816,
     });
+    await request(httpServer(app))
+      .post('/api/v1/doctors/me/geo/online')
+      .set('Authorization', `Bearer ${doctorTokenA}`)
+      .expect(201);
     await createDoctorProfile(app, doctorTokenB, {
       lat: -34.6037,
       lng: -58.3816,
     });
+    await request(httpServer(app))
+      .post('/api/v1/doctors/me/geo/online')
+      .set('Authorization', `Bearer ${doctorTokenB}`)
+      .expect(201);
 
     const doctorIdA = await getUserId(app, doctorTokenA);
     const doctorIdB = await getUserId(app, doctorTokenB);
@@ -364,6 +376,10 @@ describe('Geo emergency flows (e2e)', () => {
       lat: -34.6037,
       lng: -58.3816,
     });
+    await request(httpServer(app))
+      .post('/api/v1/doctors/me/geo/online')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .expect(201);
     const doctorId = await getUserId(app, doctorToken);
 
     await request(httpServer(app))
@@ -372,6 +388,7 @@ describe('Geo emergency flows (e2e)', () => {
       .send({
         doctorIds: [doctorId],
         patientLocation: { lat: -34.6037, lng: -58.3816 },
+        note: 'Dolor fuerte',
       })
       .expect(201);
 
@@ -381,6 +398,7 @@ describe('Geo emergency flows (e2e)', () => {
       .send({
         doctorIds: [doctorId],
         patientLocation: { lat: -34.6037, lng: -58.3816 },
+        note: 'Dolor fuerte',
       })
       .expect(429);
   });

@@ -154,6 +154,35 @@ export class ConsultationsService {
       });
     }
 
+    if (consultation.appointmentId) {
+      await this.prisma.appointment.update({
+        where: { id: consultation.appointmentId },
+        data: { status: AppointmentStatus.completed },
+      });
+    }
+
     return updated;
+  }
+
+  async getActiveForActor(actor: Actor) {
+    if (actor.role !== UserRole.doctor && actor.role !== UserRole.patient) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    return this.prisma.consultation.findFirst({
+      where: {
+        status: ConsultationStatus.in_progress,
+        ...(actor.role === UserRole.doctor
+          ? { doctorUserId: actor.id }
+          : { patientUserId: actor.id }),
+      },
+      orderBy: { startedAt: 'desc' },
+      select: {
+        id: true,
+        queueItemId: true,
+        appointmentId: true,
+        status: true,
+      },
+    });
   }
 }

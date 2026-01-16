@@ -18,6 +18,8 @@ import { GeoNearbyQueryDto } from './dto/geo-nearby-query.dto';
 import { SubscriptionPlanResolver } from './subscription-plan-resolver.service';
 import { GeoEmergencyCoordinator } from './geo-emergency-coordinator.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
+import { NotificationsService } from '../notifications/notifications.service';
+import { DoctorAvailabilityService } from '../doctors/availability/doctor-availability.service';
 
 const ONLINE_GEO_KEY = 'geo:doctors:online';
 const DEFAULT_PAGE_SIZE = 20;
@@ -34,6 +36,8 @@ export class GeoService {
     private readonly queueService: ConsultationQueueService,
     private readonly planResolver: SubscriptionPlanResolver,
     private readonly coordinator: GeoEmergencyCoordinator,
+    private readonly notifications: NotificationsService,
+    private readonly availabilityService: DoctorAvailabilityService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -72,6 +76,12 @@ export class GeoService {
     await client.del(this.doctorOnlineKey(actor.id));
     await client.zrem(ONLINE_GEO_KEY, actor.id);
     return { success: true };
+  }
+
+  async getOnlineStatus(actor: Actor) {
+    const client = this.redis.getClient();
+    const exists = await client.exists(this.doctorOnlineKey(actor.id));
+    return { online: exists === 1 };
   }
 
   async nearbyDoctors(actor: Actor, query: GeoNearbyQueryDto) {
@@ -159,6 +169,11 @@ export class GeoService {
     if (uniqueIds.length > maxDoctors) {
       throw new UnprocessableEntityException('doctorIds exceeds plan limit');
     }
+    if (!dto.note?.trim()) {
+      throw new UnprocessableEntityException('note is required');
+    }
+
+    await this.assertDoctorsAvailability(uniqueIds);
 
     await this.assertQuota(actor.id);
 
@@ -193,7 +208,7 @@ export class GeoService {
       throw new ConflictException('Queue already exists');
     }
 
-    const reason = dto.note ?? 'Geo emergency request';
+    const reason = dto.note.trim();
     const requests: { doctorId: string; queueItemId: string }[] = [];
 
     for (const doctorUserId of uniqueIds) {
@@ -208,7 +223,28 @@ export class GeoService {
     const groupId = randomUUID();
     await this.persistGroup(groupId, actor.id, dto, requests);
 
+    // Notify patient and targeted doctors about new emergencies.
+    this.notifications.emergenciesChanged([
+      actor.id,
+      ...requests.map((request) => request.doctorId),
+    ]);
+
     return { groupId, requests };
+  }
+
+  private async assertDoctorsAvailability(doctorIds: string[]) {
+    const client = this.redis.getClient();
+    for (const doctorId of doctorIds) {
+      const ttlKey = this.doctorOnlineKey(doctorId);
+      const isOnline = (await client.exists(ttlKey)) === 1;
+      const isWithinSchedule =
+        await this.availabilityService.isWithinScheduleNow(doctorId);
+      if (!isOnline && !isWithinSchedule) {
+        throw new UnprocessableEntityException(
+          'El médico no está online y no se encuentra dentro de su horario de atención.',
+        );
+      }
+    }
   }
 
   private async persistGroup(

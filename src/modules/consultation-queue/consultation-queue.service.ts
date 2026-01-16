@@ -32,6 +32,7 @@ import { CreateQueueDto } from './dto/create-queue.dto';
 import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
 import { RejectQueueDto } from './dto/reject-queue.dto';
 import { GeoEmergencyCoordinator } from '../geo/geo-emergency-coordinator.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ConsultationQueueService {
@@ -47,6 +48,7 @@ export class ConsultationQueueService {
     private readonly livekitService: LiveKitService,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly geoEmergencyCoordinator: GeoEmergencyCoordinator,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async createQueue(actor: Actor, dto: CreateQueueDto) {
@@ -274,6 +276,12 @@ export class ConsultationQueueService {
         );
       }
 
+      // Notify doctor and patient about emergency status change.
+      this.notifications.emergenciesChanged([
+        updated.doctorUserId,
+        updated.patientUserId,
+      ]);
+
       return updated;
     } catch (error) {
       if (geoClaim) {
@@ -466,6 +474,42 @@ export class ConsultationQueueService {
       include: { appointment: true },
     });
     return this.sortQueueItems(items);
+  }
+
+  async listEmergenciesForDoctor(
+    actor: Actor,
+    options: {
+      page?: number;
+      pageSize?: number;
+      status?: ConsultationQueueStatus;
+    },
+  ) {
+    await this.expireQueuedItems(actor.id);
+    return this.listEmergencies({
+      where: {
+        doctorUserId: actor.id,
+      },
+      actor,
+      ...options,
+    });
+  }
+
+  async listEmergenciesForPatient(
+    actor: Actor,
+    options: {
+      page?: number;
+      pageSize?: number;
+      status?: ConsultationQueueStatus;
+    },
+  ) {
+    await this.expireQueuedItems();
+    return this.listEmergencies({
+      where: {
+        patientUserId: actor.id,
+      },
+      actor,
+      ...options,
+    });
   }
 
   async startFromQueue(
@@ -669,6 +713,18 @@ export class ConsultationQueueService {
           );
         }
 
+        if (!isAppointmentEntry) {
+          this.notifications.emergenciesChanged([
+            updatedQueue.doctorUserId,
+            updatedQueue.patientUserId,
+          ]);
+        }
+
+        this.notifications.consultationsChanged([
+          updatedQueue.doctorUserId,
+          updatedQueue.patientUserId,
+        ]);
+
         return this.toStartResponse(updatedQueue, resumed);
       }
       // Idempotency: consultation already in_progress, don't emit event again
@@ -769,6 +825,18 @@ export class ConsultationQueueService {
       );
     }
 
+    if (!isAppointmentEntry) {
+      this.notifications.emergenciesChanged([
+        updatedQueue.doctorUserId,
+        updatedQueue.patientUserId,
+      ]);
+    }
+
+    this.notifications.consultationsChanged([
+      updatedQueue.doctorUserId,
+      updatedQueue.patientUserId,
+    ]);
+
     return this.toStartResponse(updatedQueue, consultation);
   }
 
@@ -807,6 +875,154 @@ export class ConsultationQueueService {
       where: { id: queue.id },
       data: { paymentStatus: ConsultationQueuePaymentStatus.expired },
     });
+  }
+
+  private resolvePaging(page?: number, pageSize?: number) {
+    const resolvedPage = page ?? 1;
+    const resolvedPageSize = Math.min(pageSize ?? 20, 50);
+    const skip = (resolvedPage - 1) * resolvedPageSize;
+    return { page: resolvedPage, pageSize: resolvedPageSize, skip };
+  }
+
+  private async listEmergencies(options: {
+    where: { doctorUserId?: string; patientUserId?: string };
+    actor: Actor;
+    page?: number;
+    pageSize?: number;
+    status?: ConsultationQueueStatus;
+  }) {
+    const { page, pageSize, skip } = this.resolvePaging(
+      options.page,
+      options.pageSize,
+    );
+
+    const where = {
+      ...options.where,
+      entryType: ConsultationQueueEntryType.emergency,
+      ...(options.status ? { status: options.status } : {}),
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.consultationQueueItem.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+        include: { consultation: { select: { id: true, status: true } } },
+      }),
+      this.prisma.consultationQueueItem.count({ where }),
+    ]);
+
+    const doctorIds = Array.from(
+      new Set(items.map((item) => item.doctorUserId)),
+    );
+    const patientIds = Array.from(
+      new Set(items.map((item) => item.patientUserId)),
+    );
+
+    const [users, doctorProfiles, patients] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { id: { in: [...doctorIds, ...patientIds] } },
+        select: { id: true, displayName: true, email: true },
+      }),
+      this.prisma.doctorProfile.findMany({
+        where: { userId: { in: doctorIds } },
+        select: {
+          userId: true,
+          firstName: true,
+          lastName: true,
+          priceCents: true,
+          specialties: {
+            include: { specialty: true },
+          },
+        },
+      }),
+      this.prisma.patient.findMany({
+        where: { userId: { in: patientIds } },
+        select: { userId: true, legalFirstName: true, legalLastName: true },
+      }),
+    ]);
+
+    const userMap = new Map(users.map((user) => [user.id, user]));
+    const doctorProfileMap = new Map(
+      doctorProfiles.map((profile) => [profile.userId, profile]),
+    );
+    const patientMap = new Map(
+      patients.map((patient) => [patient.userId, patient]),
+    );
+
+    const list = items.map((item) => {
+      const profile = doctorProfileMap.get(item.doctorUserId);
+      const specialty =
+        profile?.specialties.find((entry) => entry.specialty.isActive)
+          ?.specialty?.name ?? null;
+      const counterpartyId =
+        item.doctorUserId === options.where.doctorUserId
+          ? item.patientUserId
+          : item.doctorUserId;
+      const counterpartyDisplayName = this.buildDisplayName({
+        user: userMap.get(counterpartyId),
+        doctorProfile: doctorProfileMap.get(counterpartyId),
+        patient: patientMap.get(counterpartyId),
+      });
+      const consultationStatus = item.consultation?.status ?? null;
+      const canStart =
+        options.actor.role === UserRole.doctor &&
+        item.doctorUserId === options.actor.id &&
+        item.status === ConsultationQueueStatus.accepted &&
+        item.paymentStatus === ConsultationQueuePaymentStatus.paid &&
+        consultationStatus !== ConsultationStatus.in_progress &&
+        consultationStatus !== ConsultationStatus.closed;
+      return {
+        id: item.id,
+        queueStatus: item.status,
+        paymentStatus: item.paymentStatus,
+        canStart,
+        createdAt: item.createdAt.toISOString(),
+        reason: item.reason ?? null,
+        counterparty: {
+          id: counterpartyId,
+          displayName: counterpartyDisplayName,
+        },
+        specialty,
+        priceCents: profile?.priceCents ?? null,
+        consultationId: item.consultation?.id ?? null,
+      };
+    });
+
+    const hasNextPage = page * pageSize < total;
+    return {
+      items: list,
+      pageInfo: {
+        page,
+        pageSize,
+        total,
+        hasNextPage,
+        hasPrevPage: page > 1,
+      },
+    };
+  }
+
+  private buildDisplayName(input: {
+    user?: { displayName: string | null; email: string } | undefined;
+    doctorProfile?:
+      | { firstName: string | null; lastName: string | null }
+      | undefined;
+    patient?: { legalFirstName: string; legalLastName: string } | undefined;
+  }) {
+    if (input.user?.displayName) {
+      return input.user.displayName;
+    }
+    if (input.doctorProfile?.firstName || input.doctorProfile?.lastName) {
+      return `${input.doctorProfile.firstName ?? ''} ${input.doctorProfile.lastName ?? ''}`.trim();
+    }
+    if (input.patient) {
+      return `${input.patient.legalFirstName} ${input.patient.legalLastName}`.trim();
+    }
+    if (input.user?.email) {
+      return input.user.email;
+    }
+    return 'Usuario';
   }
 
   private async expireQueueById(id: string) {

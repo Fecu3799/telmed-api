@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 import {
   MERCADOPAGO_CLIENT,
   MercadoPagoClient,
@@ -45,6 +46,7 @@ class MercadoPagoTestClient implements MercadoPagoClient {
 }
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,

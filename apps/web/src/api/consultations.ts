@@ -37,3 +37,27 @@ export async function getConsultation(
 ): Promise<Consultation> {
   return http<Consultation>(endpoints.consultations.get(consultationId));
 }
+
+export type ActiveConsultation = {
+  consultationId: string;
+  queueItemId?: string | null;
+  appointmentId?: string | null;
+  status: ConsultationStatus;
+};
+
+export async function getActiveConsultation(): Promise<{
+  consultation: ActiveConsultation | null;
+}> {
+  return http<{ consultation: ActiveConsultation | null }>(
+    endpoints.consultations.active,
+  );
+}
+
+export async function closeConsultation(
+  consultationId: string,
+): Promise<Consultation> {
+  return http<Consultation>(endpoints.consultations.close(consultationId), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}

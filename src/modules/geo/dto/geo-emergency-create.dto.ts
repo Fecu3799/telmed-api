@@ -1,9 +1,8 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
-  IsOptional,
   IsString,
   IsUUID,
   MinLength,
@@ -28,9 +27,8 @@ export class GeoEmergencyCreateDto {
   @Type(() => LocationDto)
   patientLocation!: LocationDto;
 
-  @ApiPropertyOptional({ example: 'Dolor fuerte en el pecho' })
-  @IsOptional()
+  @ApiProperty({ example: 'Dolor fuerte en el pecho' })
   @IsString()
-  @MinLength(2)
-  note?: string;
+  @MinLength(1)
+  note!: string;
 }

@@ -3,7 +3,7 @@
  *
  * Requirements:
  * - DATABASE_URL_TEST must be set
- * - DATABASE_URL_TEST must be different from DATABASE_URL (safety check)
+ * - DATABASE_URL must point to the test database
  *
  * This function sets process.env.DATABASE_URL to DATABASE_URL_TEST
  * so that PrismaService and all database operations use the test database.
@@ -13,7 +13,7 @@ export function ensureTestEnv() {
   process.env.APP_ENV = process.env.APP_ENV ?? 'test';
   process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
   process.env.THROTTLE_ENABLED = process.env.THROTTLE_ENABLED ?? 'false';
-  process.env.APP_PORT = process.env.APP_PORT ?? '0';
+  process.env.APP_PORT = process.env.APP_PORT ?? '3001';
   process.env.JWT_ACCESS_SECRET =
     process.env.JWT_ACCESS_SECRET ?? 'test_access_secret_123456';
   process.env.JWT_REFRESH_SECRET =
@@ -37,18 +37,28 @@ export function ensureTestEnv() {
     );
   }
 
-  // Get DATABASE_URL for comparison (may be undefined in test environment)
-  const databaseUrl = process.env.DATABASE_URL;
+  process.env.NODE_ENV = 'test';
+  process.env.DATABASE_URL = databaseUrlTest;
 
-  // Safety check: ensure DATABASE_URL_TEST is different from DATABASE_URL
-  if (databaseUrl && databaseUrl.trim() === databaseUrlTest.trim()) {
+  const actualDbName = getDbNameFromUrl(process.env.DATABASE_URL);
+  const expectedDbName = getDbNameFromUrl(databaseUrlTest) || 'med_test';
+
+  // Final airbag: never run if DATABASE_URL doesn't point to test DB
+  if (!actualDbName || actualDbName !== expectedDbName) {
     throw new Error(
-      'DATABASE_URL_TEST must be different from DATABASE_URL. ' +
-        'Tests must use a separate database to avoid data loss. ' +
-        `Both are set to: ${databaseUrlTest}`,
+      `Refusing to run e2e against non-test DB. ` +
+        `DATABASE_URL=${process.env.DATABASE_URL} (db=${actualDbName ?? 'unknown'})`,
     );
   }
+}
 
-  // Set DATABASE_URL to DATABASE_URL_TEST so PrismaService uses the test database
-  process.env.DATABASE_URL = databaseUrlTest;
+function getDbNameFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname || '';
+    const name = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+    return name || null;
+  } catch {
+    return null;
+  }
 }

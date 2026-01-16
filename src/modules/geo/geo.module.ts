@@ -1,6 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConsultationQueueModule } from '../consultation-queue/consultation-queue.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { DoctorAvailabilityModule } from '../doctors/availability/doctor-availability.module';
 import { GeoController } from './geo.controller';
 import { GeoEmergencyCoordinator } from './geo-emergency-coordinator.service';
 import { GeoService } from './geo.service';
@@ -10,7 +12,11 @@ import { NominatimGeoGeocodingProvider } from './nominatim-geo-geocoding.provide
 import { StubGeoGeocodingProvider } from './stub-geo-geocoding.provider';
 
 @Module({
-  imports: [forwardRef(() => ConsultationQueueModule)],
+  imports: [
+    forwardRef(() => ConsultationQueueModule),
+    NotificationsModule,
+    DoctorAvailabilityModule,
+  ],
   controllers: [GeoController],
   providers: [
     GeoService,

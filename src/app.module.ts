@@ -23,6 +23,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { ChatsModule } from './modules/chats/chats.module';
 import { PatientFilesModule } from './modules/patient-files/patient-files.module';
 import { GeoModule } from './modules/geo/geo.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ClockModule } from './common/clock/clock.module';
 import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
@@ -35,7 +36,7 @@ import { BenchmarkThrottlerGuard } from './common/guards/benchmark-throttler.gua
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: process.env.NODE_ENV === 'test' ? '.env.test' : '.env',
       validate: (env) => {
         const result = envSchema.safeParse(env);
         if (!result.success) {
@@ -115,6 +116,7 @@ import { BenchmarkThrottlerGuard } from './common/guards/benchmark-throttler.gua
     ChatsModule,
     PatientFilesModule,
     GeoModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -3,6 +3,7 @@ import { ConsultationQueueStatus } from '@prisma/client';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RedisService } from '../../infra/redis/redis.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type GeoEmergencyGroup = {
   patientId: string;
@@ -33,6 +34,7 @@ export class GeoEmergencyCoordinator {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly notifications: NotificationsService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -101,6 +103,12 @@ export class GeoEmergencyCoordinator {
       if (siblingIds.length > 0) {
         await this.cancelSiblingRequests(siblingIds, acceptedByDoctorId);
       }
+
+      // Notify patient and all doctors involved in the group.
+      this.notifications.emergenciesChanged([
+        claim.group.patientId,
+        ...claim.group.doctorIds,
+      ]);
     }
   }
 

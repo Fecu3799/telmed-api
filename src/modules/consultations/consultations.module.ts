@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConsultationQueueModule } from '../consultation-queue/consultation-queue.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ConsultationsController } from './consultations.controller';
 import { ConsultationsService } from './consultations.service';
 import { ConsultationRealtimeService } from './consultation-realtime.service';
@@ -23,7 +24,7 @@ const eventsPublisherProvider =
       };
 
 @Module({
-  imports: [forwardRef(() => ConsultationQueueModule)],
+  imports: [forwardRef(() => ConsultationQueueModule), NotificationsModule],
   controllers: [ConsultationsController],
   providers: [
     ConsultationsService,

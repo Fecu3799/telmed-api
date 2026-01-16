@@ -27,6 +27,7 @@ import { GeoNearbyResponseDto } from './dto/geo-nearby-response.dto';
 import {
   GeoPresenceOfflineResponseDto,
   GeoPresenceResponseDto,
+  GeoPresenceStatusResponseDto,
 } from './dto/geo-presence-response.dto';
 
 @ApiTags('geo')
@@ -73,6 +74,18 @@ export class GeoController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   offline(@CurrentUser() actor: Actor) {
     return this.geoService.goOffline(actor);
+  }
+
+  @Get('doctors/me/geo/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get doctor online status for geo emergencies' })
+  @ApiOkResponse({ type: GeoPresenceStatusResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  status(@CurrentUser() actor: Actor) {
+    return this.geoService.getOnlineStatus(actor);
   }
 
   @Get('geo/doctors/nearby')

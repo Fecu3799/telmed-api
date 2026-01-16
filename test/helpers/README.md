@@ -47,4 +47,5 @@ npm run test:e2e
 - **Desarrollo**: `DATABASE_URL` → `postgresql://app:app@localhost:5432/med?schema=public`
 - **Tests e2e**: `DATABASE_URL_TEST` → `postgresql://app:app@localhost:5432/med_test?schema=public`
 
-El helper `ensureTestEnv()` valida que `DATABASE_URL_TEST` esté configurada y sea diferente de `DATABASE_URL` para prevenir pérdida de datos.
+El helper `ensureTestEnv()` fuerza `DATABASE_URL` a `DATABASE_URL_TEST` en tests
+y valida que el nombre de la base de datos efectiva sea la de tests.

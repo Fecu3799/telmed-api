@@ -27,6 +27,7 @@ import { AuditService } from '../../infra/audit/audit.service';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { MERCADOPAGO_CLIENT } from './mercadopago.client';
 import type { MercadoPagoClient } from './mercadopago.client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const PAYMENT_TTL_MINUTES = 10;
 
@@ -43,6 +44,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly auditService: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(MERCADOPAGO_CLIENT)
     private readonly mercadoPago: MercadoPagoClient,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -585,11 +587,10 @@ export class PaymentsService {
       return;
     }
 
-    if (existing.providerPaymentId) {
+    const mappedStatus = this.mapMercadoPagoStatus(paymentInfo.status);
+    if (existing.providerPaymentId && existing.status === mappedStatus) {
       return;
     }
-
-    const mappedStatus = this.mapMercadoPagoStatus(paymentInfo.status);
     if (process.env.NODE_ENV !== 'production') {
       this.logWebhookDebug(paymentInfo);
     }
@@ -598,7 +599,7 @@ export class PaymentsService {
       where: { id: existing.id },
       data: {
         status: mappedStatus,
-        providerPaymentId: String(paymentInfo.id),
+        providerPaymentId: existing.providerPaymentId ?? String(paymentInfo.id),
       },
     });
 
@@ -613,9 +614,10 @@ export class PaymentsService {
 
     if (updated.kind === PaymentKind.appointment) {
       if (mappedStatus === PaymentStatus.paid) {
-        await this.prisma.appointment.update({
+        const appointment = await this.prisma.appointment.update({
           where: { id: updated.appointmentId ?? '' },
           data: { status: AppointmentStatus.confirmed },
+          include: { patient: { select: { userId: true } } },
         });
         await this.auditService.log({
           action: AuditAction.WEBHOOK,
@@ -625,6 +627,11 @@ export class PaymentsService {
           traceId,
           metadata: { paymentId: updated.id, status: mappedStatus },
         });
+        // Notify both doctor and patient when appointment is confirmed.
+        this.notifications.appointmentsChanged([
+          appointment.doctorUserId,
+          appointment.patient.userId,
+        ]);
       }
     } else if (updated.kind === PaymentKind.emergency) {
       let queuePaymentStatus: ConsultationQueuePaymentStatus | null = null;
@@ -635,7 +642,7 @@ export class PaymentsService {
       }
 
       if (queuePaymentStatus) {
-        await this.prisma.consultationQueueItem.update({
+        const queueItem = await this.prisma.consultationQueueItem.update({
           where: { id: updated.queueItemId ?? '' },
           data: { paymentStatus: queuePaymentStatus },
         });
@@ -647,6 +654,11 @@ export class PaymentsService {
           traceId,
           metadata: { paymentId: updated.id, status: mappedStatus },
         });
+        // Notify doctor and patient about emergency payment updates.
+        this.notifications.emergenciesChanged([
+          queueItem.doctorUserId,
+          queueItem.patientUserId,
+        ]);
       }
     }
 
