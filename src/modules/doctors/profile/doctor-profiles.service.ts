@@ -74,6 +74,7 @@ export class DoctorProfilesService {
         bio: dto.bio ?? null,
         priceCents: dto.priceCents,
         currency: dto.currency ?? 'ARS',
+        isActive: true,
       },
       update: {
         firstName: dto.firstName,
@@ -81,6 +82,7 @@ export class DoctorProfilesService {
         bio: dto.bio ?? null,
         priceCents: dto.priceCents,
         currency: dto.currency ?? 'ARS',
+        isActive: true,
       },
     });
 
@@ -112,6 +114,7 @@ export class DoctorProfilesService {
       currency?: string;
       firstName?: string;
       lastName?: string;
+      isActive?: boolean;
     } = {};
 
     if (dto.bio !== undefined) {
@@ -128,6 +131,10 @@ export class DoctorProfilesService {
     }
     if (dto.currency !== undefined) {
       data.currency = dto.currency;
+    }
+
+    if (Object.keys(data).length > 0) {
+      data.isActive = true;
     }
 
     const profile =

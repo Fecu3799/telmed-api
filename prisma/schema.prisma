@@ -15,11 +15,7 @@ model User {
   createdAt              DateTime                      @default(now()) @map("created_at")
   updatedAt              DateTime                      @updatedAt @map("updated_at")
   displayName            String?                       @map("display_name")
-  availabilityExceptions DoctorAvailabilityException[]
-  availabilityRules      DoctorAvailabilityRule[]
-  doctorPaymentAccount   DoctorPaymentAccount?
   doctorProfile          DoctorProfile?
-  schedulingConfig       DoctorSchedulingConfig?
   patient                Patient?
   uploadedFiles          FileObject[]
   chatThreadsAsDoctor    ChatThread[]                  @relation("ChatThreadDoctor")
@@ -88,6 +84,10 @@ model DoctorProfile {
   appointments       Appointment[]
   user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   specialties        DoctorSpecialty[]
+  availabilityRules  DoctorAvailabilityRule[]
+  availabilityExceptions DoctorAvailabilityException[]
+  schedulingConfig   DoctorSchedulingConfig?
+  doctorPaymentAccount DoctorPaymentAccount?
 
   @@map("doctor_profiles")
 }
@@ -130,7 +130,7 @@ model DoctorAvailabilityRule {
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  doctorProfile DoctorProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@index([userId])
   @@map("doctor_availability_rules")
@@ -144,7 +144,7 @@ model DoctorAvailabilityException {
   customWindows Json?                           @map("custom_windows")
   createdAt     DateTime                        @default(now()) @map("created_at")
   updatedAt     DateTime                        @updatedAt @map("updated_at")
-  user          User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  doctorProfile DoctorProfile                   @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@index([userId, date])
   @@map("doctor_availability_exceptions")
@@ -158,7 +158,7 @@ model DoctorSchedulingConfig {
   timezone            String   @default("America/Argentina/Buenos_Aires")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  doctorProfile       DoctorProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@map("doctor_scheduling_configs")
 }
@@ -268,7 +268,7 @@ model DoctorPaymentAccount {
   tokenExpiresAt        DateTime        @map("token_expires_at")
   createdAt             DateTime        @default(now()) @map("created_at")
   updatedAt             DateTime        @updatedAt @map("updated_at")
-  doctor                User            @relation(fields: [doctorUserId], references: [id], onDelete: Cascade)
+  doctorProfile         DoctorProfile   @relation(fields: [doctorUserId], references: [userId], onDelete: Cascade)
 
   @@map("doctor_payment_accounts")
 }

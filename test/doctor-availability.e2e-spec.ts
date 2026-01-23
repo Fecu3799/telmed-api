@@ -40,6 +40,20 @@ async function registerAndLogin(
   return loginResponse.body.accessToken as string;
 }
 
+async function createDoctorProfile(app: INestApplication, token: string) {
+  await request(httpServer(app))
+    .put('/api/v1/doctors/me/profile')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      firstName: 'Ana',
+      lastName: 'Test',
+      bio: 'Cardiologa',
+      priceCents: 120000,
+      currency: 'ARS',
+    })
+    .expect(200);
+}
+
 function formatDateUTC(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -95,6 +109,8 @@ describe('Doctor availability (e2e)', () => {
       .expect(200);
 
     const doctorUserId = me.body.id as string;
+
+    await createDoctorProfile(app, token);
 
     await prisma.doctorSchedulingConfig.upsert({
       where: { userId: doctorUserId },
