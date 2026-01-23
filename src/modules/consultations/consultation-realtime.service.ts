@@ -19,6 +19,20 @@ import { CLOCK } from '../../common/clock/clock';
 import type { Clock } from '../../common/clock/clock';
 import { randomUUID } from 'crypto';
 
+/**
+ * Servicio "realtime-adjacent" de una consulta: emite tokens LiveKit y maneja subida/descarga
+ * de archivos en contexto de consulta
+ *
+ * How it works:
+ * - issueLivekitToken: solo doctor/patient; exige consulta in_progress;
+ *   persiste videoProvider/videoRoomName/videoCreatedAt; audita evento sin guardar token.
+ * - prepareFileUpload: valida participante + in_progress, sanitiza filename, valida mime/size;
+ *   crea FileObject y devuelve uploadUrl (TTL storage). Audita.
+ * - confirmFileUpload: valida participante + in_progress, valida ownership del archivo y pertenencia al prefijo
+ *   consultations/{id}/; actualiza lastActivityAt; audita.
+ * - getDownloadUrl: valida participante y pertenencia del objeto; devuelve presigned download URL; audita READ.
+ */
+
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 100;
 const MAX_MESSAGE_LENGTH = 2000;

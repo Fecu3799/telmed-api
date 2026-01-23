@@ -28,6 +28,17 @@ import { AdminCreateSpecialtyDto } from './dto/admin-create-specialty.dto';
 import { AdminUpdateSpecialtyDto } from './dto/admin-update-specialty.dto';
 import { SpecialtiesService } from './specialties.service';
 
+/**
+ * CRUD de specialties (admin only)
+ * - Expone endpoints de admin para administrar el catálogo de especialidades.
+ *
+ * How it works:
+ * - Monta bajo /admin/specialties y exige JwtAuthGuard + RolesGuard con rol admin.
+ * - POST /admin/specialties -> SpecialtiesService.create(dto).
+ * - PATCH /admin/specialties/:id -> SpecialtiesService.update(id, dto).
+ * - DELETE /admin/specialties/:id -> SpecialtiesService.softDelete(id).
+ */
+
 @ApiTags('admin')
 @Controller('admin/specialties')
 @UseGuards(JwtAuthGuard, RolesGuard)

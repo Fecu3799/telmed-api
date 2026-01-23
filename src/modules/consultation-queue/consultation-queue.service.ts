@@ -6,7 +6,6 @@ import {
   Logger,
   NotFoundException,
   UnprocessableEntityException,
-  NotImplementedException,
   forwardRef,
 } from '@nestjs/common';
 import {
@@ -29,10 +28,56 @@ import { LiveKitService } from '../consultations/livekit.service';
 import { getTraceId } from '../../common/request-context';
 import { CancelQueueDto } from './dto/cancel-queue.dto';
 import { CreateQueueDto } from './dto/create-queue.dto';
-import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
 import { RejectQueueDto } from './dto/reject-queue.dto';
 import { GeoEmergencyCoordinator } from '../geo/geo-emergency-coordinator.service';
 import { NotificationsService } from '../notifications/notifications.service';
+
+/**
+ * State Machine + TTLs + Start/Resume logic
+ * - Implementa la máquina de estados del queue item y coordina: ventana de espera,
+ *   ventana de pago (emergency), creación/resumen de Consultation, eventos realtime
+ *   y notificaciones UI.
+ *
+ * How it works:
+ * - createQueue
+ *   - entryType se calcula (no viene del cliente)
+ *   - Valida existencia de doctorProfile y patient.
+ *   - Emergency: reason obligatorio.
+ *   - Appointment: valida que el appointment corresponda a doctor/patient, esté confirmado,
+ *     y que el "waiting room window" esté dentro de +-15 min del startAt; evita duplicados.
+ *   - Crea item queued con 'expiresAt = now + 15 min' y paymentStatus=not_required (appointment)
+ *     o not_started (emergency).
+ * - getQueueById
+ *   - Enforce ownership (patient/doctor) y aplica expiración "lazy" (sin cron):
+ *     - expireQueueById marca queued -> expired si venció expiresAt.
+ *     - expirePendingPaymentIfNeeded marca pago pending -> expired si venció paymentExpiresAt.
+ * - acceptQueue (emergency only)
+ *   - Requiere status queued y paymentStatus not_started.
+ *   - Reserva aceptación vía GeoEmergencyCoordinator (evita múltiples doctors acepten la misma emergency).
+ *   - Actualiza a accepted, setea paymentStatus=pending y paymentExpiresAt (TTL pago 10 min).
+ *   - Notifica a doctor/patient con notifications.emergenciesChanged.
+ * - requestPaymentForQueue (patient only)
+ *   - Solo para emergency accepted + pago pending.
+ *   - Idempotencia: si existe pago por Idempotency-Key o ya hay pago pending/paid, lo reutiliza; si paid -> 409.
+ *   - Crea preferencia MP (vía PaymentsService) y crea payment + actualiza queue.paymentExpireAt en transacción.
+ * - startFromQueue
+ *   - Valida reglas distintas según entryType:
+ *     - emergency: requiere accepted + paymentStatus=paid.
+ *     - appointment: requiere not_required y validación cruzada con appointmnet.
+ *   - Si ya existe consultation:
+ *     - si está closed = 409.
+ *     - si no está in_progress, la "resume".
+ *     - si ya está in_progress, es idempotente.
+ *   - Si no existe, crea consultation en in_progress
+ *   - Publica evento consultationStarted (no bloqueante, try/catch) y notifica
+ *     consultationsChanged (+ emergenciesChangeds si aplica).
+ *   - Devuelve videoUrl determinístico para routing.
+ *
+ * Key points:
+ * - Expiraciones lazy: el sistema depende de lectura/listados para marcar expired (no cron).
+ * - paymentStatus (queue) y Payment.status (tabla payments) son distintos y conviven: queue usa TTL y gating.
+ *   payments persiste el estado real.
+ */
 
 @Injectable()
 export class ConsultationQueueService {
@@ -838,14 +883,6 @@ export class ConsultationQueueService {
     ]);
 
     return this.toStartResponse(updatedQueue, consultation);
-  }
-
-  finalizeConsultation(
-    _actor: Actor,
-    _consultationId: string,
-    _dto: FinalizeConsultationDto,
-  ) {
-    throw new NotImplementedException('Consultation finalize not implemented');
   }
 
   private buildPaymentExpiry() {

@@ -8,8 +8,12 @@ import type { Actor } from '../../common/types/actor.type';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 
 /**
- * Service for checking consultation access authorization.
- * Reusable for both HTTP endpoints and WebSocket handlers.
+ * Gate de acceso a consultas
+ * - Centraliza autorización de acceso a una consulta para usos realtime.
+ *
+ * How it works:
+ * - Admin siempre Forbidden.
+ * Solo doctor/patient; valida existencia y que el actor sea participante.
  */
 @Injectable()
 export class ConsultationAccessService {

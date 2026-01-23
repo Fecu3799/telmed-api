@@ -193,7 +193,7 @@ ConsultationQueueItem: sala de espera y coordinación de ingreso.
 
 State machine
 
-queued -> accepted -> in_progress -> finalized
+queued -> accepted -> in_progress -> closed
 
 queued -> rejected
 
@@ -205,7 +205,7 @@ Roles & permisos
 
 patient: crear queue, cancelar queue propia.
 
-doctor: aceptar/rechazar, cancelar, iniciar, finalizar.
+doctor: aceptar/rechazar, cancelar, iniciar, cerrar consulta.
 
 admin: override total.
 
@@ -319,13 +319,6 @@ POST /api/v1/consultations/queue/:queueItemId/start
 Response:
 
 { "queueItem": {...}, "consultation": {...}, "videoUrl": "..." }
-
-POST /api/v1/consultations/:id/finalize
-
-200
-Request:
-
-{ "summary": "Resumen", "notes": "Notas" }
 
 POST /api/v1/consultations/:id/close
 

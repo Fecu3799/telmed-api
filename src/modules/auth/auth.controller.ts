@@ -27,6 +27,18 @@ import { RefreshDto } from './dto/refresh.dto';
 import { RefreshResponseDto } from './docs/refresh-response.dto';
 import { RegisterDto } from './dto/register.dto';
 
+/**
+ * AuthController
+ * - Expone API publica de auth (register, login, refresh, logout, me)
+ *
+ * How it works:
+ * - Recibe DTOs, valida, llama a AuthService y traduce a responses.
+ * - Aplica throttling estricto a todo el controller (5 req/min).
+ * - logout y me requieren JwtAuthGuard (actor autenticado)
+ * - GET /auth/me consulta PatientsIdentityService y devuelve hasPatientIdentity
+ *   para habilitar/deshabilitar flujos.
+ */
+
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
 
 type RequestWithActor = Request & { user?: Actor };

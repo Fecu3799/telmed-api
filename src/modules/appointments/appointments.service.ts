@@ -26,6 +26,39 @@ import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { ListAppointmentsQueryDto } from './dto/list-appointments-query.dto';
 
+/**
+ * Core de turnos + ventana de pago
+ * - Implementa el flujo completo de turnos: validación, cálculo de slot, chequeo de solapamiento,
+ *   creación de appointment + payment, listado por rol, reintento de pago y cancelación.
+ *
+ * How it works:
+ * - createAppointment
+ *   - Valida doctor activo y paciente con identidad completa.
+ *   - Resuelve endAt según DoctorAvailabilityService.getSchedulingConfig y valida disponibilidad.
+ *   - Maneja idempotencia: si ya existe payment con esa key/kind, devuelve el appointment/payment asociado.
+ *   - Crea preferencia de pago (MP) y en una transacción:
+ *     - verifica solapamiento con otros appointments activos (pending_payment/confirmed/scheduled).
+ *     - crea appointment en pending_payment con expiresAt.
+ *     - crea payment kind appointment con checkoutUrl, providerPreferenceId, idempotencyKey y expiresAt.
+ *   - Notifica a doctor y paciente (notification.appointmentsChanged).
+ * - listPatient/listDoctor/listAdmin
+ *   - Antes de listar, expira payments pending_payment con paymentsService.expirePendingAppointmentPayments.
+ *   - Filtra por rango from/to y pagina 1-based (limit cap 50).
+ *   - Para paciente, traduce patientUserId -> patientId usando PatientsIdentityService.
+ * - requestPaymentForAppointment
+ *   - Solo patient/admin y valida ownership si es patient.
+ *   - Solo permite pagar si status=pending_payment; si la ventana venció, cancela appointment y devuelve 409.
+ *   - Idempotencia: si existe payment por key o payment pending/paid para el appointment, lo reutiliza; si paid -> 409.
+ *   - Si necesita crear uno nuevo, crea preferencia MP + payment y actualiza appointment.paymentExpiresAt.
+ * - cancelAppointment
+ *   - Valida ownership según rol; setea cancelled + cancelledAt + cancellationReason; notifica a ambos.
+ *
+ * Key points:
+ * - Reglas fuertes: sin identidad completa no se puede reservar.
+ * - Ventana de pago: si expira, el turno se cancela al intentar pagar/listar
+ * - La respuesta normaliza patientUserId aunque DB guarde patientId
+ */
+
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 

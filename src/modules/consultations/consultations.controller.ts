@@ -56,6 +56,20 @@ import { ConsultationFileConfirmDto } from './dto/consultation-file-confirm.dto'
 import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 
+/**
+ * Consulta API (create/get/patch/close + realtime helpers)
+ * - Endpoints para crud y helpers de realtime: emitir token LiveKit y manejo de archivos.
+ *
+ * How it works:
+ * - POST /appointments/:appointmentId/consultation (doctor/admin): create-or-get de consulta para un appointment.
+ * - GET /consultations/:id (patient/doctor/admin): devuelve consulta; Audita lecturas.
+ * - PATCH /consultations/:id (doctor/admin): actualiza summary/notes si no está closed.
+ * - POST /consultations/:id/close (doctor/admin): cierra consulta, audita writes, emite consultation.closed por Socket, notifica consultationsChanged.
+ * - GET /consultations/me/active (patient/doctor): retorna consulta in_progress actual (si existe).
+ * - POST /consultations/:id/livekit-token : emite token LiveKit (solo participantes)
+ * - Files: prepare/confirm/download delegan a ConsultationRealtimeService (subida por presigned URL y confirm)
+ */
+
 @ApiTags('consultations')
 @Controller()
 export class ConsultationsController {

@@ -6,6 +6,15 @@ import {
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 
+/**
+ * Read/Update current user.
+ * - Encapsula las operaciones "self-service" del usuario sobre la tabla users.
+ *
+ * How it works:
+ * - getMe: findUnique por id y devuelve un select minimal de user.
+ * - updateMe(userId, dto): valida que displayName venga definido; actualiza solo displayName
+ */
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}

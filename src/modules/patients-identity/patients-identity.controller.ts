@@ -23,6 +23,18 @@ import { PatientIdentityDto } from './docs/patient-identity.dto';
 import { PatientIdentityPatchDto } from './dto/patient-identity-patch.dto';
 import { PatientsIdentityService } from './patients-identity.service';
 
+/**
+ * Identidad legal del paciente:
+ * - Expone endpoints para que un paciente gestione su identidad legal (leer y upsert) bajo
+ *   /api/patients/me/identity, con RBAC patient y audit log de lectura/escritura.
+ *
+ * How it works:
+ * - GET /patients/me/identity: pide a PatientsIdentityService.getIdentity(actor.id)
+ *   y luego registra un audit READ con resourceType=PatientIdentity, resourceId, actor, traceId, ip, userAgent.
+ * - PATCH /patients/me/identity: llama a upsertIdentity(actor.id, dto) y registra audit
+ *   WRITE con metadata.fields=keys del DTO para saber qué cambió.
+ */
+
 @ApiTags('patients')
 @Controller('patients/me/identity')
 @UseGuards(JwtAuthGuard, RolesGuard)

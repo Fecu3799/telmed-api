@@ -43,6 +43,19 @@ import { ListAppointmentsQueryDto } from './dto/list-appointments-query.dto';
 import { AuditService } from '../../infra/audit/audit.service';
 import { AuditAction } from '@prisma/client';
 
+/**
+ * Booking + list + pay + cancel appointments
+ * - Expone la API para crear turnos, listar turnos por rol, pedir checkout de pago
+ *   y cancelar turnos, con validaciones y restricciones de negocio.
+ *
+ * How it works:
+ * - POST /appointments (patient/admin): crea appointment con Idempotency-Key opcional.
+ * - GET /patients/me/appointments / /doctors/me/appointments: lista por actor con paginación + rango from/to.
+ * - GET /admin/appointments: lista global con filtros admin.
+ * - POST /appointments/:id/pay: genera/recupera checkout de MercadoPago solo si el turno está pending_payment.
+ * - POST /appointments/:id/cancel: cancela turno (patient/doctor/admin) y guarda motivo.
+ */
+
 @ApiTags('appointments')
 @Controller()
 export class AppointmentsController {

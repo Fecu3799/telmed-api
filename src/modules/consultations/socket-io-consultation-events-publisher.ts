@@ -3,8 +3,11 @@ import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
 import type { ConsultationEventsPublisher } from './consultation-events-publisher.interface';
 
 /**
- * Socket.IO implementation of ConsultationEventsPublisher.
- * Emits realtime events via WebSocket gateway.
+ * Adapter de eventos de consulta para Socket.IO
+ * - Implementación de ConsultationEventsPublisher que publica eventos de dominio vía ConsultationRealtimeGateway.
+ *
+ * How it works:
+ * - consultationStarted: llama a gateway.emitConsultationStarted(...) dentro de try/catch (no rompe request si falla).
  */
 @Injectable()
 export class SocketIoConsultationEventsPublisher implements ConsultationEventsPublisher {

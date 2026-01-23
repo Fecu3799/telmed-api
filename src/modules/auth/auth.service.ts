@@ -16,6 +16,23 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 
+/**
+ * AuthService - Sessions + Tokens
+ * - Implementa registro/login y manejo de sesiones con refresh token (creacion, rotacion, revocacion)
+ *
+ * How it works:
+ * - register: crea user, crea session, guarda refreshToken en DB. Password con Argon2.
+ * - login: valida user/password; si disabled, 403; crea sesion nueva y devuelve tokens.
+ * - refresh: verifica refresh JWT, valida sesion activa/no expirada/no revocada + hash coincide.
+ *   Rota sesion (marca vieja rotated y crea nueva active) y devuelve tokens nuevos.
+ * - logout: verifica refresh token + ownership (payload.sub === actorId), y revoca la sesión activa.
+ * - Tokens: access {sub, role} y refresh {sub, role, sid} con TTLs desde env.
+ *
+ * Key points:
+ * - Rotación de refresh = corta el uso repetido del mismo refresh token (sesion vieja pasa a rotated).
+ * - En DB queda hash del refresh, no el token en claro.
+ */
+
 const INVALID_CREDENTIALS_MESSAGE = 'Invalid credentials';
 
 @Injectable()

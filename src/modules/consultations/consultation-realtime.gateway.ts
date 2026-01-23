@@ -36,6 +36,21 @@ type PingPayload = { consultationId: string };
 // Removed: ChatSendPayload, ChatDeliveredPayload - chat messages now handled by chats module
 
 /**
+ * Socket.IO /consultations (join,presence,queue subscribe, events)
+ * - Gateway Socket.IO para presencia en consulta y eventos operativos (join/ping + notifications start/closed)
+ *
+ * How it works:
+ * - Namespace /consultations. Autenticación por Bearer token en handshake y guarda client.data.actor.
+ * - queue:subscribe {queueItemId}: valida acceso al queue item y une al room queueItem:{id} (para notificar consultation:started)
+ * - consultation.join: valida acceso a consulta; join a room consultation:{id}; si está in_progress, setea presence en Redis
+ *   y emite presence.state
+ * - presence.ping: renueva TTL y re-emite presence.state.
+ * - Publisher methods: emitConsultationStarted (al room de queue), emitConsultationClosed (al room de consulta).
+ *
+ * Key points:
+ * - Presencia basada en Redis SCAN sobre keys presence:consultation:{id}:*
+ * - emitConsultationStarted es "best effort": loguea recipients estimados y no rompe si nadie está suscripto.
+ *
  * WebSocket Gateway for consultations namespace
  * Handles real-time events: consultation join, presence, chat, file sharing
  *

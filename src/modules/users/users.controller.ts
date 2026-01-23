@@ -17,6 +17,16 @@ import { UpdateMeDto } from './dto/update-me.dto';
 import { UserMeDto } from './docs/user-me.dto';
 import { UsersService } from './users.service';
 
+/**
+ * Current user endpoints
+ * - Expone endpoints para que el usuario autenticado consulte/edite su propio perfil.
+ *
+ * How it works:
+ * - Protegido con JwtAuthGuard y access-token.
+ * - GET /users/me devuelve el "me" desde UsersService.getMe(actor.id).
+ * - PATCH /users/me permite actualizar  displayName vía UsersService.updateMe(actor.id, dto).
+ */
+
 @ApiTags('users')
 @Controller('users')
 @UseGuards(JwtAuthGuard)

@@ -9,6 +9,19 @@ import { AdminCreateSpecialtyDto } from './dto/admin-create-specialty.dto';
 import { AdminUpdateSpecialtyDto } from './dto/admin-update-specialty.dto';
 import { SpecialtiesQueryDto } from './dto/specialties-query.dto';
 
+/**
+ * Catálogo + soft delete de specialties
+ * - Lógica de especialidades: listar activas, crear/actualizar y desactivar.
+ *
+ * How it works:
+ * - listActive(query): devuelve specialty.findMany filtrando isActive=true,
+ *   ordenado por name, con paginación por limit/offset (default 50/0).
+ * - create(dto): crea specialty activa; si choca unique (P2002) -> 409.
+ * - update(id, dto): arma data solo con campos presentes; si DTO vacío,
+ *   devuelve existente o 404; maneja unique (P2002) -> 409.
+ * - softDelete(id): setea isActive=false; si no existe (P2025) -> 404.
+ */
+
 @Injectable()
 export class SpecialtiesService {
   constructor(private readonly prisma: PrismaService) {}

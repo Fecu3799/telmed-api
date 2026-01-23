@@ -6,6 +6,22 @@ import {
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { PatientIdentityPatchDto } from './dto/patient-identity-patch.dto';
 
+/**
+ * Gestiona la identidad legal del paciente:
+ * - Implementa la lógica de identidad del paciente sobre la tabla patient:
+ *   crea el registro la primera vez (minimos obligatorios) y luego permite updates parciales.
+ *
+ * How it works:
+ * - getIdentity(userId): busca patient por userId; si no existe, 404.
+ * - upsertIdentity(userId, dto):
+ *    - Si no existe: valida el input completo. Si falta algo, 422.;
+ *      Si esta OK create y setea defaults (documentCountry=AR).
+ *    - Si existe: arma data solo con campos presentes en DTO (update parcial).
+ *      Si el DTO vino vacío, devuelve el existing sin pegarle a DB.
+ * - getIdentityStatus(userId): devuelve {exists, isComplete, patientId}
+ *   con un select mínimo, usando isIdentityComplete.
+ */
+
 type PatientIdentity = {
   legalFirstName: string | null;
   legalLastName: string | null;

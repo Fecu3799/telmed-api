@@ -25,6 +25,18 @@ import { DoctorSpecialtiesPutDto } from './dto/doctor-specialties-put.dto';
 import { LocationDto } from './dto/location.dto';
 import { DoctorProfilesService } from './doctor-profiles.service';
 
+/**
+ * Gestión del perfil del doctor
+ * - Expone la API para que un doctor autenticado gestione su perfil:
+ *   leer/crear/actualizar el perfil, setear ubicación y administrar sus especialidades.
+ *
+ * How it works:
+ * - Todas las rutas cuelgan de GET/PUT/PATCH /doctors/me/profile,
+ *   PUT /doctors/me/location y GET /doctors/me/specialties.
+ * - Protege todo con JwtAuthGuard + RolesGuard y restringe a UserRole.doctor.
+ * - Delega la lógica a DoctorProfilesService (perfil, ubicacion, especialidades).
+ */
+
 @ApiTags('doctors')
 @Controller('doctors/me')
 @UseGuards(JwtAuthGuard, RolesGuard)

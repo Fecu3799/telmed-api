@@ -16,6 +16,14 @@ export class ConsultationQueueAccessService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Ownership gate (queue)
+   * - Centraliza el check de acceso a ConsultationQueueItem por actor.
+   *
+   * How it works:
+   * - Patient: solo si queue.patientUserId === actor.id.
+   * - Doctor: solo si queue.doctorUserId === actor.id.
+   * - Admin: explícitamente Forbidden (operacional, no acceso a contenido).
+   *
    * Check if actor can access a queue item.
    * Throws ForbiddenException if access is denied.
    * @param actor - The actor requesting access

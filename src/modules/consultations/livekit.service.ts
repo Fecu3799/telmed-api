@@ -5,6 +5,15 @@ import { randomUUID } from 'crypto';
 import { CLOCK } from '../../common/clock/clock';
 import type { Clock } from '../../common/clock/clock';
 
+/**
+ * Genera tookens JWT para que doctor/patient se conecten a la sala de video en LiveKit.
+ *
+ * How it works:
+ * - Lee LIVEKIT_API_KEY/SECRET/URL desde env; en test usa defaults.
+ * - issueToken: firma un JWT HS256 con permisos roomJoin + publisher/subscribe y TTL configurable.
+ * - Expone getLivekitUrl para armar payloads/eventos sin regenerar token.
+ */
+
 type LiveKitTokenResult = {
   token: string;
   roomName: string;

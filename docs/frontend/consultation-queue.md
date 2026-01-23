@@ -8,7 +8,7 @@
 
 ## State machine
 
-- queued -> accepted -> in_progress -> finalized
+- queued -> accepted -> in_progress -> closed
 - queued -> rejected
 - queued -> cancelled
 - queued -> expired
@@ -16,7 +16,7 @@
 ## Roles & permissions
 
 - patient: crear queue, cancelar queue propia.
-- doctor: crear queue (si corresponde), aceptar/rechazar, cancelar, iniciar, finalizar.
+- doctor: crear queue (si corresponde), aceptar/rechazar, cancelar, iniciar, cerrar consulta.
 - admin: override total.
 
 ## Business rules
@@ -216,28 +216,6 @@ Response 201:
 }
 ```
 
-### POST /api/v1/consultations/:id/finalize
-
-Status: 200.
-Request:
-
-```json
-{ "summary": "Resumen", "notes": "Notas" }
-```
-
-Response 200:
-
-```json
-{
-  "id": "c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
-  "status": "finalized",
-  "closedAt": "2025-01-05T14:30:00.000Z",
-  "doctorUserId": "d9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a",
-  "patientUserId": "2b3c5f7a-9c2a-4c1e-8e9f-123456789abc",
-  "appointmentId": "e9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a"
-}
-```
-
 ## Error handling
 
 - 401 Unauthorized
@@ -263,7 +241,7 @@ Problem Details example:
 
 ## Happy path UI
 
-Patient crea queue, doctor acepta, doctor inicia, doctor finaliza. Admin puede intervenir en cualquier paso.
+Patient crea queue, doctor acepta, doctor inicia, doctor cierra la consulta. Admin puede intervenir en cualquier paso.
 
 ### GET /api/v1/consultations/queue
 

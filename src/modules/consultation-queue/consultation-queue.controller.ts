@@ -45,9 +45,23 @@ import { ConsultationQueueService } from './consultation-queue.service';
 import { PaymentCheckoutDto } from '../payments/docs/payment.dto';
 import { CancelQueueDto } from './dto/cancel-queue.dto';
 import { CreateQueueDto } from './dto/create-queue.dto';
-import { FinalizeConsultationDto } from './dto/finalize-consultation.dto';
 import { RejectQueueDto } from './dto/reject-queue.dto';
 import { ListEmergenciesQueryDto } from './dto/list-emergencies-query.dto';
+
+/**
+ * Queue API + Emergency Flow
+ * - Expone el flujo de sala de espera / cola para appointment y emergency: crear item, ver estado (poll),
+ *   aceptar/rechazar/cancelar, pedir pago (emergency), listar colas/emergencias, start de consulta desde queue.
+ *
+ * How it works:
+ * - POST /consultations/queue : crea ConsultationQueueItem (entryType se deriva:
+ *   appointmentId -> appointment, sino emergency) y audita el alta.
+ * - GET /consultations/queue/:id : endopoint "dinamico" (headers no-cache) para polling de estado.
+ * - POST ../:id/accept : solo doctor/admin; en emergency pasa a accepted y abre ventana de pago. Audita transición.
+ * - POST ../:id/payment : solo patient; crea/retorna checkout (idempotente) y audita Payment.
+ * - GET /doctors/me/emergencies / /patients/me/emergencies : vistas paginadas para el panel de turnos.
+ * - POST ../:id/start : start/resume de consulta (doctor/admin) desde queue.
+ */
 
 @ApiTags('consultations')
 @Controller()
@@ -362,30 +376,5 @@ export class ConsultationQueueController {
     );
 
     return result;
-  }
-
-  @Post('consultations/:id/finalize')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.doctor, UserRole.admin)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Finalize consultation' })
-  @ApiBody({ type: FinalizeConsultationDto })
-  @ApiOkResponse({ type: ConsultationQueueConsultationDto })
-  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
-  @ApiForbiddenResponse({ type: ProblemDetailsDto })
-  @ApiNotFoundResponse({ type: ProblemDetailsDto })
-  @ApiConflictResponse({ type: ProblemDetailsDto })
-  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
-  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  finalize(
-    @CurrentUser() actor: Actor,
-    @Param('id') consultationId: string,
-    @Body() dto: FinalizeConsultationDto,
-  ) {
-    return this.consultationQueueService.finalizeConsultation(
-      actor,
-      consultationId,
-      dto,
-    );
   }
 }

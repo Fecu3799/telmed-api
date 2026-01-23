@@ -15,6 +15,30 @@ import { DoctorProfilePutDto } from './dto/doctor-profile-put.dto';
 import { DoctorSpecialtiesPutDto } from './dto/doctor-specialties-put.dto';
 import { LocationDto } from './dto/location.dto';
 
+/**
+ * Gestiona el perfil del doctor:
+ * - Implementa la lógica de negocio y persistencia del perfil profesional del doctor, incluyendo:
+ *   - Perfil base (nombre, bio, precio).
+ *   - Ubicación geográfica (PostGIS geography(Point, 4326)) + lectura/escritura por SQL.
+ *   - Especialidades (tabla puente doctor_specialties con specialties)
+ *
+ * How it works:
+ * - Perfil
+ *   - getProfile(userId): busca doctorProfile por userId, si no existe 404. Trae location con query raw.
+ *   - upsertProfile(userId, dto): upsert del perfil (create/update). Si viene dto.location, setea geo y devuelve perfil con location.
+ *   - patchProfile(userId, dto): valida que existe, arma data solo con campos presentes,
+ *     actualiza solo si hay cambios; si viene location, actualiza.
+ * - Ubicación (PostGIS):
+ *   - setLocation(userId, lat, lng): hace UPDATE por $executeRaw
+ *   - Luego intenta reverseGeocode(lat,lng) y si resuelve ciudad/region/pais, los persiste.
+ *     Si el geocoding falla, no rompe la operación.
+ *   - getLocation(userId): lee la ubicación desde DB con $queryRaw y retorna {lat,lng} o null.
+ * - Especialidades:
+ *   - getSpecialties(userId): valida que existe perfil y trae doctorSpecialties con include: {specialty: true}; devuelve {id, name}.
+ *   - setSpecialties(userId, dto): deduplica (borra duplicados) IDs, valida que existan en specialties,
+ *     y aplica un $transaction de "replace": borra todas y recrea con createMany si hay IDs.
+ */
+
 @Injectable()
 export class DoctorProfilesService {
   constructor(

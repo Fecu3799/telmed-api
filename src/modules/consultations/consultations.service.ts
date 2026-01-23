@@ -14,6 +14,24 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import type { Actor } from '../../common/types/actor.type';
 import { ConsultationPatchDto } from './dto/consultation-patch.dto';
 
+/**
+ * Core de consultas (appointment -> consultation, read/patch/close, active)
+ * - Crear consulta asociada a un appointment, validar acceso, editar notas/resumen, cerrar consulta
+ *   y marcar efectos colaterales (queue + appointment)
+ *
+ * How it works:
+ * - createForAppointment: valida appointment existente + status (scheduled/confirmed), valida ownership si actor es doctor
+ *   y crea consulta única por appointmentId (maneja race con P2002).
+ * - getById: incluye queueItem (info mínima), y aplica ownership (doctor/patient).
+ * - patch: bloquea si closed; permite solo doctor/admin; actualiza summary/notes.
+ * - close: idempotente si ya está closed; setea closedAt, lastActivityAt, summary/notes final;
+ *   si venia de queue marca queueItem.closedAt; si venia de appointment marca appointment completed.
+ * - getActiveForActor: busca última in_progress del actor.
+ *
+ * Key points:
+ * - Admin no está bloqueado en ConsultationService.getById, pero el controller lo devuelve con vista reducida.
+ */
+
 @Injectable()
 export class ConsultationsService {
   constructor(private readonly prisma: PrismaService) {}
