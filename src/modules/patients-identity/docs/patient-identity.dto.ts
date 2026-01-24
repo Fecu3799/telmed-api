@@ -32,6 +32,15 @@ export class PatientIdentityDto {
   @ApiPropertyOptional({ example: 'Av. Siempre Viva 123' })
   addressText?: string | null;
 
+  @ApiPropertyOptional({ example: 'Maria Perez' })
+  emergencyContactName?: string | null;
+
+  @ApiPropertyOptional({ example: '+54 11 5555 1234' })
+  emergencyContactPhone?: string | null;
+
+  @ApiPropertyOptional({ example: 'OSDE' })
+  insuranceName?: string | null;
+
   @ApiProperty({ example: '2025-01-05T13:50:00.000Z' })
   createdAt!: string;
 

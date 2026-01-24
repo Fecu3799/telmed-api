@@ -56,6 +56,9 @@ model Patient {
   birthDate       DateTime            @map("birth_date") @db.Date
   phone           String?             @map("phone")
   addressText     String?             @map("address_text")
+  emergencyContactName  String?       @map("emergency_contact_name")
+  emergencyContactPhone String?       @map("emergency_contact_phone")
+  insuranceName         String?       @map("insurance_name")
   createdAt       DateTime            @default(now()) @map("created_at")
   updatedAt       DateTime            @updatedAt @map("updated_at")
   appointments    Appointment[]
@@ -203,10 +206,11 @@ model Consultation {
   lastActivityAt DateTime?              @map("last_activity_at")
   createdAt      DateTime               @default(now()) @map("created_at")
   updatedAt      DateTime               @updatedAt @map("updated_at")
+
   appointment    Appointment?           @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   queueItem      ConsultationQueueItem? @relation(fields: [queueItemId], references: [id], onDelete: SetNull)
-  chatMessages   ChatMessage[]         @relation("ChatMessageConsultation")
-  relatedFiles   PatientFile[]         @relation("PatientFileConsultation")
+  chatMessages   ChatMessage[]          @relation("ChatMessageConsultation")
+  relatedFiles   PatientFile[]          @relation("PatientFileConsultation")
 
   @@index([doctorUserId, createdAt])
   @@index([patientUserId, createdAt])

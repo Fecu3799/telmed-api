@@ -12,6 +12,9 @@ export interface PatientIdentity {
   birthDate: string | null;
   phone: string | null;
   addressText: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  insuranceName: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -25,6 +28,9 @@ export interface PatientIdentityPatch {
   birthDate?: string;
   phone?: string | null;
   addressText?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  insuranceName?: string | null;
 }
 
 export async function getPatientIdentity(): Promise<PatientIdentity> {

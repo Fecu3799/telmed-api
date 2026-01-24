@@ -71,6 +71,9 @@ export class PatientsIdentityService {
           birthDate: new Date(dto.birthDate!),
           phone: dto.phone ?? null,
           addressText: dto.addressText ?? null,
+          emergencyContactName: dto.emergencyContactName ?? null,
+          emergencyContactPhone: dto.emergencyContactPhone ?? null,
+          insuranceName: dto.insuranceName ?? null,
         },
       });
     }
@@ -99,6 +102,15 @@ export class PatientsIdentityService {
     }
     if (dto.addressText !== undefined) {
       data.addressText = dto.addressText;
+    }
+    if (dto.emergencyContactName !== undefined) {
+      data.emergencyContactName = dto.emergencyContactName;
+    }
+    if (dto.emergencyContactPhone !== undefined) {
+      data.emergencyContactPhone = dto.emergencyContactPhone;
+    }
+    if (dto.insuranceName !== undefined) {
+      data.insuranceName = dto.insuranceName;
     }
 
     if (Object.keys(data).length === 0) {

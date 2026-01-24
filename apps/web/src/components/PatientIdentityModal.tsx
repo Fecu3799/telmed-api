@@ -25,6 +25,9 @@ export function PatientIdentityModal({
     birthDate: '',
     phone: '',
     addressText: '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    insuranceName: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ProblemDetails | null>(null);
@@ -40,6 +43,9 @@ export function PatientIdentityModal({
       birthDate: '1990-05-10',
       phone: '+54 11 5555-5555',
       addressText: 'Av. Siempre Viva 123',
+      emergencyContactName: 'Maria Perez',
+      emergencyContactPhone: '+54 11 4444-4444',
+      insuranceName: 'OSDE',
     });
     setError(null);
     setFieldErrors({});
@@ -320,6 +326,87 @@ export function PatientIdentityModal({
               value={formData.phone || ''}
               onChange={(e) =>
                 setFormData({ ...formData, phone: e.target.value })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
+              Emergency Contact Name
+            </label>
+            <input
+              type="text"
+              value={formData.emergencyContactName || ''}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  emergencyContactName: e.target.value,
+                })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
+              Emergency Contact Phone
+            </label>
+            <input
+              type="text"
+              value={formData.emergencyContactPhone || ''}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  emergencyContactPhone: e.target.value,
+                })
+              }
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: '500',
+              }}
+            >
+              Insurance Name
+            </label>
+            <input
+              type="text"
+              value={formData.insuranceName || ''}
+              onChange={(e) =>
+                setFormData({ ...formData, insuranceName: e.target.value })
               }
               style={{
                 width: '100%',

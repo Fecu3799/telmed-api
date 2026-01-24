@@ -61,4 +61,22 @@ export class PatientIdentityPatchDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   addressText?: string | null;
+
+  @ApiPropertyOptional({ example: 'Maria Perez' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  emergencyContactName?: string | null;
+
+  @ApiPropertyOptional({ example: '+54 11 5555 1234' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  emergencyContactPhone?: string | null;
+
+  @ApiPropertyOptional({ example: 'OSDE' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  insuranceName?: string | null;
 }
