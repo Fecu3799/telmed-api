@@ -14,6 +14,7 @@ import { PrismaModule } from './infra/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PatientsIdentityModule } from './modules/patients-identity/patients-identity.module';
+import { PatientsClinicalProfileModule } from './modules/patients-clinical-profile/patients-clinical-profile.module';
 import { DoctorsModule } from './modules/doctors/doctors.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
@@ -107,6 +108,7 @@ import { BenchmarkThrottlerGuard } from './common/guards/benchmark-throttler.gua
     AuthModule,
     UsersModule,
     PatientsIdentityModule,
+    PatientsClinicalProfileModule,
     DoctorsModule,
     SpecialtiesModule,
     AppointmentsModule,

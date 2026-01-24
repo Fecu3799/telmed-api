@@ -69,6 +69,90 @@ model Patient {
   @@map("patients")
 }
 
+model PatientClinicalAllergy {
+  id                 String                     @id @default(uuid())
+  patientUserId      String                     @map("patient_user_id")
+  name               String
+  notes              String?                    @db.Text
+  sourceType         ClinicalSourceType         @default(patient) @map("source_type")
+  sourceUserId       String?                    @map("source_user_id")
+  verificationStatus ClinicalVerificationStatus @default(unverified) @map("verification_status")
+  verifiedByUserId   String?                    @map("verified_by_user_id")
+  verifiedAt         DateTime?                  @map("verified_at")
+  isActive           Boolean                    @default(true) @map("is_active")
+  endedAt            DateTime?                  @map("ended_at")
+  deletedAt          DateTime?                  @map("deleted_at")
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+
+  @@index([patientUserId, isActive])
+  @@index([patientUserId, verificationStatus])
+  @@map("patient_clinical_allergies")
+}
+
+model PatientClinicalMedication {
+  id                 String                     @id @default(uuid())
+  patientUserId      String                     @map("patient_user_id")
+  name               String
+  notes              String?                    @db.Text
+  sourceType         ClinicalSourceType         @default(patient) @map("source_type")
+  sourceUserId       String?                    @map("source_user_id")
+  verificationStatus ClinicalVerificationStatus @default(unverified) @map("verification_status")
+  verifiedByUserId   String?                    @map("verified_by_user_id")
+  verifiedAt         DateTime?                  @map("verified_at")
+  isActive           Boolean                    @default(true) @map("is_active")
+  endedAt            DateTime?                  @map("ended_at")
+  deletedAt          DateTime?                  @map("deleted_at")
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+
+  @@index([patientUserId, isActive])
+  @@index([patientUserId, verificationStatus])
+  @@map("patient_clinical_medications")
+}
+
+model PatientClinicalCondition {
+  id                 String                     @id @default(uuid())
+  patientUserId      String                     @map("patient_user_id")
+  name               String
+  notes              String?                    @db.Text
+  sourceType         ClinicalSourceType         @default(patient) @map("source_type")
+  sourceUserId       String?                    @map("source_user_id")
+  verificationStatus ClinicalVerificationStatus @default(unverified) @map("verification_status")
+  verifiedByUserId   String?                    @map("verified_by_user_id")
+  verifiedAt         DateTime?                  @map("verified_at")
+  isActive           Boolean                    @default(true) @map("is_active")
+  endedAt            DateTime?                  @map("ended_at")
+  deletedAt          DateTime?                  @map("deleted_at")
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+
+  @@index([patientUserId, isActive])
+  @@index([patientUserId, verificationStatus])
+  @@map("patient_clinical_conditions")
+}
+
+model PatientClinicalProcedure {
+  id                 String                     @id @default(uuid())
+  patientUserId      String                     @map("patient_user_id")
+  name               String
+  notes              String?                    @db.Text
+  sourceType         ClinicalSourceType         @default(patient) @map("source_type")
+  sourceUserId       String?                    @map("source_user_id")
+  verificationStatus ClinicalVerificationStatus @default(unverified) @map("verification_status")
+  verifiedByUserId   String?                    @map("verified_by_user_id")
+  verifiedAt         DateTime?                  @map("verified_at")
+  isActive           Boolean                    @default(true) @map("is_active")
+  endedAt            DateTime?                  @map("ended_at")
+  deletedAt          DateTime?                  @map("deleted_at")
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+
+  @@index([patientUserId, isActive])
+  @@index([patientUserId, verificationStatus])
+  @@map("patient_clinical_procedures")
+}
+
 model DoctorProfile {
   userId             String                    @id @map("user_id")
   bio                String?
@@ -366,6 +450,18 @@ enum DoctorVerificationStatus {
 enum DoctorAvailabilityExceptionType {
   closed
   custom
+}
+
+enum ClinicalSourceType {
+  patient
+  clinician
+  system
+}
+
+enum ClinicalVerificationStatus {
+  unverified
+  verified
+  disputed
 }
 
 enum AppointmentStatus {
