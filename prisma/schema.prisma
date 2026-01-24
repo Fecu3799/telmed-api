@@ -295,10 +295,47 @@ model Consultation {
   queueItem      ConsultationQueueItem? @relation(fields: [queueItemId], references: [id], onDelete: SetNull)
   chatMessages   ChatMessage[]          @relation("ChatMessageConsultation")
   relatedFiles   PatientFile[]          @relation("PatientFileConsultation")
+  clinicalEpisode ClinicalEpisode?
 
   @@index([doctorUserId, createdAt])
   @@index([patientUserId, createdAt])
   @@map("consultations")
+}
+
+model ClinicalEpisode {
+  id             String      @id @default(uuid())
+  consultationId String      @unique @map("consultation_id")
+  patientUserId  String      @map("patient_user_id")
+  doctorUserId   String      @map("doctor_user_id")
+  deletedAt      DateTime?   @map("deleted_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  notes        ClinicalEpisodeNote[]
+
+  @@index([doctorUserId, createdAt])
+  @@index([patientUserId, createdAt])
+  @@map("clinical_episodes")
+}
+
+model ClinicalEpisodeNote {
+  id              String                 @id @default(uuid())
+  episodeId       String                 @map("episode_id")
+  kind            ClinicalEpisodeNoteKind
+  title           String
+  body            String                 @db.Text
+  createdByUserId String                 @map("created_by_user_id")
+  createdByRole   UserRole               @map("created_by_role")
+  deletedAt       DateTime?              @map("deleted_at")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  episode ClinicalEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([episodeId, kind])
+  @@index([createdByUserId, createdAt])
+  @@map("clinical_episode_notes")
 }
 
 model FileObject {
@@ -462,6 +499,12 @@ enum ClinicalVerificationStatus {
   unverified
   verified
   disputed
+}
+
+enum ClinicalEpisodeNoteKind {
+  draft
+  final
+  addendum
 }
 
 enum AppointmentStatus {

@@ -4,9 +4,11 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -53,8 +55,10 @@ import { ConsultationRealtimeService } from './consultation-realtime.service';
 // Removed: ConsultationMessagesQueryDto (chat messages now handled by chats module)
 import { ConsultationFilePrepareDto } from './dto/consultation-file-prepare.dto';
 import { ConsultationFileConfirmDto } from './dto/consultation-file-confirm.dto';
+import { UpsertClinicalEpisodeDraftDto } from './dto/upsert-clinical-episode-draft.dto';
 import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ClinicalEpisodeDraftResponseDto } from './docs/clinical-episode-draft.dto';
 
 /**
  * Consulta API (create/get/patch/close + realtime helpers)
@@ -208,6 +212,88 @@ export class ConsultationsController {
       consultation.patientUserId,
     ]);
     return this.withConsultationExtras(consultation);
+  }
+
+  @Put('consultations/:consultationId/clinical-episode/draft')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Upsert clinical episode draft (doctor)' })
+  @ApiBody({ type: UpsertClinicalEpisodeDraftDto })
+  @ApiOkResponse({ type: ClinicalEpisodeDraftResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async upsertClinicalEpisodeDraft(
+    @CurrentUser() actor: Actor,
+    @Param('consultationId') consultationId: string,
+    @Body() dto: UpsertClinicalEpisodeDraftDto,
+    @Req() req: Request,
+  ) {
+    const result = await this.consultationsService.upsertClinicalEpisodeDraft(
+      actor,
+      consultationId,
+      dto,
+    );
+
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'clinical_episode_draft',
+      resourceId: result.draft.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: {
+        consultationId,
+      },
+    });
+
+    return result;
+  }
+
+  @Get('consultations/:consultationId/clinical-episode')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get clinical episode draft (doctor)' })
+  @ApiOkResponse({ type: ClinicalEpisodeDraftResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async getClinicalEpisodeDraft(
+    @CurrentUser() actor: Actor,
+    @Param('consultationId') consultationId: string,
+    @Req() req: Request,
+  ) {
+    if (actor.role !== UserRole.doctor) {
+      throw new NotFoundException('Clinical episode not found');
+    }
+
+    const result =
+      await this.consultationsService.getClinicalEpisodeDraftForDoctor(
+        actor,
+        consultationId,
+      );
+
+    await this.auditService.log({
+      action: AuditAction.READ,
+      resourceType: 'clinical_episode_draft',
+      resourceId: result.draft.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: {
+        consultationId,
+      },
+    });
+
+    return result;
   }
 
   @Get('consultations/me/active')

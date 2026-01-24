@@ -23,6 +23,8 @@ export async function resetDb(prisma: PrismaClient) {
   await prisma.patientClinicalCondition.deleteMany();
   await prisma.patientClinicalMedication.deleteMany();
   await prisma.patientClinicalAllergy.deleteMany();
+  await prisma.clinicalEpisodeNote.deleteMany();
+  await prisma.clinicalEpisode.deleteMany();
   await prisma.consultation.deleteMany();
   await prisma.consultationQueueItem.deleteMany();
   await prisma.webhookEvent.deleteMany();
