@@ -4,7 +4,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  NotFoundException,
   Param,
   Patch,
   Post,
@@ -55,10 +54,14 @@ import { ConsultationRealtimeService } from './consultation-realtime.service';
 // Removed: ConsultationMessagesQueryDto (chat messages now handled by chats module)
 import { ConsultationFilePrepareDto } from './dto/consultation-file-prepare.dto';
 import { ConsultationFileConfirmDto } from './dto/consultation-file-confirm.dto';
+import { SetClinicalEpisodeFormattedDto } from './dto/set-clinical-episode-formatted.dto';
 import { UpsertClinicalEpisodeDraftDto } from './dto/upsert-clinical-episode-draft.dto';
 import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
-import { ClinicalEpisodeDraftResponseDto } from './docs/clinical-episode-draft.dto';
+import {
+  ClinicalEpisodeDraftResponseDto,
+  ClinicalEpisodeResponseDto,
+} from './docs/clinical-episode-draft.dto';
 
 /**
  * Consulta API (create/get/patch/close + realtime helpers)
@@ -255,35 +258,32 @@ export class ConsultationsController {
     return result;
   }
 
-  @Get('consultations/:consultationId/clinical-episode')
+  @Post('consultations/:consultationId/clinical-episode/finalize')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.patient, UserRole.doctor)
+  @Roles(UserRole.doctor)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Get clinical episode draft (doctor)' })
-  @ApiOkResponse({ type: ClinicalEpisodeDraftResponseDto })
+  @ApiOperation({ summary: 'Finalize clinical episode (doctor)' })
+  @ApiCreatedResponse({ type: ClinicalEpisodeResponseDto })
   @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
   @ApiForbiddenResponse({ type: ProblemDetailsDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
-  async getClinicalEpisodeDraft(
+  async finalizeClinicalEpisode(
     @CurrentUser() actor: Actor,
     @Param('consultationId') consultationId: string,
     @Req() req: Request,
   ) {
-    if (actor.role !== UserRole.doctor) {
-      throw new NotFoundException('Clinical episode not found');
-    }
-
-    const result =
-      await this.consultationsService.getClinicalEpisodeDraftForDoctor(
-        actor,
-        consultationId,
-      );
+    const result = await this.consultationsService.finalizeClinicalEpisode(
+      actor,
+      consultationId,
+    );
 
     await this.auditService.log({
-      action: AuditAction.READ,
-      resourceType: 'clinical_episode_draft',
-      resourceId: result.draft.id,
+      action: AuditAction.WRITE,
+      resourceType: 'clinical_episode_final',
+      resourceId: result.final.id,
       actor,
       traceId: (req as Request & { traceId?: string }).traceId ?? null,
       ip: req.ip,
@@ -292,6 +292,109 @@ export class ConsultationsController {
         consultationId,
       },
     });
+
+    return result;
+  }
+
+  @Put('consultations/:consultationId/clinical-episode/final/formatted')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Set formatted clinical episode (doctor)' })
+  @ApiBody({ type: SetClinicalEpisodeFormattedDto })
+  @ApiOkResponse({ type: ClinicalEpisodeResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  async setClinicalEpisodeFormatted(
+    @CurrentUser() actor: Actor,
+    @Param('consultationId') consultationId: string,
+    @Body() dto: SetClinicalEpisodeFormattedDto,
+    @Req() req: Request,
+  ) {
+    const result =
+      await this.consultationsService.setClinicalEpisodeFinalFormatted(
+        actor,
+        consultationId,
+        dto,
+      );
+
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'clinical_episode_final_formatted',
+      resourceId: result.final.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: {
+        consultationId,
+        formatVersion: dto.formatVersion ?? null,
+      },
+    });
+
+    return result;
+  }
+
+  @Get('consultations/:consultationId/clinical-episode')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get clinical episode (doctor/patient)' })
+  @ApiOkResponse({ type: ClinicalEpisodeResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async getClinicalEpisode(
+    @CurrentUser() actor: Actor,
+    @Param('consultationId') consultationId: string,
+    @Req() req: Request,
+  ) {
+    if (actor.role === UserRole.patient) {
+      const result =
+        await this.consultationsService.getClinicalEpisodeForPatient(
+          actor,
+          consultationId,
+        );
+
+      await this.auditService.log({
+        action: AuditAction.READ,
+        resourceType: 'clinical_episode_final',
+        resourceId: result.final.id,
+        actor,
+        traceId: (req as Request & { traceId?: string }).traceId ?? null,
+        ip: req.ip,
+        userAgent: req.get('user-agent') ?? null,
+        metadata: {
+          consultationId,
+        },
+      });
+
+      return result;
+    }
+
+    const result = await this.consultationsService.getClinicalEpisodeForDoctor(
+      actor,
+      consultationId,
+    );
+
+    if (result.draft) {
+      await this.auditService.log({
+        action: AuditAction.READ,
+        resourceType: 'clinical_episode_draft',
+        resourceId: result.draft.id,
+        actor,
+        traceId: (req as Request & { traceId?: string }).traceId ?? null,
+        ip: req.ip,
+        userAgent: req.get('user-agent') ?? null,
+        metadata: {
+          consultationId,
+        },
+      });
+    }
 
     return result;
   }

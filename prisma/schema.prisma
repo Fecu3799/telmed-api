@@ -325,6 +325,11 @@ model ClinicalEpisodeNote {
   kind            ClinicalEpisodeNoteKind
   title           String
   body            String                 @db.Text
+  formattedBody   String?                @db.Text @map("formatted_body")
+  formattedAt     DateTime?              @map("formatted_at")
+  formattedByUserId String?              @map("formatted_by_user_id")
+  formatVersion   Int?                   @map("format_version")
+  aiMeta          Json?                  @map("ai_meta")
   createdByUserId String                 @map("created_by_user_id")
   createdByRole   UserRole               @map("created_by_role")
   deletedAt       DateTime?              @map("deleted_at")

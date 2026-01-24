@@ -150,45 +150,7 @@ describe('Clinical episode draft (e2e)', () => {
     }
   });
 
-  it('doctor upsert draft creates and updates same draft', async () => {
-    const doctor = await registerAndLogin(app, 'doctor');
-    const patient = await registerAndLogin(app, 'patient');
-
-    await createDoctorProfile(app, doctor.accessToken);
-    await createPatientIdentity(app, patient.accessToken);
-
-    const doctorUserId = await getUserId(app, doctor.accessToken);
-    const patientUserId = await getUserId(app, patient.accessToken);
-
-    const consultation = await createConsultation(
-      prisma,
-      doctorUserId,
-      patientUserId,
-    );
-
-    const first = await request(app.getHttpServer())
-      .put(
-        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
-      )
-      .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .send({ title: 'Draft A', body: 'Initial draft' })
-      .expect(200);
-
-    const second = await request(app.getHttpServer())
-      .put(
-        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
-      )
-      .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .send({ title: 'Draft B', body: 'Updated draft' })
-      .expect(200);
-
-    expect(first.body.draft.id).toBeDefined();
-    expect(second.body.draft.id).toBe(first.body.draft.id);
-    expect(second.body.draft.title).toBe('Draft B');
-    expect(second.body.draft.body).toBe('Updated draft');
-  });
-
-  it('doctor can read draft', async () => {
+  it('doctor can finalize draft and read episode', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const patient = await registerAndLogin(app, 'patient');
 
@@ -211,6 +173,15 @@ describe('Clinical episode draft (e2e)', () => {
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .send({ title: 'Draft A', body: 'Initial draft' })
       .expect(200);
+
+    const finalizeResponse = await request(app.getHttpServer())
+      .post(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/finalize`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    expect(finalizeResponse.body.final.title).toBe('Draft A');
 
     const getResponse = await request(app.getHttpServer())
       .get(`/api/v1/consultations/${consultation.id}/clinical-episode`)
@@ -218,9 +189,10 @@ describe('Clinical episode draft (e2e)', () => {
       .expect(200);
 
     expect(getResponse.body.draft.title).toBe('Draft A');
+    expect(getResponse.body.final.title).toBe('Draft A');
   });
 
-  it('patient cannot see draft (404) and cannot write (403)', async () => {
+  it('patient sees final only after close', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const patient = await registerAndLogin(app, 'patient');
 
@@ -237,20 +209,93 @@ describe('Clinical episode draft (e2e)', () => {
     );
 
     await request(app.getHttpServer())
+      .put(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({ title: 'Draft A', body: 'Initial draft' })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/finalize`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
       .get(`/api/v1/consultations/${consultation.id}/clinical-episode`)
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .expect(404);
 
     await request(app.getHttpServer())
+      .post(`/api/v1/consultations/${consultation.id}/close`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({})
+      .expect(200);
+
+    const patientGetResponse = await request(app.getHttpServer())
+      .get(`/api/v1/consultations/${consultation.id}/clinical-episode`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(200);
+
+    expect(patientGetResponse.body.final.displayBody).toBe('Initial draft');
+  });
+
+  it('formatted override shows for patient', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const patient = await registerAndLogin(app, 'patient');
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
+
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    const patientUserId = await getUserId(app, patient.accessToken);
+
+    const consultation = await createConsultation(
+      prisma,
+      doctorUserId,
+      patientUserId,
+    );
+
+    await request(app.getHttpServer())
       .put(
         `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
       )
-      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
       .send({ title: 'Draft A', body: 'Initial draft' })
-      .expect(403);
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/finalize`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/consultations/${consultation.id}/close`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({})
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .put(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/final/formatted`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({ formattedBody: 'Formatted final', formatVersion: 1 })
+      .expect(200);
+
+    const patientGetResponse = await request(app.getHttpServer())
+      .get(`/api/v1/consultations/${consultation.id}/clinical-episode`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(200);
+
+    expect(patientGetResponse.body.final.displayBody).toBe('Formatted final');
   });
 
-  it('doctor not owner cannot read or write', async () => {
+  it('patient cannot write and doctor not owner cannot read or write', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const otherDoctor = await registerAndLogin(app, 'doctor');
     const patient = await registerAndLogin(app, 'patient');
@@ -268,6 +313,14 @@ describe('Clinical episode draft (e2e)', () => {
       doctorUserId,
       patientUserId,
     );
+
+    await request(app.getHttpServer())
+      .put(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
+      )
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ title: 'Draft A', body: 'Initial draft' })
+      .expect(403);
 
     await request(app.getHttpServer())
       .put(

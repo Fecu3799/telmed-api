@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   AppointmentStatus,
@@ -15,6 +16,7 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import type { Actor } from '../../common/types/actor.type';
 import { ConsultationPatchDto } from './dto/consultation-patch.dto';
 import { UpsertClinicalEpisodeDraftDto } from './dto/upsert-clinical-episode-draft.dto';
+import { SetClinicalEpisodeFormattedDto } from './dto/set-clinical-episode-formatted.dto';
 
 /**
  * Core de consultas (appointment -> consultation, read/patch/close, active)
@@ -281,9 +283,210 @@ export class ConsultationsService {
     };
   }
 
-  async getClinicalEpisodeDraftForDoctor(
+  async finalizeClinicalEpisode(
     actor: Actor,
     consultationId: string,
+  ) {
+    const consultation = await this.prisma.consultation.findUnique({
+      where: { id: consultationId },
+    });
+
+    if (!consultation) {
+      throw new NotFoundException('Consultation not found');
+    }
+
+    if (consultation.doctorUserId !== actor.id) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    const episode =
+      (await this.prisma.clinicalEpisode.findUnique({
+        where: { consultationId },
+      })) ??
+      (await this.prisma.clinicalEpisode.create({
+        data: {
+          consultationId,
+          patientUserId: consultation.patientUserId,
+          doctorUserId: consultation.doctorUserId,
+        },
+      }));
+
+    const draft = await this.prisma.clinicalEpisodeNote.findFirst({
+      where: {
+        episodeId: episode.id,
+        kind: ClinicalEpisodeNoteKind.draft,
+        deletedAt: null,
+      },
+    });
+
+    if (!draft) {
+      throw new UnprocessableEntityException('Draft not found');
+    }
+
+    const existingFinal = await this.prisma.clinicalEpisodeNote.findFirst({
+      where: {
+        episodeId: episode.id,
+        kind: ClinicalEpisodeNoteKind.final,
+        deletedAt: null,
+      },
+    });
+
+    if (existingFinal) {
+      throw new ConflictException('Final note already exists');
+    }
+
+    const finalNote = await this.prisma.clinicalEpisodeNote.create({
+      data: {
+        episodeId: episode.id,
+        kind: ClinicalEpisodeNoteKind.final,
+        title: draft.title,
+        body: draft.body,
+        createdByUserId: actor.id,
+        createdByRole: actor.role,
+      },
+    });
+
+    return {
+      episodeId: episode.id,
+      consultationId,
+      final: {
+        id: finalNote.id,
+        title: finalNote.title,
+        body: finalNote.body,
+        formattedBody: finalNote.formattedBody,
+        formattedAt: finalNote.formattedAt,
+        displayBody: finalNote.formattedBody ?? finalNote.body,
+        createdAt: finalNote.createdAt,
+      },
+    };
+  }
+
+  async getClinicalEpisodeForDoctor(actor: Actor, consultationId: string) {
+    const consultation = await this.prisma.consultation.findUnique({
+      where: { id: consultationId },
+    });
+
+    if (!consultation) {
+      throw new NotFoundException('Consultation not found');
+    }
+
+    if (consultation.doctorUserId !== actor.id) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    const episode = await this.prisma.clinicalEpisode.findUnique({
+      where: { consultationId },
+    });
+
+    if (!episode || episode.deletedAt) {
+      throw new NotFoundException('Clinical episode not found');
+    }
+
+    const [draft, finalNote] = await this.prisma.$transaction([
+      this.prisma.clinicalEpisodeNote.findFirst({
+        where: {
+          episodeId: episode.id,
+          kind: ClinicalEpisodeNoteKind.draft,
+          deletedAt: null,
+        },
+      }),
+      this.prisma.clinicalEpisodeNote.findFirst({
+        where: {
+          episodeId: episode.id,
+          kind: ClinicalEpisodeNoteKind.final,
+          deletedAt: null,
+        },
+      }),
+    ]);
+
+    if (!draft && !finalNote) {
+      throw new NotFoundException('Clinical episode not found');
+    }
+
+    return {
+      episodeId: episode.id,
+      consultationId,
+      ...(draft
+        ? {
+            draft: {
+              id: draft.id,
+              title: draft.title,
+              body: draft.body,
+              updatedAt: draft.updatedAt,
+            },
+          }
+        : {}),
+      ...(finalNote
+        ? {
+            final: {
+              id: finalNote.id,
+              title: finalNote.title,
+              body: finalNote.body,
+              formattedBody: finalNote.formattedBody,
+              formattedAt: finalNote.formattedAt,
+              displayBody: finalNote.formattedBody ?? finalNote.body,
+              createdAt: finalNote.createdAt,
+            },
+          }
+        : {}),
+    };
+  }
+
+  async getClinicalEpisodeForPatient(actor: Actor, consultationId: string) {
+    const consultation = await this.prisma.consultation.findUnique({
+      where: { id: consultationId },
+    });
+
+    if (!consultation) {
+      throw new NotFoundException('Consultation not found');
+    }
+
+    if (consultation.patientUserId !== actor.id) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    if (consultation.status !== ConsultationStatus.closed) {
+      throw new NotFoundException('Clinical episode not found');
+    }
+
+    const episode = await this.prisma.clinicalEpisode.findUnique({
+      where: { consultationId },
+    });
+
+    if (!episode || episode.deletedAt) {
+      throw new NotFoundException('Clinical episode not found');
+    }
+
+    const finalNote = await this.prisma.clinicalEpisodeNote.findFirst({
+      where: {
+        episodeId: episode.id,
+        kind: ClinicalEpisodeNoteKind.final,
+        deletedAt: null,
+      },
+    });
+
+    if (!finalNote) {
+      throw new NotFoundException('Clinical episode not found');
+    }
+
+    return {
+      episodeId: episode.id,
+      consultationId,
+      final: {
+        id: finalNote.id,
+        title: finalNote.title,
+        formattedBody: finalNote.formattedBody,
+        formattedAt: finalNote.formattedAt,
+        displayBody: finalNote.formattedBody ?? finalNote.body,
+        createdAt: finalNote.createdAt,
+      },
+    };
+  }
+
+  async setClinicalEpisodeFinalFormatted(
+    actor: Actor,
+    consultationId: string,
+    dto: SetClinicalEpisodeFormattedDto,
   ) {
     const consultation = await this.prisma.consultation.findUnique({
       where: { id: consultationId },
@@ -305,26 +508,40 @@ export class ConsultationsService {
       throw new NotFoundException('Clinical episode not found');
     }
 
-    const draft = await this.prisma.clinicalEpisodeNote.findFirst({
+    const finalNote = await this.prisma.clinicalEpisodeNote.findFirst({
       where: {
         episodeId: episode.id,
-        kind: ClinicalEpisodeNoteKind.draft,
+        kind: ClinicalEpisodeNoteKind.final,
         deletedAt: null,
       },
     });
 
-    if (!draft) {
+    if (!finalNote) {
       throw new NotFoundException('Clinical episode not found');
     }
+
+    const updated = await this.prisma.clinicalEpisodeNote.update({
+      where: { id: finalNote.id },
+      data: {
+        formattedBody: dto.formattedBody,
+        formattedAt: new Date(),
+        formattedByUserId: actor.id,
+        formatVersion: dto.formatVersion ?? null,
+        aiMeta: dto.aiMeta ?? null,
+      },
+    });
 
     return {
       episodeId: episode.id,
       consultationId,
-      draft: {
-        id: draft.id,
-        title: draft.title,
-        body: draft.body,
-        updatedAt: draft.updatedAt,
+      final: {
+        id: updated.id,
+        title: updated.title,
+        body: updated.body,
+        formattedBody: updated.formattedBody,
+        formattedAt: updated.formattedAt,
+        displayBody: updated.formattedBody ?? updated.body,
+        createdAt: updated.createdAt,
       },
     };
   }
