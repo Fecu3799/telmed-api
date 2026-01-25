@@ -49,12 +49,6 @@ export class ConsultationDto {
   @ApiPropertyOptional({ example: '2025-01-05T15:00:00.000Z' })
   closedAt?: string | null;
 
-  @ApiPropertyOptional({ example: 'Resumen de la consulta' })
-  summary?: string | null;
-
-  @ApiPropertyOptional({ example: 'Notas internas' })
-  notes?: string | null;
-
   @ApiPropertyOptional({ example: 'livekit' })
   videoProvider?: string | null;
 

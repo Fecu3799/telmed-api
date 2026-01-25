@@ -17,6 +17,7 @@ import type { Actor } from '../../common/types/actor.type';
 import { ConsultationPatchDto } from './dto/consultation-patch.dto';
 import { UpsertClinicalEpisodeDraftDto } from './dto/upsert-clinical-episode-draft.dto';
 import { SetClinicalEpisodeFormattedDto } from './dto/set-clinical-episode-formatted.dto';
+import { CreateClinicalEpisodeAddendumDto } from './dto/create-clinical-episode-addendum.dto';
 
 /**
  * Core de consultas (appointment -> consultation, read/patch/close, active)
@@ -27,8 +28,8 @@ import { SetClinicalEpisodeFormattedDto } from './dto/set-clinical-episode-forma
  * - createForAppointment: valida appointment existente + status (scheduled/confirmed), valida ownership si actor es doctor
  *   y crea consulta única por appointmentId (maneja race con P2002).
  * - getById: incluye queueItem (info mínima), y aplica ownership (doctor/patient).
- * - patch: bloquea si closed; permite solo doctor/admin; actualiza summary/notes.
- * - close: idempotente si ya está closed; setea closedAt, lastActivityAt, summary/notes final;
+ * - patch: bloquea si closed; permite solo doctor/admin.
+ * - close: idempotente si ya está closed; setea closedAt y lastActivityAt;
  *   si venia de queue marca queueItem.closedAt; si venia de appointment marca appointment completed.
  * - getActiveForActor: busca última in_progress del actor.
  *
@@ -138,13 +139,7 @@ export class ConsultationsService {
       throw new ForbiddenException('Forbidden');
     }
 
-    return this.prisma.consultation.update({
-      where: { id },
-      data: {
-        summary: dto.summary ?? null,
-        notes: dto.notes ?? null,
-      },
-    });
+    return consultation;
   }
 
   async close(actor: Actor, id: string, dto?: ConsultationPatchDto) {
@@ -164,8 +159,6 @@ export class ConsultationsService {
         status: ConsultationStatus.closed,
         closedAt: consultation.closedAt ?? new Date(),
         lastActivityAt: new Date(),
-        summary: dto?.summary ?? consultation.summary ?? null,
-        notes: dto?.notes ?? consultation.notes ?? null,
       },
     });
 
@@ -382,7 +375,7 @@ export class ConsultationsService {
       throw new NotFoundException('Clinical episode not found');
     }
 
-    const [draft, finalNote] = await this.prisma.$transaction([
+    const [draft, finalNote, addendums] = await this.prisma.$transaction([
       this.prisma.clinicalEpisodeNote.findFirst({
         where: {
           episodeId: episode.id,
@@ -397,9 +390,17 @@ export class ConsultationsService {
           deletedAt: null,
         },
       }),
+      this.prisma.clinicalEpisodeNote.findMany({
+        where: {
+          episodeId: episode.id,
+          kind: ClinicalEpisodeNoteKind.addendum,
+          deletedAt: null,
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
     ]);
 
-    if (!draft && !finalNote) {
+    if (!draft && !finalNote && addendums.length === 0) {
       throw new NotFoundException('Clinical episode not found');
     }
 
@@ -429,6 +430,12 @@ export class ConsultationsService {
             },
           }
         : {}),
+      addendums: addendums.map((note) => ({
+        id: note.id,
+        title: note.title,
+        body: note.body,
+        createdAt: note.createdAt,
+      })),
     };
   }
 
@@ -469,6 +476,15 @@ export class ConsultationsService {
       throw new NotFoundException('Clinical episode not found');
     }
 
+    const addendums = await this.prisma.clinicalEpisodeNote.findMany({
+      where: {
+        episodeId: episode.id,
+        kind: ClinicalEpisodeNoteKind.addendum,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
     return {
       episodeId: episode.id,
       consultationId,
@@ -480,6 +496,12 @@ export class ConsultationsService {
         displayBody: finalNote.formattedBody ?? finalNote.body,
         createdAt: finalNote.createdAt,
       },
+      addendums: addendums.map((note) => ({
+        id: note.id,
+        title: note.title,
+        body: note.body,
+        createdAt: note.createdAt,
+      })),
     };
   }
 
@@ -527,7 +549,10 @@ export class ConsultationsService {
         formattedAt: new Date(),
         formattedByUserId: actor.id,
         formatVersion: dto.formatVersion ?? null,
-        aiMeta: dto.aiMeta ?? null,
+        aiMeta:
+          dto.aiMeta === undefined
+            ? undefined
+            : (dto.aiMeta as Prisma.InputJsonValue),
       },
     });
 
@@ -542,6 +567,70 @@ export class ConsultationsService {
         formattedAt: updated.formattedAt,
         displayBody: updated.formattedBody ?? updated.body,
         createdAt: updated.createdAt,
+      },
+    };
+  }
+
+  async createClinicalEpisodeAddendum(
+    actor: Actor,
+    consultationId: string,
+    dto: CreateClinicalEpisodeAddendumDto,
+  ) {
+    const consultation = await this.prisma.consultation.findUnique({
+      where: { id: consultationId },
+    });
+
+    if (!consultation) {
+      throw new NotFoundException('Consultation not found');
+    }
+
+    if (consultation.doctorUserId !== actor.id) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    if (consultation.status !== ConsultationStatus.closed) {
+      throw new ConflictException('Consultation is not closed');
+    }
+
+    const episode = await this.prisma.clinicalEpisode.findUnique({
+      where: { consultationId },
+    });
+
+    if (!episode || episode.deletedAt) {
+      throw new ConflictException('Clinical episode not finalized');
+    }
+
+    const finalNote = await this.prisma.clinicalEpisodeNote.findFirst({
+      where: {
+        episodeId: episode.id,
+        kind: ClinicalEpisodeNoteKind.final,
+        deletedAt: null,
+      },
+    });
+
+    if (!finalNote) {
+      throw new ConflictException('Clinical episode not finalized');
+    }
+
+    const addendum = await this.prisma.clinicalEpisodeNote.create({
+      data: {
+        episodeId: episode.id,
+        kind: ClinicalEpisodeNoteKind.addendum,
+        title: dto.title,
+        body: dto.body,
+        createdByUserId: actor.id,
+        createdByRole: actor.role,
+      },
+    });
+
+    return {
+      episodeId: episode.id,
+      consultationId,
+      addendum: {
+        id: addendum.id,
+        title: addendum.title,
+        body: addendum.body,
+        createdAt: addendum.createdAt,
       },
     };
   }

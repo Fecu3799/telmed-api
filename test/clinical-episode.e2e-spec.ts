@@ -108,7 +108,7 @@ async function createConsultation(
   });
 }
 
-describe('Clinical episode draft (e2e)', () => {
+describe('Clinical episode (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
 
@@ -334,5 +334,99 @@ describe('Clinical episode draft (e2e)', () => {
       .get(`/api/v1/consultations/${consultation.id}/clinical-episode`)
       .set('Authorization', `Bearer ${otherDoctor.accessToken}`)
       .expect(403);
+  });
+
+  it('doctor can add addendums after close and patient sees them ordered', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const patient = await registerAndLogin(app, 'patient');
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
+
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    const patientUserId = await getUserId(app, patient.accessToken);
+
+    const consultation = await createConsultation(
+      prisma,
+      doctorUserId,
+      patientUserId,
+    );
+
+    await request(app.getHttpServer())
+      .put(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({ title: 'Draft A', body: 'Initial draft' })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/finalize`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/consultations/${consultation.id}/close`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({})
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/addendums`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({ title: 'Addendum A', body: 'First addendum' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/addendums`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({ title: 'Addendum B', body: 'Second addendum' })
+      .expect(201);
+
+    const patientGetResponse = await request(app.getHttpServer())
+      .get(`/api/v1/consultations/${consultation.id}/clinical-episode`)
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(200);
+
+    expect(patientGetResponse.body.addendums).toHaveLength(2);
+    expect(patientGetResponse.body.addendums[0].title).toBe('Addendum A');
+    expect(patientGetResponse.body.addendums[1].title).toBe('Addendum B');
+  });
+
+  it('addendum without final returns 409', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const patient = await registerAndLogin(app, 'patient');
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await createPatientIdentity(app, patient.accessToken);
+
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    const patientUserId = await getUserId(app, patient.accessToken);
+
+    const consultation = await createConsultation(
+      prisma,
+      doctorUserId,
+      patientUserId,
+    );
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/consultations/${consultation.id}/close`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({})
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(
+        `/api/v1/consultations/${consultation.id}/clinical-episode/addendums`,
+      )
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({ title: 'Addendum A', body: 'First addendum' })
+      .expect(409);
   });
 });

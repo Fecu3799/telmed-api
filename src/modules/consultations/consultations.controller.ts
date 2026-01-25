@@ -56,9 +56,11 @@ import { ConsultationFilePrepareDto } from './dto/consultation-file-prepare.dto'
 import { ConsultationFileConfirmDto } from './dto/consultation-file-confirm.dto';
 import { SetClinicalEpisodeFormattedDto } from './dto/set-clinical-episode-formatted.dto';
 import { UpsertClinicalEpisodeDraftDto } from './dto/upsert-clinical-episode-draft.dto';
+import { CreateClinicalEpisodeAddendumDto } from './dto/create-clinical-episode-addendum.dto';
 import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
+  ClinicalEpisodeAddendumResponseDto,
   ClinicalEpisodeDraftResponseDto,
   ClinicalEpisodeResponseDto,
 } from './docs/clinical-episode-draft.dto';
@@ -70,7 +72,7 @@ import {
  * How it works:
  * - POST /appointments/:appointmentId/consultation (doctor/admin): create-or-get de consulta para un appointment.
  * - GET /consultations/:id (patient/doctor/admin): devuelve consulta; Audita lecturas.
- * - PATCH /consultations/:id (doctor/admin): actualiza summary/notes si no está closed.
+ * - PATCH /consultations/:id (doctor/admin): no-op legacy endpoint (kept for compatibility).
  * - POST /consultations/:id/close (doctor/admin): cierra consulta, audita writes, emite consultation.closed por Socket, notifica consultationsChanged.
  * - GET /consultations/me/active (patient/doctor): retorna consulta in_progress actual (si existe).
  * - POST /consultations/:id/livekit-token : emite token LiveKit (solo participantes)
@@ -338,6 +340,47 @@ export class ConsultationsController {
     return result;
   }
 
+  @Post('consultations/:consultationId/clinical-episode/addendums')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create clinical episode addendum (doctor)' })
+  @ApiBody({ type: CreateClinicalEpisodeAddendumDto })
+  @ApiCreatedResponse({ type: ClinicalEpisodeAddendumResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async createClinicalEpisodeAddendum(
+    @CurrentUser() actor: Actor,
+    @Param('consultationId') consultationId: string,
+    @Body() dto: CreateClinicalEpisodeAddendumDto,
+    @Req() req: Request,
+  ) {
+    const result = await this.consultationsService.createClinicalEpisodeAddendum(
+      actor,
+      consultationId,
+      dto,
+    );
+
+    await this.auditService.log({
+      action: AuditAction.WRITE,
+      resourceType: 'clinical_episode_addendum',
+      resourceId: result.addendum.id,
+      actor,
+      traceId: (req as Request & { traceId?: string }).traceId ?? null,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+      metadata: {
+        consultationId,
+      },
+    });
+
+    return result;
+  }
+
   @Get('consultations/:consultationId/clinical-episode')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.patient, UserRole.doctor)
@@ -381,7 +424,20 @@ export class ConsultationsController {
       consultationId,
     );
 
-    if (result.draft) {
+    if (result.final) {
+      await this.auditService.log({
+        action: AuditAction.READ,
+        resourceType: 'clinical_episode_final',
+        resourceId: result.final.id,
+        actor,
+        traceId: (req as Request & { traceId?: string }).traceId ?? null,
+        ip: req.ip,
+        userAgent: req.get('user-agent') ?? null,
+        metadata: {
+          consultationId,
+        },
+      });
+    } else if (result.draft) {
       await this.auditService.log({
         action: AuditAction.READ,
         resourceType: 'clinical_episode_draft',

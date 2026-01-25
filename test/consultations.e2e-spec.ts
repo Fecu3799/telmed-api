@@ -246,7 +246,7 @@ describe('Consultations (e2e)', () => {
     await request(httpServer(app))
       .patch(`/api/v1/consultations/${consultationId}`)
       .set('Authorization', `Bearer ${patient.accessToken}`)
-      .send({ summary: 'No permitido' })
+      .send({})
       .expect(403);
   });
 
@@ -276,7 +276,7 @@ describe('Consultations (e2e)', () => {
     await request(httpServer(app))
       .patch(`/api/v1/consultations/${consultationId}`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .send({ summary: 'Post close' })
+      .send({})
       .expect(409);
   });
 

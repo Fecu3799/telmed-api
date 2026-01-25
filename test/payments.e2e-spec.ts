@@ -364,7 +364,7 @@ describe('Payments (e2e)', () => {
     await request(httpServer(app))
       .post(`/api/v1/consultations/${consultationId}/close`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
-      .send({ summary: 'Ok' })
+      .send({})
       .expect(200);
 
     const queueNoPayment = await request(httpServer(app))

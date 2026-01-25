@@ -282,8 +282,6 @@ model Consultation {
   status         ConsultationStatus     @default(draft)
   startedAt      DateTime?              @map("started_at")
   closedAt       DateTime?              @map("closed_at")
-  summary        String?
-  notes          String?
   videoProvider  String?                @map("video_provider")
   videoRoomName  String?                @map("video_room_name")
   videoCreatedAt DateTime?              @map("video_created_at")

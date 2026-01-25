@@ -48,6 +48,20 @@ export class ClinicalEpisodeFinalDto {
   createdAt!: string;
 }
 
+export class ClinicalEpisodeAddendumDto {
+  @ApiProperty({ example: 'a9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
+  id!: string;
+
+  @ApiProperty({ example: 'Addendum title' })
+  title!: string;
+
+  @ApiProperty({ example: 'Additional notes' })
+  body!: string;
+
+  @ApiProperty({ example: '2025-01-05T13:55:00.000Z' })
+  createdAt!: string;
+}
+
 export class ClinicalEpisodeResponseDto {
   @ApiProperty({ example: 'a9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
   episodeId!: string;
@@ -60,4 +74,18 @@ export class ClinicalEpisodeResponseDto {
 
   @ApiPropertyOptional({ type: ClinicalEpisodeFinalDto })
   final?: ClinicalEpisodeFinalDto;
+
+  @ApiPropertyOptional({ type: [ClinicalEpisodeAddendumDto] })
+  addendums?: ClinicalEpisodeAddendumDto[];
+}
+
+export class ClinicalEpisodeAddendumResponseDto {
+  @ApiProperty({ example: 'a9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
+  episodeId!: string;
+
+  @ApiProperty({ example: 'a9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
+  consultationId!: string;
+
+  @ApiProperty({ type: ClinicalEpisodeAddendumDto })
+  addendum!: ClinicalEpisodeAddendumDto;
 }
