@@ -20,8 +20,6 @@ export interface Consultation {
   status: ConsultationStatus;
   startedAt?: string | null;
   closedAt?: string | null;
-  summary?: string | null;
-  notes?: string | null;
   videoProvider?: string | null;
   videoRoomName?: string | null;
   videoCreatedAt?: string | null;
@@ -60,4 +58,165 @@ export async function closeConsultation(
     method: 'POST',
     body: JSON.stringify({}),
   });
+}
+
+type ConsultationHistoryQuery = {
+  page?: number;
+  pageSize?: number;
+  status?: ConsultationStatus;
+  from?: string;
+  to?: string;
+};
+
+export type ConsultationHistoryParticipant = {
+  id: string;
+  displayName: string;
+};
+
+export type ConsultationHistoryItem = {
+  id: string;
+  status: ConsultationStatus;
+  createdAt: string;
+  startedAt?: string | null;
+  closedAt?: string | null;
+  doctor: ConsultationHistoryParticipant;
+  patient?: ConsultationHistoryParticipant;
+  hasClinicalFinal?: boolean;
+};
+
+export type ConsultationHistoryResponse = {
+  items: ConsultationHistoryItem[];
+  pageInfo: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+};
+
+function buildQuery(params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+    query.set(key, String(value));
+  }
+  return query.toString();
+}
+
+export async function listPatientConsultations(
+  params: ConsultationHistoryQuery,
+): Promise<ConsultationHistoryResponse> {
+  const query = buildQuery(
+    params as Record<string, string | number | undefined>,
+  );
+  return http<ConsultationHistoryResponse>(
+    `${endpoints.consultations.historyPatient}?${query}`,
+  );
+}
+
+export async function listDoctorPatientConsultations(
+  patientUserId: string,
+  params: ConsultationHistoryQuery,
+): Promise<ConsultationHistoryResponse> {
+  const query = buildQuery(
+    params as Record<string, string | number | undefined>,
+  );
+  return http<ConsultationHistoryResponse>(
+    `${endpoints.consultations.historyDoctorPatient(patientUserId)}?${query}`,
+  );
+}
+
+export type ClinicalEpisodeDraft = {
+  id: string;
+  title: string;
+  body: string;
+  updatedAt: string;
+};
+
+export type ClinicalEpisodeFinal = {
+  id: string;
+  title: string;
+  body?: string;
+  formattedBody?: string | null;
+  formattedAt?: string | null;
+  displayBody?: string;
+  createdAt: string;
+};
+
+export type ClinicalEpisodeAddendum = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+};
+
+export type ClinicalEpisodeResponse = {
+  episodeId: string;
+  consultationId: string;
+  draft?: ClinicalEpisodeDraft;
+  final?: ClinicalEpisodeFinal;
+  addendums?: ClinicalEpisodeAddendum[];
+};
+
+export async function getClinicalEpisode(
+  consultationId: string,
+): Promise<ClinicalEpisodeResponse> {
+  return http<ClinicalEpisodeResponse>(
+    endpoints.consultations.clinicalEpisode(consultationId),
+  );
+}
+
+export async function putClinicalEpisodeDraft(
+  consultationId: string,
+  payload: { title: string; body: string },
+): Promise<ClinicalEpisodeResponse> {
+  return http<ClinicalEpisodeResponse>(
+    endpoints.consultations.clinicalEpisode(consultationId) + '/draft',
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function postClinicalEpisodeFinalize(
+  consultationId: string,
+): Promise<ClinicalEpisodeResponse> {
+  return http<ClinicalEpisodeResponse>(
+    endpoints.consultations.clinicalEpisode(consultationId) + '/finalize',
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export async function putClinicalEpisodeFinalFormatted(
+  consultationId: string,
+  payload: { formattedBody: string },
+): Promise<ClinicalEpisodeResponse> {
+  return http<ClinicalEpisodeResponse>(
+    endpoints.consultations.clinicalEpisode(consultationId) +
+      '/final/formatted',
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function postClinicalEpisodeAddendum(
+  consultationId: string,
+  payload: { title: string; body: string },
+): Promise<ClinicalEpisodeResponse> {
+  return http<ClinicalEpisodeResponse>(
+    endpoints.consultations.clinicalEpisode(consultationId) + '/addendums',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }

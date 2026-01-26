@@ -16,6 +16,7 @@ import {
   type EmergencyItem,
   type EmergenciesResponse,
 } from '../api/emergencies';
+import { getConsultation } from '../api/consultations';
 import { acceptQueue, payForQueue, startQueue } from '../api/queue';
 import { type ProblemDetails } from '../api/http';
 import { notificationsSocket } from '../api/notifications-socket';
@@ -114,6 +115,9 @@ export function AppointmentsPage() {
     hasNextPage: boolean;
     hasPrevPage: boolean;
   } | null>(null);
+  const [consultationStatusById, setConsultationStatusById] = useState<
+    Record<string, string>
+  >({});
 
   // Cancel state
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -221,6 +225,45 @@ export function AppointmentsPage() {
       setEmergenciesLoading(false);
     }
   }, [activeRole, emergenciesPage, getActiveToken]);
+
+  useEffect(() => {
+    const consultIds = emergencies
+      .map((item) => item.consultationId)
+      .filter((id): id is string => Boolean(id));
+    const missing = consultIds.filter((id) => !consultationStatusById[id]);
+    if (missing.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    const loadStatuses = async () => {
+      const entries = await Promise.all(
+        missing.slice(0, 10).map(async (id) => {
+          try {
+            const consultation = await getConsultation(id);
+            return { id, status: consultation.status };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (cancelled) {
+        return;
+      }
+      setConsultationStatusById((prev) => {
+        const next = { ...prev };
+        entries.forEach((entry) => {
+          if (entry) {
+            next[entry.id] = entry.status;
+          }
+        });
+        return next;
+      });
+    };
+    void loadStatuses();
+    return () => {
+      cancelled = true;
+    };
+  }, [emergencies, consultationStatusById]);
 
   // Load appointments
   useEffect(() => {
@@ -741,13 +784,28 @@ export function AppointmentsPage() {
                     onClick={() =>
                       navigate(`/room/${emergency.consultationId}`)
                     }
+                    disabled={
+                      consultationStatusById[emergency.consultationId] &&
+                      consultationStatusById[emergency.consultationId] !==
+                        'in_progress'
+                    }
                     style={{
                       padding: '8px 16px',
-                      backgroundColor: '#28a745',
+                      backgroundColor:
+                        consultationStatusById[emergency.consultationId] &&
+                        consultationStatusById[emergency.consultationId] !==
+                          'in_progress'
+                          ? '#9ca3af'
+                          : '#28a745',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: 'pointer',
+                      cursor:
+                        consultationStatusById[emergency.consultationId] &&
+                        consultationStatusById[emergency.consultationId] !==
+                          'in_progress'
+                          ? 'not-allowed'
+                          : 'pointer',
                       marginLeft: '8px',
                     }}
                   >
@@ -775,13 +833,28 @@ export function AppointmentsPage() {
                     onClick={() =>
                       navigate(`/room/${emergency.consultationId}`)
                     }
+                    disabled={
+                      consultationStatusById[emergency.consultationId] &&
+                      consultationStatusById[emergency.consultationId] !==
+                        'in_progress'
+                    }
                     style={{
                       padding: '8px 16px',
-                      backgroundColor: '#28a745',
+                      backgroundColor:
+                        consultationStatusById[emergency.consultationId] &&
+                        consultationStatusById[emergency.consultationId] !==
+                          'in_progress'
+                          ? '#9ca3af'
+                          : '#28a745',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: 'pointer',
+                      cursor:
+                        consultationStatusById[emergency.consultationId] &&
+                        consultationStatusById[emergency.consultationId] !==
+                          'in_progress'
+                          ? 'not-allowed'
+                          : 'pointer',
                       marginLeft: '8px',
                     }}
                   >

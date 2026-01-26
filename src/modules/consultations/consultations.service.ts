@@ -15,31 +15,280 @@ import {
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import type { Actor } from '../../common/types/actor.type';
 import { ConsultationPatchDto } from './dto/consultation-patch.dto';
+import { ConsultationHistoryQueryDto } from './dto/consultation-history-query.dto';
 import { UpsertClinicalEpisodeDraftDto } from './dto/upsert-clinical-episode-draft.dto';
 import { SetClinicalEpisodeFormattedDto } from './dto/set-clinical-episode-formatted.dto';
 import { CreateClinicalEpisodeAddendumDto } from './dto/create-clinical-episode-addendum.dto';
 
 /**
- * Core de consultas (appointment -> consultation, read/patch/close, active)
- * - Crear consulta asociada a un appointment, validar acceso, editar notas/resumen, cerrar consulta
- *   y marcar efectos colaterales (queue + appointment)
- *
+ * Core de consultas (appointment -> consultation, read/patch/close, history, active).
+ * What it does:
+ * - Crea consultas asociadas a appointments, valida accesos, edita/cierra y lista historiales.
  * How it works:
- * - createForAppointment: valida appointment existente + status (scheduled/confirmed), valida ownership si actor es doctor
- *   y crea consulta única por appointmentId (maneja race con P2002).
+ * - createForAppointment: valida appointment existente + status, y crea consulta única por appointmentId.
  * - getById: incluye queueItem (info mínima), y aplica ownership (doctor/patient).
- * - patch: bloquea si closed; permite solo doctor/admin.
- * - close: idempotente si ya está closed; setea closedAt y lastActivityAt;
- *   si venia de queue marca queueItem.closedAt; si venia de appointment marca appointment completed.
- * - getActiveForActor: busca última in_progress del actor.
- *
- * Key points:
- * - Admin no está bloqueado en ConsultationService.getById, pero el controller lo devuelve con vista reducida.
+ * - patch/close: bloquea si closed; close setea closedAt y dispara side-effects.
+ * - list history: pagina por createdAt desc con filtros status/from/to y batch lookup de hasClinicalFinal.
+ * Gotchas:
+ * - Los filtros de fecha requieren from+to y se aplican sobre createdAt.
  */
 
 @Injectable()
 export class ConsultationsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private resolvePaging(page?: number, pageSize?: number) {
+    const resolvedPage = page ?? 1;
+    const resolvedPageSize = Math.min(pageSize ?? 20, 50);
+    const skip = (resolvedPage - 1) * resolvedPageSize;
+    return { page: resolvedPage, pageSize: resolvedPageSize, skip };
+  }
+
+  private parseDateTime(value: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new UnprocessableEntityException('Invalid datetime');
+    }
+    return date;
+  }
+
+  private resolveRange(from?: string, to?: string) {
+    if (!from && !to) {
+      return null;
+    }
+    if (!from || !to) {
+      throw new UnprocessableEntityException(
+        'from and to are required together',
+      );
+    }
+    const fromDate = this.parseDateTime(from);
+    const toDate = this.parseDateTime(to);
+    if (fromDate >= toDate) {
+      throw new UnprocessableEntityException('from must be before to');
+    }
+    return { from: fromDate, to: toDate };
+  }
+
+  private buildDisplayName(input: {
+    user?: { displayName: string | null; email: string } | undefined;
+    doctorProfile?:
+      | { firstName: string | null; lastName: string | null }
+      | undefined;
+    patient?: { legalFirstName: string; legalLastName: string } | undefined;
+  }) {
+    if (input.user?.displayName) {
+      return input.user.displayName;
+    }
+    if (input.doctorProfile?.firstName || input.doctorProfile?.lastName) {
+      return `${input.doctorProfile.firstName ?? ''} ${input.doctorProfile.lastName ?? ''}`.trim();
+    }
+    if (input.patient) {
+      return `${input.patient.legalFirstName} ${input.patient.legalLastName}`.trim();
+    }
+    if (input.user?.email) {
+      return input.user.email;
+    }
+    return 'Usuario';
+  }
+
+  private async listHistory(
+    query: ConsultationHistoryQueryDto,
+    options: {
+      where: Prisma.ConsultationWhereInput;
+      includePatient: boolean;
+    },
+  ) {
+    const { page, pageSize, skip } = this.resolvePaging(
+      query.page,
+      query.pageSize,
+    );
+    const range = this.resolveRange(query.from, query.to);
+    const where: Prisma.ConsultationWhereInput = {
+      ...options.where,
+      ...(query.status ? { status: query.status } : {}),
+      ...(range
+        ? {
+            createdAt: {
+              gte: range.from,
+              lte: range.to,
+            },
+          }
+        : {}),
+    };
+
+    const [consultations, totalItems] = await this.prisma.$transaction([
+      this.prisma.consultation.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          startedAt: true,
+          closedAt: true,
+          doctorUserId: true,
+          patientUserId: true,
+        },
+      }),
+      this.prisma.consultation.count({ where }),
+    ]);
+
+    if (consultations.length === 0) {
+      const totalPages =
+        totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize);
+      return {
+        items: [],
+        pageInfo: {
+          page,
+          pageSize,
+          totalItems,
+          totalPages,
+          hasNextPage: totalPages > 0 ? page < totalPages : false,
+          hasPrevPage: page > 1,
+        },
+      };
+    }
+
+    const consultationIds = consultations.map((item) => item.id);
+    const doctorIds = Array.from(
+      new Set(consultations.map((item) => item.doctorUserId)),
+    );
+    const patientIds = Array.from(
+      new Set(consultations.map((item) => item.patientUserId)),
+    );
+    const userIds = Array.from(new Set([...doctorIds, ...patientIds]));
+
+    const [users, doctorProfiles, patients, finalNotes] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, displayName: true, email: true },
+      }),
+      this.prisma.doctorProfile.findMany({
+        where: { userId: { in: doctorIds } },
+        select: { userId: true, firstName: true, lastName: true },
+      }),
+      options.includePatient
+        ? this.prisma.patient.findMany({
+            where: { userId: { in: patientIds } },
+            select: {
+              userId: true,
+              legalFirstName: true,
+              legalLastName: true,
+            },
+          })
+        : Promise.resolve(
+            [] as Array<{
+              userId: string;
+              legalFirstName: string;
+              legalLastName: string;
+            }>,
+          ),
+      this.prisma.clinicalEpisodeNote.findMany({
+        where: {
+          kind: ClinicalEpisodeNoteKind.final,
+          deletedAt: null,
+          episode: {
+            consultationId: { in: consultationIds },
+            deletedAt: null,
+          },
+        },
+        select: {
+          episode: {
+            select: { consultationId: true },
+          },
+        },
+      }),
+    ]);
+
+    const userMap = new Map(users.map((user) => [user.id, user]));
+    const doctorProfileMap = new Map(
+      doctorProfiles.map((profile) => [profile.userId, profile]),
+    );
+    const patientMap = new Map(
+      patients.map((patient) => [patient.userId, patient]),
+    );
+    const finalMap = new Set(
+      finalNotes.map((note) => note.episode.consultationId),
+    );
+
+    const items = consultations.map((consultation) => {
+      const doctorDisplayName = this.buildDisplayName({
+        user: userMap.get(consultation.doctorUserId),
+        doctorProfile: doctorProfileMap.get(consultation.doctorUserId),
+      });
+      const patientDisplayName = options.includePatient
+        ? this.buildDisplayName({
+            user: userMap.get(consultation.patientUserId),
+            patient: patientMap.get(consultation.patientUserId),
+          })
+        : null;
+      return {
+        id: consultation.id,
+        status: consultation.status,
+        createdAt: consultation.createdAt.toISOString(),
+        startedAt: consultation.startedAt?.toISOString() ?? null,
+        closedAt: consultation.closedAt?.toISOString() ?? null,
+        doctor: {
+          id: consultation.doctorUserId,
+          displayName: doctorDisplayName,
+        },
+        ...(options.includePatient
+          ? {
+              patient: {
+                id: consultation.patientUserId,
+                displayName: patientDisplayName ?? 'Usuario',
+              },
+            }
+          : {}),
+        hasClinicalFinal: finalMap.has(consultation.id),
+      };
+    });
+
+    const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize);
+
+    return {
+      items,
+      pageInfo: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasNextPage: totalPages > 0 ? page < totalPages : false,
+        hasPrevPage: page > 1,
+      },
+    };
+  }
+
+  async listPatientConsultations(
+    actor: Actor,
+    query: ConsultationHistoryQueryDto,
+  ) {
+    if (actor.role !== UserRole.patient) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    return this.listHistory(query, {
+      where: { patientUserId: actor.id },
+      includePatient: false,
+    });
+  }
+
+  async listDoctorPatientConsultations(
+    actor: Actor,
+    patientUserId: string,
+    query: ConsultationHistoryQueryDto,
+  ) {
+    if (actor.role !== UserRole.doctor) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    return this.listHistory(query, {
+      where: { doctorUserId: actor.id, patientUserId },
+      includePatient: true,
+    });
+  }
 
   async createForAppointment(actor: Actor, appointmentId: string) {
     const appointment = await this.prisma.appointment.findUnique({
@@ -276,10 +525,7 @@ export class ConsultationsService {
     };
   }
 
-  async finalizeClinicalEpisode(
-    actor: Actor,
-    consultationId: string,
-  ) {
+  async finalizeClinicalEpisode(actor: Actor, consultationId: string) {
     const consultation = await this.prisma.consultation.findUnique({
       where: { id: consultationId },
     });

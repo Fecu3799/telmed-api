@@ -13,6 +13,7 @@ import { DoctorPatientsPage } from './pages/DoctorPatientsPage';
 import { DoctorPatientDetailPage } from './pages/DoctorPatientDetailPage';
 import { DoctorPatientFilesPage } from './pages/DoctorPatientFilesPage';
 import { DoctorPatientHistoryPage } from './pages/DoctorPatientHistoryPage';
+import { PatientHistoryPage } from './pages/PatientHistoryPage';
 import { AppointmentsPage } from './pages/AppointmentsPage';
 import { DoctorLocationPage } from './pages/DoctorLocationPage';
 import { GeoNearbyPage } from './pages/GeoNearbyPage';
@@ -129,6 +130,14 @@ function App() {
             element={
               <PrivateRoute>
                 <DoctorPatientHistoryPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/patient-history"
+            element={
+              <PrivateRoute>
+                <PatientHistoryPage />
               </PrivateRoute>
             }
           />

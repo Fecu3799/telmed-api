@@ -1,17 +1,16 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import {
   getClinicalEpisode,
-  listDoctorPatientConsultations,
+  listPatientConsultations,
   type ClinicalEpisodeResponse,
   type ConsultationHistoryItem,
 } from '../api/consultations';
 import type { ProblemDetails } from '../api/http';
 
-export function DoctorPatientHistoryPage() {
+export function PatientHistoryPage() {
   const navigate = useNavigate();
-  const { patientId } = useParams<{ patientId: string }>();
   const { activeRole } = useAuth();
   const [consultationId, setConsultationId] = useState('');
   const [episode, setEpisode] = useState<ClinicalEpisodeResponse | null>(null);
@@ -24,25 +23,14 @@ export function DoctorPatientHistoryPage() {
   const [consultationsError, setConsultationsError] =
     useState<ProblemDetails | null>(null);
 
-  // Redirect if not doctor
   useEffect(() => {
-    if (activeRole && activeRole !== 'doctor') {
-      navigate('/lobby');
-    }
-  }, [activeRole, navigate]);
-
-  if (activeRole !== 'doctor') {
-    return null;
-  }
-
-  useEffect(() => {
-    if (activeRole !== 'doctor' || !patientId) {
+    if (activeRole !== 'patient') {
       return;
     }
     let cancelled = false;
     setConsultationsLoading(true);
     setConsultationsError(null);
-    listDoctorPatientConsultations(patientId, { page: 1, pageSize: 50 })
+    listPatientConsultations({ page: 1, pageSize: 50 })
       .then((response) => {
         if (cancelled) return;
         setConsultations(response.items);
@@ -67,7 +55,7 @@ export function DoctorPatientHistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeRole, patientId]);
+  }, [activeRole]);
 
   useEffect(() => {
     if (consultationId || consultations.length === 0) {
@@ -79,6 +67,16 @@ export function DoctorPatientHistoryPage() {
       void handleLoadEpisode(first.id);
     }
   }, [consultations, consultationId]);
+
+  useEffect(() => {
+    if (activeRole && activeRole !== 'patient') {
+      navigate('/lobby');
+    }
+  }, [activeRole, navigate]);
+
+  if (activeRole !== 'patient') {
+    return null;
+  }
 
   const handleLoadEpisode = async (id: string) => {
     if (!id) {
@@ -111,7 +109,7 @@ export function DoctorPatientHistoryPage() {
       if (error.status === 404) {
         return (
           <div style={{ fontSize: '14px', color: '#737373' }}>
-            Aún no hay notas cargadas.
+            Notas no disponibles todavía.
           </div>
         );
       }
@@ -137,48 +135,33 @@ export function DoctorPatientHistoryPage() {
         </div>
       );
     }
-
-    if (!episode) {
+    if (!episode || !episode.final) {
       return (
         <div style={{ fontSize: '14px', color: '#737373' }}>
-          Seleccioná una consulta para ver sus notas.
+          Notas no disponibles todavía.
         </div>
       );
     }
 
     const finalNote = episode.final;
-    const draft = episode.draft;
     const addendums = episode.addendums ?? [];
     const sortedAddendums = [...addendums].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
-    const finalDisplay =
-      finalNote?.displayBody ?? finalNote?.formattedBody ?? finalNote?.body ?? '';
+    const displayBody =
+      finalNote.displayBody ?? finalNote.formattedBody ?? finalNote.body ?? '';
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {draft && (
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 600 }}>Borrador</div>
-            <div style={{ fontSize: '13px', color: '#737373' }}>
-              {draft.title}
-            </div>
-            <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap' }}>
-              {draft.body}
-            </div>
+        <div>
+          <div style={{ fontSize: '14px', fontWeight: 600 }}>Final</div>
+          <div style={{ fontSize: '13px', color: '#737373' }}>
+            {finalNote.title}
           </div>
-        )}
-        {finalNote && (
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 600 }}>Final</div>
-            <div style={{ fontSize: '13px', color: '#737373' }}>
-              {finalNote.title}
-            </div>
-            <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap' }}>
-              {finalDisplay}
-            </div>
+          <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap' }}>
+            {displayBody}
           </div>
-        )}
+        </div>
         {sortedAddendums.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '14px', fontWeight: 600 }}>Addendums</div>
@@ -208,7 +191,7 @@ export function DoctorPatientHistoryPage() {
       >
         <h1 style={{ margin: 0 }}>Historia Clínica</h1>
         <button
-          onClick={() => navigate(`/doctor-patients/${patientId}`)}
+          onClick={() => navigate('/lobby')}
           style={{
             padding: '8px 16px',
             backgroundColor: '#6c757d',
@@ -218,7 +201,7 @@ export function DoctorPatientHistoryPage() {
             cursor: 'pointer',
           }}
         >
-          Volver
+          Volver al Lobby
         </button>
       </div>
 
@@ -231,7 +214,7 @@ export function DoctorPatientHistoryPage() {
           marginBottom: '16px',
         }}
       >
-        <h2 style={{ marginTop: 0 }}>Consultas del paciente</h2>
+        <h2 style={{ marginTop: 0 }}>Mis consultas</h2>
         {consultationsLoading ? (
           <div style={{ fontSize: '14px' }}>Cargando consultas...</div>
         ) : consultationsError ? (
@@ -240,7 +223,7 @@ export function DoctorPatientHistoryPage() {
           </div>
         ) : consultations.length === 0 ? (
           <div style={{ fontSize: '14px', color: '#737373' }}>
-            No hay consultas registradas para este paciente.
+            No hay consultas registradas.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -264,11 +247,9 @@ export function DoctorPatientHistoryPage() {
                   <div>
                     <strong>Estado:</strong> {item.status}
                   </div>
-                  {item.patient && (
-                    <div>
-                      <strong>Paciente:</strong> {item.patient.displayName}
-                    </div>
-                  )}
+                  <div>
+                    <strong>Doctor:</strong> {item.doctor.displayName}
+                  </div>
                 </div>
                 <button
                   onClick={() => {
@@ -322,11 +303,19 @@ export function DoctorPatientHistoryPage() {
             Buscar por ID
           </button>
         </div>
-        {patientId && (
-          <div style={{ marginTop: '8px', fontSize: '12px', color: '#737373' }}>
-            Paciente: {patientId.slice(0, 8)}...
-          </div>
-        )}
+      </div>
+
+      <div
+        style={{
+          border: '1px solid #ddd',
+          borderRadius: '8px',
+          padding: '16px',
+          backgroundColor: 'white',
+          marginBottom: '16px',
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Notas del episodio</h2>
+        {renderEpisode()}
       </div>
 
       <div
@@ -337,8 +326,11 @@ export function DoctorPatientHistoryPage() {
           backgroundColor: 'white',
         }}
       >
-        <h2 style={{ marginTop: 0 }}>Notas del episodio</h2>
-        {renderEpisode()}
+        <h2 style={{ marginTop: 0 }}>Perfil clínico</h2>
+        <div style={{ fontSize: '14px', color: '#737373' }}>
+          Próximamente: alergias, medicación habitual, condiciones y
+          procedimientos.
+        </div>
       </div>
     </div>
   );

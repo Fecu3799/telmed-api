@@ -359,11 +359,12 @@ export class ConsultationsController {
     @Body() dto: CreateClinicalEpisodeAddendumDto,
     @Req() req: Request,
   ) {
-    const result = await this.consultationsService.createClinicalEpisodeAddendum(
-      actor,
-      consultationId,
-      dto,
-    );
+    const result =
+      await this.consultationsService.createClinicalEpisodeAddendum(
+        actor,
+        consultationId,
+        dto,
+      );
 
     await this.auditService.log({
       action: AuditAction.WRITE,

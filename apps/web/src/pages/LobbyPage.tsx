@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { login, register, getMe, type AuthMeResponse } from '../api/auth';
@@ -8,13 +8,17 @@ import {
 } from '../api/patient-identity';
 import { getDoctorProfile, type DoctorProfile } from '../api/doctor-profile';
 import { getOnlineStatus, goOffline, goOnline, pingOnline } from '../api/geo';
-import { getActiveConsultation } from '../api/consultations';
+import {
+  getActiveConsultation,
+  type ConsultationStatus,
+} from '../api/consultations';
 import { notificationsSocket } from '../api/notifications-socket';
 import { type ProblemDetails } from '../api/http';
 import { PatientIdentityModal } from '../components/PatientIdentityModal';
 import { DoctorProfileModal } from '../components/DoctorProfileModal';
 
 export function LobbyPage() {
+  const ONLINE_STORAGE_KEY = 'telmed.doctor.online';
   const navigate = useNavigate();
   const {
     doctorToken,
@@ -23,8 +27,13 @@ export function LobbyPage() {
     setDoctorToken,
     setPatientToken,
     setActiveRole,
-    getActiveToken,
   } = useAuth();
+  const activeToken =
+    activeRole === 'doctor'
+      ? doctorToken
+      : activeRole === 'patient'
+        ? patientToken
+        : null;
 
   // Demo credentials state
   const [doctorEmail, setDoctorEmail] = useState('doctor.demo@telmed.test');
@@ -38,6 +47,11 @@ export function LobbyPage() {
   );
   const [loadingSession, setLoadingSession] = useState(false);
   const [sessionError, setSessionError] = useState<ProblemDetails | null>(null);
+  const [sessionCooldownUntil, setSessionCooldownUntil] = useState<number | null>(
+    null,
+  );
+  const sessionInFlightRef = useRef(false);
+  const lastSessionFetchRef = useRef<number | null>(null);
 
   // Patient identity
   const [patientIdentity, setPatientIdentity] =
@@ -56,6 +70,8 @@ export function LobbyPage() {
   const [activeConsultationId, setActiveConsultationId] = useState<
     string | null
   >(null);
+  const [activeConsultationStatus, setActiveConsultationStatus] =
+    useState<ConsultationStatus | null>(null);
 
   // Error states
   const [error, setError] = useState<ProblemDetails | null>(null);
@@ -64,12 +80,25 @@ export function LobbyPage() {
   // Sincroniza http client con el token del rol activo antes de hacer la llamada
   useEffect(() => {
     const loadSessionStatus = async () => {
-      if (!getActiveToken()) {
+      if (!activeToken) {
         setSessionStatus(null);
         setSessionError(null);
         return;
       }
 
+      if (sessionInFlightRef.current) {
+        return;
+      }
+
+      const now = Date.now();
+      if (sessionCooldownUntil && now < sessionCooldownUntil) {
+        return;
+      }
+      if (lastSessionFetchRef.current && now - lastSessionFetchRef.current < 15_000) {
+        return;
+      }
+
+      sessionInFlightRef.current = true;
       setLoadingSession(true);
       setSessionError(null);
       try {
@@ -80,6 +109,16 @@ export function LobbyPage() {
         setSessionStatus(null);
         // Show error details for debugging
         const apiError = err as { problemDetails?: ProblemDetails };
+        const statusCode = apiError.problemDetails?.status;
+        if (statusCode === 429) {
+          const retryAt = Date.now() + 30_000;
+          setSessionCooldownUntil(retryAt);
+          setSessionError({
+            status: 429,
+            detail: 'Rate limited, reintentando...',
+          });
+          return;
+        }
         setSessionError(
           apiError.problemDetails || {
             status: 500,
@@ -87,12 +126,25 @@ export function LobbyPage() {
           },
         );
       } finally {
+        lastSessionFetchRef.current = Date.now();
+        sessionInFlightRef.current = false;
         setLoadingSession(false);
       }
     };
 
     void loadSessionStatus();
-  }, [activeRole, doctorToken, patientToken, getActiveToken]);
+  }, [activeRole, doctorToken, patientToken, activeToken, sessionCooldownUntil]);
+
+  useEffect(() => {
+    if (!sessionCooldownUntil) {
+      return undefined;
+    }
+    const delay = Math.max(sessionCooldownUntil - Date.now(), 0);
+    const timeout = window.setTimeout(() => {
+      setSessionCooldownUntil(null);
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [sessionCooldownUntil]);
 
   // Load patient identity when activeRole is patient
   useEffect(() => {
@@ -149,9 +201,14 @@ export function LobbyPage() {
         setIsOnline(false);
         return;
       }
+      const stored = localStorage.getItem(ONLINE_STORAGE_KEY);
+      if (stored !== null) {
+        setIsOnline(stored === 'true');
+      }
       try {
         const status = await getOnlineStatus();
         setIsOnline(status.online);
+        localStorage.setItem(ONLINE_STORAGE_KEY, String(status.online));
       } catch (err) {
         const apiError = err as {
           problemDetails?: ProblemDetails;
@@ -172,23 +229,26 @@ export function LobbyPage() {
 
   useEffect(() => {
     const loadActiveConsultation = async () => {
-      if (!getActiveToken()) {
+      if (!activeToken) {
         setActiveConsultationId(null);
+        setActiveConsultationStatus(null);
         return;
       }
       try {
         const response = await getActiveConsultation();
         setActiveConsultationId(response.consultation?.consultationId ?? null);
+        setActiveConsultationStatus(response.consultation?.status ?? null);
       } catch {
         setActiveConsultationId(null);
+        setActiveConsultationStatus(null);
       }
     };
 
     void loadActiveConsultation();
-  }, [activeRole, doctorToken, patientToken, getActiveToken]);
+  }, [activeRole, doctorToken, patientToken, activeToken]);
 
   useEffect(() => {
-    const token = getActiveToken();
+    const token = activeToken;
     if (!token) {
       notificationsSocket.disconnect();
       return;
@@ -202,8 +262,10 @@ export function LobbyPage() {
           setActiveConsultationId(
             response.consultation?.consultationId ?? null,
           );
+          setActiveConsultationStatus(response.consultation?.status ?? null);
         } catch {
           setActiveConsultationId(null);
+          setActiveConsultationStatus(null);
         }
       })();
     };
@@ -213,7 +275,7 @@ export function LobbyPage() {
       notificationsSocket.offConsultationsChanged(handleConsultationsChanged);
       notificationsSocket.disconnect();
     };
-  }, [getActiveToken]);
+  }, [activeToken]);
 
   useEffect(() => {
     if (activeRole !== 'doctor' || !isOnline) {
@@ -334,9 +396,11 @@ export function LobbyPage() {
       if (!isOnline) {
         await goOnline();
         setIsOnline(true);
+        localStorage.setItem(ONLINE_STORAGE_KEY, 'true');
       } else {
         await goOffline();
         setIsOnline(false);
+        localStorage.setItem(ONLINE_STORAGE_KEY, 'false');
       }
     } catch (err) {
       const apiError = err as {
@@ -415,17 +479,26 @@ export function LobbyPage() {
           {activeConsultationId && (
             <button
               onClick={() => navigate(`/room/${activeConsultationId}`)}
+              disabled={activeConsultationStatus !== 'in_progress'}
               style={{
                 padding: '8px 16px',
-                backgroundColor: '#007bff',
+                backgroundColor:
+                  activeConsultationStatus === 'in_progress'
+                    ? '#007bff'
+                    : '#9ca3af',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
-                cursor: 'pointer',
+                cursor:
+                  activeConsultationStatus === 'in_progress'
+                    ? 'pointer'
+                    : 'not-allowed',
                 fontSize: '0.9em',
               }}
             >
-              Entrar a consulta
+              {activeConsultationStatus === 'in_progress'
+                ? 'Entrar a consulta'
+                : 'Consulta cerrada'}
             </button>
           )}
           <button
@@ -442,6 +515,22 @@ export function LobbyPage() {
           >
             Open Chats
           </button>
+          {activeRole === 'patient' && (
+            <button
+              onClick={() => navigate('/patient-history')}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#6f42c1',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.9em',
+              }}
+            >
+              Historia Clínica
+            </button>
+          )}
         </div>
       </div>
 

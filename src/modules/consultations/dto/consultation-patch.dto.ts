@@ -1,2 +1,1 @@
-export class ConsultationPatchDto {
-}
+export class ConsultationPatchDto {}

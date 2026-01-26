@@ -10,6 +10,7 @@ import { ConsultationRealtimeGateway } from './consultation-realtime.gateway';
 import { ConsultationEventsPublisher } from './consultation-events-publisher.interface';
 import { SocketIoConsultationEventsPublisher } from './socket-io-consultation-events-publisher';
 import { NoopConsultationEventsPublisher } from './noop-consultation-events-publisher';
+import { PatientsConsultationsController } from './patients-consultations.controller';
 
 // Use Noop publisher in test environment, Socket.IO in others
 const eventsPublisherProvider =
@@ -23,9 +24,18 @@ const eventsPublisherProvider =
         useClass: SocketIoConsultationEventsPublisher,
       };
 
+/**
+ * Consultations module wiring.
+ * What it does:
+ * - Registers controllers and providers for consultation CRUD/history/realtime.
+ * How it works:
+ * - Exposes ConsultationsService and realtime publishers to other modules.
+ * Gotchas:
+ * - History endpoints live here to reuse consultation access + filters.
+ */
 @Module({
   imports: [forwardRef(() => ConsultationQueueModule), NotificationsModule],
-  controllers: [ConsultationsController],
+  controllers: [ConsultationsController, PatientsConsultationsController],
   providers: [
     ConsultationsService,
     ConsultationRealtimeService,
@@ -37,6 +47,7 @@ const eventsPublisherProvider =
     eventsPublisherProvider,
   ],
   exports: [
+    ConsultationsService,
     ConsultationAccessService,
     ConsultationRealtimeGateway,
     LiveKitService,

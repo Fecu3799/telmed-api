@@ -167,9 +167,7 @@ describe('Clinical episode (e2e)', () => {
     );
 
     await request(app.getHttpServer())
-      .put(
-        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
-      )
+      .put(`/api/v1/consultations/${consultation.id}/clinical-episode/draft`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .send({ title: 'Draft A', body: 'Initial draft' })
       .expect(200);
@@ -209,9 +207,7 @@ describe('Clinical episode (e2e)', () => {
     );
 
     await request(app.getHttpServer())
-      .put(
-        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
-      )
+      .put(`/api/v1/consultations/${consultation.id}/clinical-episode/draft`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .send({ title: 'Draft A', body: 'Initial draft' })
       .expect(200);
@@ -259,9 +255,7 @@ describe('Clinical episode (e2e)', () => {
     );
 
     await request(app.getHttpServer())
-      .put(
-        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
-      )
+      .put(`/api/v1/consultations/${consultation.id}/clinical-episode/draft`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .send({ title: 'Draft A', body: 'Initial draft' })
       .expect(200);
@@ -315,17 +309,13 @@ describe('Clinical episode (e2e)', () => {
     );
 
     await request(app.getHttpServer())
-      .put(
-        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
-      )
+      .put(`/api/v1/consultations/${consultation.id}/clinical-episode/draft`)
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .send({ title: 'Draft A', body: 'Initial draft' })
       .expect(403);
 
     await request(app.getHttpServer())
-      .put(
-        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
-      )
+      .put(`/api/v1/consultations/${consultation.id}/clinical-episode/draft`)
       .set('Authorization', `Bearer ${otherDoctor.accessToken}`)
       .send({ title: 'Draft A', body: 'Initial draft' })
       .expect(403);
@@ -353,9 +343,7 @@ describe('Clinical episode (e2e)', () => {
     );
 
     await request(app.getHttpServer())
-      .put(
-        `/api/v1/consultations/${consultation.id}/clinical-episode/draft`,
-      )
+      .put(`/api/v1/consultations/${consultation.id}/clinical-episode/draft`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .send({ title: 'Draft A', body: 'Initial draft' })
       .expect(200);

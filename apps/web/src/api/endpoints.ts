@@ -46,7 +46,12 @@ export const endpoints = {
     livekitToken: (consultationId: string) =>
       `/consultations/${consultationId}/livekit-token`,
     close: (consultationId: string) => `/consultations/${consultationId}/close`,
+    clinicalEpisode: (consultationId: string) =>
+      `/consultations/${consultationId}/clinical-episode`,
     active: '/consultations/me/active',
+    historyPatient: '/patients/me/consultations',
+    historyDoctorPatient: (patientUserId: string) =>
+      `/doctor-patients/${patientUserId}/consultations`,
   },
   emergencies: {
     doctor: '/doctors/me/emergencies',

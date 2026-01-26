@@ -16,6 +16,16 @@ import { PrismaService } from '../src/infra/prisma/prisma.service';
 import { resetDb } from './helpers/reset-db';
 import { ensureTestEnv } from './helpers/ensure-test-env';
 
+/**
+ * Consultations e2e coverage.
+ * What it does:
+ * - Exercises consultation lifecycle and history listings end-to-end.
+ * How it works:
+ * - Spins up Nest app, seeds users/appointments, then calls API endpoints.
+ * Gotchas:
+ * - Scheduling configuration is forced to UTC for deterministic availability.
+ */
+
 function httpServer(app: INestApplication): Server {
   return app.getHttpServer() as unknown as Server;
 }
@@ -40,6 +50,14 @@ async function registerAndLogin(
   return {
     accessToken: loginResponse.body.accessToken as string,
   };
+}
+
+async function getUserId(app: INestApplication, token: string) {
+  const response = await request(httpServer(app))
+    .get('/api/v1/auth/me')
+    .set('Authorization', `Bearer ${token}`)
+    .expect(200);
+  return response.body.id as string;
 }
 
 function dateParts(daysAhead: number) {
@@ -301,5 +319,68 @@ describe('Consultations (e2e)', () => {
       .post(`/api/v1/appointments/${appointmentId}/consultation`)
       .set('Authorization', `Bearer ${doctor.accessToken}`)
       .expect(409);
+  });
+
+  it('lists patient consultations history', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const patient = await registerAndLogin(app, 'patient');
+
+    const { appointmentId } = await createAppointment(
+      app,
+      prisma,
+      doctor.accessToken,
+      patient.accessToken,
+    );
+
+    const created = await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/consultation`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    const response = await request(httpServer(app))
+      .get('/api/v1/patients/me/consultations')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .expect(200);
+
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0].id).toBe(created.body.id);
+    expect(response.body.pageInfo.totalItems).toBe(1);
+  });
+
+  it('lists doctor patient consultations and returns empty for others', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const patient = await registerAndLogin(app, 'patient');
+    const otherPatient = await registerAndLogin(app, 'patient');
+
+    const { appointmentId } = await createAppointment(
+      app,
+      prisma,
+      doctor.accessToken,
+      patient.accessToken,
+    );
+
+    await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/consultation`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    const patientUserId = await getUserId(app, patient.accessToken);
+    const otherUserId = await getUserId(app, otherPatient.accessToken);
+
+    const response = await request(httpServer(app))
+      .get(`/api/v1/doctor-patients/${patientUserId}/consultations`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.pageInfo.totalItems).toBe(1);
+
+    const empty = await request(httpServer(app))
+      .get(`/api/v1/doctor-patients/${otherUserId}/consultations`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+
+    expect(empty.body.items).toHaveLength(0);
+    expect(empty.body.pageInfo.totalItems).toBe(0);
   });
 });

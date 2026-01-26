@@ -36,6 +36,12 @@ export function RoomPage() {
   const [chatThread, setChatThread] = useState<ChatThread | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
+  const [preflightStatus, setPreflightStatus] =
+    useState<Consultation['status'] | null>(null);
+  const [preflightError, setPreflightError] = useState<ProblemDetails | null>(
+    null,
+  );
+  const [preflightLoading, setPreflightLoading] = useState(false);
 
   const handleJoin = async (role: 'doctor' | 'patient') => {
     if (!consultationId) {
@@ -69,6 +75,14 @@ export function RoomPage() {
       return;
     }
 
+    if (preflightStatus && preflightStatus !== 'in_progress') {
+      setError({
+        status: 409,
+        detail: 'La consulta no está en curso.',
+      });
+      return;
+    }
+
     setConnectionState('loading');
     setError(null);
     setSelectedRole(role);
@@ -79,6 +93,10 @@ export function RoomPage() {
       setConnectionState('connected');
     } catch (err) {
       const apiError = err as { problemDetails?: ProblemDetails };
+      const status = apiError.problemDetails?.status;
+      if (status === 409) {
+        setPreflightStatus('closed');
+      }
       setError(
         apiError.problemDetails || {
           status: 500,
@@ -214,6 +232,49 @@ export function RoomPage() {
       : chatThread.doctor
     : undefined;
 
+  useEffect(() => {
+    if (!consultationId || !activeRole) {
+      return;
+    }
+
+    const tokenAvailable =
+      (activeRole === 'doctor' && doctorToken) ||
+      (activeRole === 'patient' && patientToken);
+    if (!tokenAvailable || connectionState !== 'idle') {
+      return;
+    }
+
+    let cancelled = false;
+    setPreflightLoading(true);
+    setPreflightError(null);
+    getConsultation(consultationId)
+      .then((data) => {
+        if (cancelled) return;
+        setConsultation(data);
+        setPreflightStatus(data.status);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const apiError = err as { problemDetails?: ProblemDetails };
+        setPreflightError(
+          apiError.problemDetails || {
+            status: 500,
+            detail: 'No se pudo cargar la consulta',
+          },
+        );
+        setPreflightStatus(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPreflightLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [consultationId, activeRole, doctorToken, patientToken, connectionState]);
+
   if (!consultationId) {
     return (
       <div style={{ padding: '20px' }}>
@@ -300,25 +361,64 @@ export function RoomPage() {
           </div>
         ) : (
           <div style={{ marginTop: '16px' }}>
+            {preflightLoading && (
+              <div style={{ marginBottom: '8px' }}>Verificando consulta...</div>
+            )}
+            {preflightError && (
+              <div
+                style={{
+                  marginBottom: '8px',
+                  padding: '8px 12px',
+                  backgroundColor: '#fee',
+                  border: '1px solid #fcc',
+                  borderRadius: '4px',
+                  color: '#c33',
+                }}
+              >
+                {preflightError.detail}
+              </div>
+            )}
+            {preflightStatus && preflightStatus !== 'in_progress' && (
+              <div
+                style={{
+                  marginBottom: '8px',
+                  padding: '8px 12px',
+                  backgroundColor: '#fff3cd',
+                  border: '1px solid #ffeeba',
+                  borderRadius: '4px',
+                  color: '#856404',
+                }}
+              >
+                La consulta no está en curso. Volvé al lobby.
+              </div>
+            )}
             {activeRole === 'doctor' && (
               <button
                 onClick={() => void handleJoin('doctor')}
                 disabled={
                   connectionState === 'loading' ||
                   connectionState === 'error' ||
-                  !doctorToken
+                  !doctorToken ||
+                  (preflightStatus !== null &&
+                    preflightStatus !== 'in_progress')
                 }
                 style={{
                   padding: '12px 24px',
                   border: 'none',
                   borderRadius: '4px',
                   backgroundColor:
-                    connectionState === 'loading' || !doctorToken
+                    connectionState === 'loading' ||
+                    !doctorToken ||
+                    (preflightStatus !== null &&
+                      preflightStatus !== 'in_progress')
                       ? '#ccc'
                       : '#007bff',
                   color: 'white',
                   cursor:
-                    connectionState === 'loading' || !doctorToken
+                    connectionState === 'loading' ||
+                    !doctorToken ||
+                    (preflightStatus !== null &&
+                      preflightStatus !== 'in_progress')
                       ? 'not-allowed'
                       : 'pointer',
                   fontSize: '16px',
@@ -334,19 +434,27 @@ export function RoomPage() {
                 disabled={
                   connectionState === 'loading' ||
                   connectionState === 'error' ||
-                  !patientToken
+                  !patientToken ||
+                  (preflightStatus !== null &&
+                    preflightStatus !== 'in_progress')
                 }
                 style={{
                   padding: '12px 24px',
                   border: 'none',
                   borderRadius: '4px',
                   backgroundColor:
-                    connectionState === 'loading' || !patientToken
+                    connectionState === 'loading' ||
+                    !patientToken ||
+                    (preflightStatus !== null &&
+                      preflightStatus !== 'in_progress')
                       ? '#ccc'
                       : '#28a745',
                   color: 'white',
                   cursor:
-                    connectionState === 'loading' || !patientToken
+                    connectionState === 'loading' ||
+                    !patientToken ||
+                    (preflightStatus !== null &&
+                      preflightStatus !== 'in_progress')
                       ? 'not-allowed'
                       : 'pointer',
                   fontSize: '16px',
@@ -470,6 +578,8 @@ export function RoomPage() {
             {/* All LiveKit-dependent components MUST be inside LiveKitRoom */}
             <RoomLayout
               activeRole={activeRole}
+              consultationId={consultationId!}
+              consultationStatus={consultation?.status ?? null}
               onCloseConsultation={() => void handleCloseConsultation()}
               closing={closing}
             />
