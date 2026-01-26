@@ -945,7 +945,11 @@ export class ConsultationQueueService {
         orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
-        include: { consultation: { select: { id: true, status: true } } },
+        include: {
+          consultation: {
+            select: { id: true, status: true, startedAt: true, closedAt: true },
+          },
+        },
       }),
       this.prisma.consultationQueueItem.count({ where }),
     ]);
@@ -1023,7 +1027,14 @@ export class ConsultationQueueService {
         },
         specialty,
         priceCents: profile?.priceCents ?? null,
-        consultationId: item.consultation?.id ?? null,
+        consultation: item.consultation
+          ? {
+              id: item.consultation.id,
+              status: item.consultation.status,
+              startedAt: item.consultation.startedAt?.toISOString() ?? null,
+              closedAt: item.consultation.closedAt?.toISOString() ?? null,
+            }
+          : null,
       };
     });
 

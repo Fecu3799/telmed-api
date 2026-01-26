@@ -141,7 +141,7 @@ export class AppointmentsService {
         throw new ConflictException('Idempotency key already used');
       }
       return {
-        appointment: this.toAppointmentResponse(existingAppointment),
+        appointment: this.toAppointmentResponse(existingAppointment, null),
         payment: this.toPaymentResponse(existingPayment),
       };
     }
@@ -230,10 +230,13 @@ export class AppointmentsService {
     );
 
     const response = {
-      appointment: this.toAppointmentResponse({
-        ...appointment,
-        patientUserId,
-      }),
+      appointment: this.toAppointmentResponse(
+        {
+          ...appointment,
+          patientUserId,
+        },
+        null,
+      ),
       payment: this.toPaymentResponse(payment),
     };
 
@@ -272,8 +275,26 @@ export class AppointmentsService {
       this.prisma.appointment.count({ where }),
     ]);
 
+    // Batch fetch consultations for appointments
+    const appointmentIds = items.map((item) => item.id);
+    const consultations = await this.prisma.consultation.findMany({
+      where: { appointmentId: { in: appointmentIds } },
+      select: {
+        id: true,
+        appointmentId: true,
+        status: true,
+        startedAt: true,
+        closedAt: true,
+      },
+    });
+    const consultationMap = new Map(
+      consultations.map((c) => [c.appointmentId!, c]),
+    );
+
     return this.buildPage(
-      items.map((item) => this.toAppointmentResponse(item)),
+      items.map((item) =>
+        this.toAppointmentResponse(item, consultationMap.get(item.id)),
+      ),
       total,
       page,
       limit,
@@ -303,8 +324,26 @@ export class AppointmentsService {
       this.prisma.appointment.count({ where }),
     ]);
 
+    // Batch fetch consultations for appointments
+    const appointmentIds = items.map((item) => item.id);
+    const consultations = await this.prisma.consultation.findMany({
+      where: { appointmentId: { in: appointmentIds } },
+      select: {
+        id: true,
+        appointmentId: true,
+        status: true,
+        startedAt: true,
+        closedAt: true,
+      },
+    });
+    const consultationMap = new Map(
+      consultations.map((c) => [c.appointmentId!, c]),
+    );
+
     return this.buildPage(
-      items.map((item) => this.toAppointmentResponse(item)),
+      items.map((item) =>
+        this.toAppointmentResponse(item, consultationMap.get(item.id)),
+      ),
       total,
       page,
       limit,
@@ -344,8 +383,26 @@ export class AppointmentsService {
       this.prisma.appointment.count({ where }),
     ]);
 
+    // Batch fetch consultations for appointments
+    const appointmentIds = items.map((item) => item.id);
+    const consultations = await this.prisma.consultation.findMany({
+      where: { appointmentId: { in: appointmentIds } },
+      select: {
+        id: true,
+        appointmentId: true,
+        status: true,
+        startedAt: true,
+        closedAt: true,
+      },
+    });
+    const consultationMap = new Map(
+      consultations.map((c) => [c.appointmentId!, c]),
+    );
+
     return this.buildPage(
-      items.map((item) => this.toAppointmentResponse(item)),
+      items.map((item) =>
+        this.toAppointmentResponse(item, consultationMap.get(item.id)),
+      ),
       total,
       page,
       limit,
@@ -522,10 +579,13 @@ export class AppointmentsService {
       appointment.patient.userId,
     ]);
 
-    return this.toAppointmentResponse({
-      ...updated,
-      patientUserId: appointment.patient.userId,
-    });
+    return this.toAppointmentResponse(
+      {
+        ...updated,
+        patientUserId: appointment.patient.userId,
+      },
+      null,
+    );
   }
 
   private parseDateTime(value: string) {
@@ -545,7 +605,15 @@ export class AppointmentsService {
     return { from: fromDate, to: toDate };
   }
 
-  private toAppointmentResponse(appointment: Record<string, unknown>) {
+  private toAppointmentResponse(
+    appointment: Record<string, unknown>,
+    consultation?: {
+      id: string;
+      status: string;
+      startedAt: Date | null;
+      closedAt: Date | null;
+    } | null,
+  ) {
     const patient =
       'patient' in appointment
         ? (appointment.patient as { userId: string })
@@ -555,7 +623,18 @@ export class AppointmentsService {
       (appointment.patientUserId as string | undefined) ??
       '';
     const { patient: _patient, patientId: _patientId, ...rest } = appointment;
-    return { ...rest, patientUserId };
+    const response: Record<string, unknown> = { ...rest, patientUserId };
+    if (consultation) {
+      response.consultation = {
+        id: consultation.id,
+        status: consultation.status,
+        startedAt: consultation.startedAt?.toISOString() ?? null,
+        closedAt: consultation.closedAt?.toISOString() ?? null,
+      };
+    } else {
+      response.consultation = null;
+    }
+    return response;
   }
 
   private resolvePaging(page?: number, limit?: number) {

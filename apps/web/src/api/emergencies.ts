@@ -1,6 +1,13 @@
 import { http } from './http';
 import { endpoints } from './endpoints';
 
+export interface ConsultationInfo {
+  id: string;
+  status: 'draft' | 'in_progress' | 'closed';
+  startedAt?: string | null;
+  closedAt?: string | null;
+}
+
 export type EmergencyItem = {
   id: string;
   queueStatus: string;
@@ -11,7 +18,7 @@ export type EmergencyItem = {
   counterparty?: { id: string; displayName: string | null } | null;
   specialty?: string | null;
   priceCents?: number | null;
-  consultationId?: string | null;
+  consultation?: ConsultationInfo | null;
 };
 
 export type EmergenciesResponse = {

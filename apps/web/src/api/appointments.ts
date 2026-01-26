@@ -18,6 +18,13 @@ export interface AvailabilityResponse {
   meta: AvailabilityMeta;
 }
 
+export interface ConsultationInfo {
+  id: string;
+  status: 'draft' | 'in_progress' | 'closed';
+  startedAt?: string | null;
+  closedAt?: string | null;
+}
+
 export interface Appointment {
   id: string;
   doctorUserId: string;
@@ -30,6 +37,7 @@ export interface Appointment {
   cancelledAt?: string | null;
   cancellationReason?: string | null;
   paymentExpiresAt?: string | null;
+  consultation?: ConsultationInfo | null;
 }
 
 export interface PaymentCheckout {

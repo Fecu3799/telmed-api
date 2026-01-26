@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentStatus } from '@prisma/client';
+import { ConsultationInfoDto } from '../../consultations/docs/consultation-info.dto';
 
 export class AppointmentDto {
   @ApiProperty({ example: 'b9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
@@ -34,4 +35,11 @@ export class AppointmentDto {
 
   @ApiPropertyOptional({ example: '2025-01-05T14:10:00.000Z' })
   paymentExpiresAt?: string | null;
+
+  @ApiPropertyOptional({
+    type: ConsultationInfoDto,
+    nullable: true,
+    description: 'Consultation associated with this appointment, if exists',
+  })
+  consultation?: ConsultationInfoDto | null;
 }

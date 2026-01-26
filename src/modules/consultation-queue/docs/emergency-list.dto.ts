@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ConsultationInfoDto } from '../../consultations/docs/consultation-info.dto';
 
 export class EmergencyListItemDto {
   @ApiProperty({ example: 'd9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
@@ -33,8 +34,12 @@ export class EmergencyListItemDto {
   @ApiPropertyOptional({ example: 150000 })
   priceCents?: number | null;
 
-  @ApiPropertyOptional({ example: 'c9b7f38c-0c1e-4c5d-8f9f-0c0e4c7e1a1a' })
-  consultationId?: string | null;
+  @ApiPropertyOptional({
+    type: ConsultationInfoDto,
+    nullable: true,
+    description: 'Consultation associated with this emergency, if exists',
+  })
+  consultation?: ConsultationInfoDto | null;
 }
 
 export class EmergenciesPageInfoDto {

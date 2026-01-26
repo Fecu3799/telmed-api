@@ -16,10 +16,41 @@ import {
   type EmergencyItem,
   type EmergenciesResponse,
 } from '../api/emergencies';
-import { getConsultation } from '../api/consultations';
 import { acceptQueue, payForQueue, startQueue } from '../api/queue';
 import { type ProblemDetails } from '../api/http';
 import { notificationsSocket } from '../api/notifications-socket';
+
+// Badge component matching ClinicalProfileListSection pattern
+function Badge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone?: 'success' | 'warning' | 'error' | 'info' | 'neutral';
+}) {
+  const colorMap: Record<string, { background: string; color: string }> = {
+    success: { background: '#dcfce7', color: '#166534' },
+    warning: { background: '#fef3c7', color: '#92400e' },
+    error: { background: '#fee2e2', color: '#991b1b' },
+    info: { background: '#dbeafe', color: '#1e40af' },
+    neutral: { background: '#f3f4f6', color: '#374151' },
+  };
+  const palette = tone ? colorMap[tone] : colorMap.neutral;
+  return (
+    <span
+      style={{
+        padding: '2px 8px',
+        borderRadius: '999px',
+        fontSize: '12px',
+        backgroundColor: palette.background,
+        color: palette.color,
+        fontWeight: 500,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
 
 function randomUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -115,9 +146,6 @@ export function AppointmentsPage() {
     hasNextPage: boolean;
     hasPrevPage: boolean;
   } | null>(null);
-  const [consultationStatusById, setConsultationStatusById] = useState<
-    Record<string, string>
-  >({});
 
   // Cancel state
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -225,45 +253,6 @@ export function AppointmentsPage() {
       setEmergenciesLoading(false);
     }
   }, [activeRole, emergenciesPage, getActiveToken]);
-
-  useEffect(() => {
-    const consultIds = emergencies
-      .map((item) => item.consultationId)
-      .filter((id): id is string => Boolean(id));
-    const missing = consultIds.filter((id) => !consultationStatusById[id]);
-    if (missing.length === 0) {
-      return;
-    }
-    let cancelled = false;
-    const loadStatuses = async () => {
-      const entries = await Promise.all(
-        missing.slice(0, 10).map(async (id) => {
-          try {
-            const consultation = await getConsultation(id);
-            return { id, status: consultation.status };
-          } catch {
-            return null;
-          }
-        }),
-      );
-      if (cancelled) {
-        return;
-      }
-      setConsultationStatusById((prev) => {
-        const next = { ...prev };
-        entries.forEach((entry) => {
-          if (entry) {
-            next[entry.id] = entry.status;
-          }
-        });
-        return next;
-      });
-    };
-    void loadStatuses();
-    return () => {
-      cancelled = true;
-    };
-  }, [emergencies, consultationStatusById]);
 
   // Load appointments
   useEffect(() => {
@@ -705,168 +694,235 @@ export function AppointmentsPage() {
           <div
             style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
           >
-            {emergencies.map((emergency) => (
-              <div
-                key={emergency.id}
-                onClick={() => setSelectedEmergencyId(emergency.id)}
-                style={{
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  backgroundColor: 'white',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ marginBottom: '6px' }}>
-                  <strong>Fecha:</strong> {formatDateTime(emergency.createdAt)}
-                </div>
-                <div style={{ marginBottom: '6px' }}>
-                  <strong>
-                    {activeRole === 'doctor' ? 'Paciente' : 'Doctor'}:
-                  </strong>{' '}
-                  {emergency.counterparty?.displayName || 'Usuario'}
-                </div>
-                <div style={{ marginBottom: '6px' }}>
-                  <strong>Motivo:</strong> {emergency.reason || 'Sin motivo'}
-                </div>
-                <div style={{ marginBottom: '6px' }}>
-                  <strong>Estado:</strong> {emergency.queueStatus}
-                </div>
-                <div style={{ marginBottom: '6px' }}>
-                  <strong>Pago:</strong> {emergency.paymentStatus}
-                </div>
-                {emergency.specialty && (
-                  <div style={{ marginBottom: '6px', color: '#666' }}>
-                    <strong>Especialidad:</strong> {emergency.specialty}
-                  </div>
-                )}
-                {emergency.priceCents !== null &&
-                  emergency.priceCents !== undefined && (
-                    <div style={{ marginBottom: '6px' }}>
-                      <strong>Precio:</strong>{' '}
-                      {(emergency.priceCents / 100).toFixed(2)}
+            {emergencies.map((emergency) => {
+              // Helper functions for badges
+              const getConsultationStatusBadge = () => {
+                if (!emergency.consultation) {
+                  return <Badge label="Consulta no iniciada" tone="neutral" />;
+                }
+                if (emergency.consultation.status === 'in_progress') {
+                  return <Badge label="En curso" tone="info" />;
+                }
+                if (emergency.consultation.status === 'closed') {
+                  return <Badge label="Finalizada" tone="success" />;
+                }
+                return <Badge label="Borrador" tone="neutral" />;
+              };
+
+              const getQueueStatusBadge = () => {
+                const statusMap: Record<
+                  string,
+                  {
+                    label: string;
+                    tone: 'success' | 'warning' | 'error' | 'info' | 'neutral';
+                  }
+                > = {
+                  queued: { label: 'En cola', tone: 'warning' },
+                  accepted: { label: 'Aceptada', tone: 'info' },
+                  rejected: { label: 'Rechazada', tone: 'error' },
+                  cancelled: { label: 'Cancelada', tone: 'error' },
+                  expired: { label: 'Expirada', tone: 'error' },
+                };
+                const mapped = statusMap[emergency.queueStatus] || {
+                  label: emergency.queueStatus,
+                  tone: 'neutral' as const,
+                };
+                return <Badge label={mapped.label} tone={mapped.tone} />;
+              };
+
+              const getPaymentStatusBadge = () => {
+                const statusMap: Record<
+                  string,
+                  {
+                    label: string;
+                    tone: 'success' | 'warning' | 'error' | 'info' | 'neutral';
+                  }
+                > = {
+                  not_started: { label: 'Pago: no iniciado', tone: 'neutral' },
+                  pending: { label: 'Pago: pendiente', tone: 'warning' },
+                  paid: { label: 'Pago: OK', tone: 'success' },
+                  expired: { label: 'Pago: expirado', tone: 'error' },
+                  failed: { label: 'Pago: fallido', tone: 'error' },
+                };
+                const mapped = statusMap[emergency.paymentStatus] || {
+                  label: `Pago: ${emergency.paymentStatus}`,
+                  tone: 'neutral' as const,
+                };
+                return <Badge label={mapped.label} tone={mapped.tone} />;
+              };
+
+              return (
+                <div
+                  key={emergency.id}
+                  onClick={() => setSelectedEmergencyId(emergency.id)}
+                  style={{
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    backgroundColor: 'white',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ marginBottom: '6px' }}>
+                        <strong>Fecha:</strong>{' '}
+                        {formatDateTime(emergency.createdAt)}
+                      </div>
+                      <div style={{ marginBottom: '6px' }}>
+                        <strong>
+                          {activeRole === 'doctor' ? 'Paciente' : 'Doctor'}:
+                        </strong>{' '}
+                        {emergency.counterparty?.displayName || 'Usuario'}
+                      </div>
+                      {emergency.reason && (
+                        <div style={{ marginBottom: '6px' }}>
+                          <strong>Motivo:</strong> {emergency.reason}
+                        </div>
+                      )}
+                      {emergency.specialty && (
+                        <div style={{ marginBottom: '6px', color: '#666' }}>
+                          <strong>Especialidad:</strong> {emergency.specialty}
+                        </div>
+                      )}
+                      {emergency.priceCents !== null &&
+                        emergency.priceCents !== undefined && (
+                          <div style={{ marginBottom: '6px' }}>
+                            <strong>Precio:</strong>{' '}
+                            {(emergency.priceCents / 100).toFixed(2)}
+                          </div>
+                        )}
+                      {emergency.consultation?.startedAt && (
+                        <div
+                          style={{
+                            marginBottom: '6px',
+                            fontSize: '13px',
+                            color: '#666',
+                          }}
+                        >
+                          <strong>Iniciada:</strong>{' '}
+                          {formatDateTime(emergency.consultation.startedAt)}
+                        </div>
+                      )}
+                      {emergency.consultation?.closedAt && (
+                        <div
+                          style={{
+                            marginBottom: '6px',
+                            fontSize: '13px',
+                            color: '#666',
+                          }}
+                        >
+                          <strong>Cerrada:</strong>{' '}
+                          {formatDateTime(emergency.consultation.closedAt)}
+                        </div>
+                      )}
                     </div>
-                  )}
-                {activeRole === 'doctor' &&
-                  emergency.queueStatus === 'queued' && (
-                    <button
-                      onClick={() => void handleAcceptEmergency(emergency.id)}
+                    <div
                       style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#28a745',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        alignItems: 'flex-end',
                       }}
                     >
-                      Aceptar
-                    </button>
-                  )}
-                {activeRole === 'doctor' && emergency.canStart && (
-                  <button
-                    onClick={() => void handleStartEmergency(emergency.id)}
+                      {getConsultationStatusBadge()}
+                      {getQueueStatusBadge()}
+                      {getPaymentStatusBadge()}
+                    </div>
+                  </div>
+                  <div
                     style={{
-                      padding: '8px 16px',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      marginLeft: '8px',
+                      display: 'flex',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                      marginTop: '8px',
                     }}
                   >
-                    Start
-                  </button>
-                )}
-                {activeRole === 'doctor' && emergency.consultationId && (
-                  <button
-                    onClick={() =>
-                      navigate(`/room/${emergency.consultationId}`)
-                    }
-                    disabled={
-                      !!(
-                        consultationStatusById[emergency.consultationId] &&
-                        consultationStatusById[emergency.consultationId] !==
-                          'in_progress'
-                      )
-                    }
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor:
-                        consultationStatusById[emergency.consultationId] &&
-                        consultationStatusById[emergency.consultationId] !==
-                          'in_progress'
-                          ? '#9ca3af'
-                          : '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor:
-                        consultationStatusById[emergency.consultationId] &&
-                        consultationStatusById[emergency.consultationId] !==
-                          'in_progress'
-                          ? 'not-allowed'
-                          : 'pointer',
-                      marginLeft: '8px',
-                    }}
-                  >
-                    Entrar a consulta
-                  </button>
-                )}
-                {activeRole === 'patient' &&
-                  emergency.paymentStatus === 'pending' && (
-                    <button
-                      onClick={() => void handlePayEmergency(emergency.id)}
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#007bff',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Pagar
-                    </button>
-                  )}
-                {activeRole === 'patient' && emergency.consultationId && (
-                  <button
-                    onClick={() =>
-                      navigate(`/room/${emergency.consultationId}`)
-                    }
-                    disabled={
-                      !!(
-                        consultationStatusById[emergency.consultationId] &&
-                        consultationStatusById[emergency.consultationId] !==
-                          'in_progress'
-                      )
-                    }
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor:
-                        consultationStatusById[emergency.consultationId] &&
-                        consultationStatusById[emergency.consultationId] !==
-                          'in_progress'
-                          ? '#9ca3af'
-                          : '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor:
-                        consultationStatusById[emergency.consultationId] &&
-                        consultationStatusById[emergency.consultationId] !==
-                          'in_progress'
-                          ? 'not-allowed'
-                          : 'pointer',
-                      marginLeft: '8px',
-                    }}
-                  >
-                    Entrar
-                  </button>
-                )}
-              </div>
-            ))}
+                    {activeRole === 'doctor' &&
+                      emergency.queueStatus === 'queued' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleAcceptEmergency(emergency.id);
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Aceptar
+                        </button>
+                      )}
+                    {activeRole === 'doctor' && emergency.canStart && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleStartEmergency(emergency.id);
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#007bff',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Start
+                      </button>
+                    )}
+                    {emergency.consultation?.status === 'in_progress' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/room/${emergency.consultation!.id}`);
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Entrar a consulta
+                      </button>
+                    )}
+                    {activeRole === 'patient' &&
+                      emergency.paymentStatus === 'pending' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handlePayEmergency(emergency.id);
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Pagar
+                        </button>
+                      )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -961,6 +1017,42 @@ export function AppointmentsPage() {
                 appointment.paymentExpiresAt &&
                 new Date(appointment.paymentExpiresAt) <= new Date();
 
+              // Helper functions for badges
+              const getConsultationStatusBadge = () => {
+                if (!appointment.consultation) {
+                  return <Badge label="Consulta no iniciada" tone="neutral" />;
+                }
+                if (appointment.consultation.status === 'in_progress') {
+                  return <Badge label="En curso" tone="info" />;
+                }
+                if (appointment.consultation.status === 'closed') {
+                  return <Badge label="Finalizada" tone="success" />;
+                }
+                return <Badge label="Borrador" tone="neutral" />;
+              };
+
+              const getAppointmentStatusBadge = () => {
+                const statusMap: Record<
+                  string,
+                  {
+                    label: string;
+                    tone: 'success' | 'warning' | 'error' | 'info' | 'neutral';
+                  }
+                > = {
+                  pending_payment: {
+                    label: 'Pendiente de pago',
+                    tone: 'warning',
+                  },
+                  scheduled: { label: 'Programado', tone: 'info' },
+                  cancelled: { label: 'Cancelado', tone: 'error' },
+                };
+                const mapped = statusMap[appointment.status] || {
+                  label: appointment.status,
+                  tone: 'neutral' as const,
+                };
+                return <Badge label={mapped.label} tone={mapped.tone} />;
+              };
+
               return (
                 <div
                   key={appointment.id}
@@ -971,24 +1063,76 @@ export function AppointmentsPage() {
                     backgroundColor: 'white',
                   }}
                 >
-                  <div style={{ marginBottom: '8px' }}>
-                    <strong>Fecha:</strong>{' '}
-                    {formatDateTime(appointment.startAt)}
-                  </div>
-                  {activeRole === 'doctor' && (
-                    <div style={{ marginBottom: '8px', color: '#666' }}>
-                      <strong>Paciente ID:</strong> {appointment.patientUserId}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ marginBottom: '8px' }}>
+                        <strong>Fecha:</strong>{' '}
+                        {formatDateTime(appointment.startAt)}
+                      </div>
+                      {activeRole === 'doctor' && (
+                        <div style={{ marginBottom: '8px', color: '#666' }}>
+                          <strong>Paciente ID:</strong>{' '}
+                          {appointment.patientUserId}
+                        </div>
+                      )}
+                      {appointment.consultation?.startedAt && (
+                        <div
+                          style={{
+                            marginBottom: '8px',
+                            fontSize: '13px',
+                            color: '#666',
+                          }}
+                        >
+                          <strong>Iniciada:</strong>{' '}
+                          {formatDateTime(appointment.consultation.startedAt)}
+                        </div>
+                      )}
+                      {appointment.consultation?.closedAt && (
+                        <div
+                          style={{
+                            marginBottom: '8px',
+                            fontSize: '13px',
+                            color: '#666',
+                          }}
+                        >
+                          <strong>Cerrada:</strong>{' '}
+                          {formatDateTime(appointment.consultation.closedAt)}
+                        </div>
+                      )}
+                      {appointment.cancelledAt && (
+                        <div
+                          style={{
+                            marginBottom: '8px',
+                            fontSize: '13px',
+                            color: '#666',
+                          }}
+                        >
+                          <strong>Cancelado:</strong>{' '}
+                          {formatDateTime(appointment.cancelledAt)}
+                          {appointment.cancellationReason && (
+                            <span> - {appointment.cancellationReason}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <div style={{ marginBottom: '8px' }}>
-                    <strong>Estado:</strong>{' '}
-                    {appointment.status === 'pending_payment'
-                      ? 'Pendiente de pago'
-                      : appointment.status === 'scheduled'
-                        ? 'Programado'
-                        : appointment.status === 'cancelled'
-                          ? 'Cancelado'
-                          : appointment.status}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        alignItems: 'flex-end',
+                      }}
+                    >
+                      {getConsultationStatusBadge()}
+                      {getAppointmentStatusBadge()}
+                    </div>
                   </div>
                   {isPaymentPending && activeRole === 'patient' && (
                     <div
@@ -1063,8 +1207,30 @@ export function AppointmentsPage() {
                   )}
                   {appointment.status !== 'cancelled' && (
                     <div
-                      style={{ display: 'flex', gap: '8px', marginTop: '8px' }}
+                      style={{
+                        display: 'flex',
+                        gap: '8px',
+                        marginTop: '8px',
+                        flexWrap: 'wrap',
+                      }}
                     >
+                      {appointment.consultation?.status === 'in_progress' && (
+                        <button
+                          onClick={() =>
+                            navigate(`/room/${appointment.consultation!.id}`)
+                          }
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Entrar a consulta
+                        </button>
+                      )}
                       {isPaymentPending &&
                         activeRole === 'patient' &&
                         !isPaymentExpired && (
