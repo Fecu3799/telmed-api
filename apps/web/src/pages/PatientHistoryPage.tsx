@@ -7,7 +7,26 @@ import {
   type ClinicalEpisodeResponse,
   type ConsultationHistoryItem,
 } from '../api/consultations';
+import {
+  getMyClinicalAllergies,
+  getMyClinicalConditions,
+  getMyClinicalMedications,
+  getMyClinicalProcedures,
+  createMyClinicalAllergy,
+  updateMyClinicalAllergy,
+  deleteMyClinicalAllergy,
+  createMyClinicalMedication,
+  updateMyClinicalMedication,
+  deleteMyClinicalMedication,
+  createMyClinicalCondition,
+  updateMyClinicalCondition,
+  deleteMyClinicalCondition,
+  createMyClinicalProcedure,
+  updateMyClinicalProcedure,
+  deleteMyClinicalProcedure,
+} from '../api/clinical-profile';
 import type { ProblemDetails } from '../api/http';
+import { ClinicalProfileEditableSection } from '../components/ClinicalProfileEditableSection';
 
 export function PatientHistoryPage() {
   const navigate = useNavigate();
@@ -16,12 +35,13 @@ export function PatientHistoryPage() {
   const [episode, setEpisode] = useState<ClinicalEpisodeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ProblemDetails | null>(null);
-  const [consultations, setConsultations] = useState<
-    ConsultationHistoryItem[]
-  >([]);
+  const [consultations, setConsultations] = useState<ConsultationHistoryItem[]>(
+    [],
+  );
   const [consultationsLoading, setConsultationsLoading] = useState(false);
   const [consultationsError, setConsultationsError] =
     useState<ProblemDetails | null>(null);
+  const pageSize = 20;
 
   useEffect(() => {
     if (activeRole !== 'patient') {
@@ -146,7 +166,8 @@ export function PatientHistoryPage() {
     const finalNote = episode.final;
     const addendums = episode.addendums ?? [];
     const sortedAddendums = [...addendums].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
     const displayBody =
       finalNote.displayBody ?? finalNote.formattedBody ?? finalNote.body ?? '';
@@ -163,7 +184,9 @@ export function PatientHistoryPage() {
           </div>
         </div>
         {sortedAddendums.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+          >
             <div style={{ fontSize: '14px', fontWeight: 600 }}>Addendums</div>
             {sortedAddendums.map((note) => (
               <div key={note.id} style={{ fontSize: '14px' }}>
@@ -318,19 +341,44 @@ export function PatientHistoryPage() {
         {renderEpisode()}
       </div>
 
-      <div
-        style={{
-          border: '1px solid #ddd',
-          borderRadius: '8px',
-          padding: '16px',
-          backgroundColor: 'white',
-        }}
-      >
+      <div style={{ marginBottom: '16px' }}>
         <h2 style={{ marginTop: 0 }}>Perfil clínico</h2>
-        <div style={{ fontSize: '14px', color: '#737373' }}>
-          Próximamente: alergias, medicación habitual, condiciones y
-          procedimientos.
-        </div>
+        <ClinicalProfileEditableSection
+          title="Alergias"
+          emptyText="Sin alergias registradas."
+          pageSize={pageSize}
+          list={getMyClinicalAllergies}
+          createItem={createMyClinicalAllergy}
+          updateItem={updateMyClinicalAllergy}
+          deleteItem={deleteMyClinicalAllergy}
+        />
+        <ClinicalProfileEditableSection
+          title="Medicación"
+          emptyText="Sin medicación registrada."
+          pageSize={pageSize}
+          list={getMyClinicalMedications}
+          createItem={createMyClinicalMedication}
+          updateItem={updateMyClinicalMedication}
+          deleteItem={deleteMyClinicalMedication}
+        />
+        <ClinicalProfileEditableSection
+          title="Condiciones"
+          emptyText="Sin condiciones registradas."
+          pageSize={pageSize}
+          list={getMyClinicalConditions}
+          createItem={createMyClinicalCondition}
+          updateItem={updateMyClinicalCondition}
+          deleteItem={deleteMyClinicalCondition}
+        />
+        <ClinicalProfileEditableSection
+          title="Procedimientos"
+          emptyText="Sin procedimientos registrados."
+          pageSize={pageSize}
+          list={getMyClinicalProcedures}
+          createItem={createMyClinicalProcedure}
+          updateItem={updateMyClinicalProcedure}
+          deleteItem={deleteMyClinicalProcedure}
+        />
       </div>
     </div>
   );

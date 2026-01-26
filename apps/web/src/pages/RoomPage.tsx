@@ -36,8 +36,9 @@ export function RoomPage() {
   const [chatThread, setChatThread] = useState<ChatThread | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
-  const [preflightStatus, setPreflightStatus] =
-    useState<Consultation['status'] | null>(null);
+  const [preflightStatus, setPreflightStatus] = useState<
+    Consultation['status'] | null
+  >(null);
   const [preflightError, setPreflightError] = useState<ProblemDetails | null>(
     null,
   );
@@ -578,7 +579,7 @@ export function RoomPage() {
             {/* All LiveKit-dependent components MUST be inside LiveKitRoom */}
             <RoomLayout
               activeRole={activeRole}
-              consultationId={consultationId!}
+              consultationId={consultationId}
               consultationStatus={consultation?.status ?? null}
               onCloseConsultation={() => void handleCloseConsultation()}
               closing={closing}

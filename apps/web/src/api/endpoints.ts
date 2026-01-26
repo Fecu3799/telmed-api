@@ -15,6 +15,29 @@ export const endpoints = {
     get: '/patients/me/identity',
     patch: '/patients/me/identity',
   },
+  // Clinical Profile
+  clinicalProfile: {
+    allergies: '/patients/me/clinical-profile/allergies',
+    medications: '/patients/me/clinical-profile/medications',
+    conditions: '/patients/me/clinical-profile/conditions',
+    procedures: '/patients/me/clinical-profile/procedures',
+    allergiesForPatient: (patientUserId: string) =>
+      `/patients/${patientUserId}/clinical-profile/allergies`,
+    medicationsForPatient: (patientUserId: string) =>
+      `/patients/${patientUserId}/clinical-profile/medications`,
+    conditionsForPatient: (patientUserId: string) =>
+      `/patients/${patientUserId}/clinical-profile/conditions`,
+    proceduresForPatient: (patientUserId: string) =>
+      `/patients/${patientUserId}/clinical-profile/procedures`,
+    verifyAllergyForPatient: (patientUserId: string, allergyId: string) =>
+      `/patients/${patientUserId}/clinical-profile/allergies/${allergyId}/verify`,
+    verifyMedicationForPatient: (patientUserId: string, medicationId: string) =>
+      `/patients/${patientUserId}/clinical-profile/medications/${medicationId}/verify`,
+    verifyConditionForPatient: (patientUserId: string, conditionId: string) =>
+      `/patients/${patientUserId}/clinical-profile/conditions/${conditionId}/verify`,
+    verifyProcedureForPatient: (patientUserId: string, procedureId: string) =>
+      `/patients/${patientUserId}/clinical-profile/procedures/${procedureId}/verify`,
+  },
   // Doctor Profile
   doctorProfile: {
     get: '/doctors/me/profile',

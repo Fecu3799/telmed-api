@@ -62,9 +62,8 @@ export function RoomLayout({
   const hceSectionRef = useRef<HTMLDivElement | null>(null);
   const [episodeLoading, setEpisodeLoading] = useState(false);
   const [episodeError, setEpisodeError] = useState<ProblemDetails | null>(null);
-  const [episodeData, setEpisodeData] = useState<ClinicalEpisodeResponse | null>(
-    null,
-  );
+  const [episodeData, setEpisodeData] =
+    useState<ClinicalEpisodeResponse | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftBody, setDraftBody] = useState('');
   const [draftDirty, setDraftDirty] = useState(false);
@@ -183,7 +182,8 @@ export function RoomLayout({
   }, [activeRole, episodeData?.final, formattedDirty]);
 
   const isClosed = consultationStatus === 'closed';
-  const hasStatus = consultationStatus !== null && consultationStatus !== undefined;
+  const hasStatus =
+    consultationStatus !== null && consultationStatus !== undefined;
   const hasFinal = Boolean(episodeData?.final);
   const canShowAddendumForm =
     activeRole === 'doctor' && hasFinal && (!hasStatus || isClosed);
@@ -394,9 +394,7 @@ export function RoomLayout({
         )}
       </div>
       {draftError && (
-        <div style={{ fontSize: '13px', color: '#b91c1c' }}>
-          {draftError}
-        </div>
+        <div style={{ fontSize: '13px', color: '#b91c1c' }}>{draftError}</div>
       )}
       {finalizeError && (
         <div style={{ fontSize: '13px', color: '#b91c1c' }}>
@@ -424,7 +422,9 @@ export function RoomLayout({
     if (episodeError) {
       if (episodeError.status === 404 && activeRole === 'doctor') {
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+          >
             <div style={{ fontSize: '14px', color: '#737373' }}>
               Aún no hay notas cargadas.
             </div>
@@ -478,7 +478,8 @@ export function RoomLayout({
     const finalNote = episodeData.final;
     const addendums = episodeData.addendums ?? [];
     const sortedAddendums = [...addendums].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
 
     if (
@@ -495,7 +496,10 @@ export function RoomLayout({
     }
 
     const finalDisplay =
-      finalNote?.displayBody ?? finalNote?.formattedBody ?? finalNote?.body ?? '';
+      finalNote?.displayBody ??
+      finalNote?.formattedBody ??
+      finalNote?.body ??
+      '';
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -543,7 +547,9 @@ export function RoomLayout({
             />
             <button
               onClick={() => void handleSaveFormatted()}
-              disabled={!finalNote || savingFormatted || formattedBody.trim() === ''}
+              disabled={
+                !finalNote || savingFormatted || formattedBody.trim() === ''
+              }
               style={{
                 alignSelf: 'flex-start',
                 padding: '8px 14px',
@@ -646,7 +652,9 @@ export function RoomLayout({
           </div>
         )}
         {sortedAddendums.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+          >
             <div style={{ fontSize: '14px', fontWeight: 600 }}>Addendums</div>
             {sortedAddendums.map((note) => (
               <div key={note.id} style={{ fontSize: '14px' }}>

@@ -785,9 +785,11 @@ export function AppointmentsPage() {
                       navigate(`/room/${emergency.consultationId}`)
                     }
                     disabled={
-                      consultationStatusById[emergency.consultationId] &&
-                      consultationStatusById[emergency.consultationId] !==
-                        'in_progress'
+                      !!(
+                        consultationStatusById[emergency.consultationId] &&
+                        consultationStatusById[emergency.consultationId] !==
+                          'in_progress'
+                      )
                     }
                     style={{
                       padding: '8px 16px',
@@ -834,9 +836,11 @@ export function AppointmentsPage() {
                       navigate(`/room/${emergency.consultationId}`)
                     }
                     disabled={
-                      consultationStatusById[emergency.consultationId] &&
-                      consultationStatusById[emergency.consultationId] !==
-                        'in_progress'
+                      !!(
+                        consultationStatusById[emergency.consultationId] &&
+                        consultationStatusById[emergency.consultationId] !==
+                          'in_progress'
+                      )
                     }
                     style={{
                       padding: '8px 16px',

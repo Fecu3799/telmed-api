@@ -47,9 +47,9 @@ export function LobbyPage() {
   );
   const [loadingSession, setLoadingSession] = useState(false);
   const [sessionError, setSessionError] = useState<ProblemDetails | null>(null);
-  const [sessionCooldownUntil, setSessionCooldownUntil] = useState<number | null>(
-    null,
-  );
+  const [sessionCooldownUntil, setSessionCooldownUntil] = useState<
+    number | null
+  >(null);
   const sessionInFlightRef = useRef(false);
   const lastSessionFetchRef = useRef<number | null>(null);
 
@@ -94,7 +94,10 @@ export function LobbyPage() {
       if (sessionCooldownUntil && now < sessionCooldownUntil) {
         return;
       }
-      if (lastSessionFetchRef.current && now - lastSessionFetchRef.current < 15_000) {
+      if (
+        lastSessionFetchRef.current &&
+        now - lastSessionFetchRef.current < 15_000
+      ) {
         return;
       }
 
@@ -133,7 +136,13 @@ export function LobbyPage() {
     };
 
     void loadSessionStatus();
-  }, [activeRole, doctorToken, patientToken, activeToken, sessionCooldownUntil]);
+  }, [
+    activeRole,
+    doctorToken,
+    patientToken,
+    activeToken,
+    sessionCooldownUntil,
+  ]);
 
   useEffect(() => {
     if (!sessionCooldownUntil) {
