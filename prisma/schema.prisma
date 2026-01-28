@@ -7,23 +7,23 @@ datasource db {
 }
 
 model User {
-  id                     String                        @id @default(uuid())
-  email                  String                        @unique
-  passwordHash           String                        @map("password_hash")
-  role                   UserRole
-  status                 UserStatus                    @default(active)
-  createdAt              DateTime                      @default(now()) @map("created_at")
-  updatedAt              DateTime                      @updatedAt @map("updated_at")
-  displayName            String?                       @map("display_name")
-  doctorProfile          DoctorProfile?
-  patient                Patient?
-  uploadedFiles          FileObject[]
-  chatThreadsAsDoctor    ChatThread[]                  @relation("ChatThreadDoctor")
-  chatThreadsAsPatient   ChatThread[]                  @relation("ChatThreadPatient")
-  chatMessages           ChatMessage[]                 @relation("ChatMessageSender")
-  paymentsAsDoctor       Payment[]                     @relation("PaymentDoctor")
-  paymentsAsPatient      Payment[]                     @relation("PaymentPatient")
-  sessions               Session[]
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  passwordHash         String         @map("password_hash")
+  role                 UserRole
+  status               UserStatus     @default(active)
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+  displayName          String?        @map("display_name")
+  doctorProfile        DoctorProfile?
+  patient              Patient?
+  uploadedFiles        FileObject[]
+  chatThreadsAsDoctor  ChatThread[]   @relation("ChatThreadDoctor")
+  chatThreadsAsPatient ChatThread[]   @relation("ChatThreadPatient")
+  chatMessages         ChatMessage[]  @relation("ChatMessageSender")
+  paymentsAsDoctor     Payment[]      @relation("PaymentDoctor")
+  paymentsAsPatient    Payment[]      @relation("PaymentPatient")
+  sessions             Session[]
 
   @@map("users")
 }
@@ -46,24 +46,24 @@ model Session {
 }
 
 model Patient {
-  id              String              @id @default(uuid()) @map("id")
-  userId          String              @unique @map("user_id")
-  legalFirstName  String              @map("legal_first_name")
-  legalLastName   String              @map("legal_last_name")
-  documentType    PatientDocumentType @map("document_type")
-  documentNumber  String              @map("document_number")
-  documentCountry String              @default("AR") @map("document_country")
-  birthDate       DateTime            @map("birth_date") @db.Date
-  phone           String?             @map("phone")
-  addressText     String?             @map("address_text")
-  emergencyContactName  String?       @map("emergency_contact_name")
-  emergencyContactPhone String?       @map("emergency_contact_phone")
-  insuranceName         String?       @map("insurance_name")
-  createdAt       DateTime            @default(now()) @map("created_at")
-  updatedAt       DateTime            @updatedAt @map("updated_at")
-  appointments    Appointment[]
-  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  files           PatientFile[]
+  id                    String              @id @default(uuid()) @map("id")
+  userId                String              @unique @map("user_id")
+  legalFirstName        String              @map("legal_first_name")
+  legalLastName         String              @map("legal_last_name")
+  documentType          PatientDocumentType @map("document_type")
+  documentNumber        String              @map("document_number")
+  documentCountry       String              @default("AR") @map("document_country")
+  birthDate             DateTime            @map("birth_date") @db.Date
+  phone                 String?             @map("phone")
+  addressText           String?             @map("address_text")
+  emergencyContactName  String?             @map("emergency_contact_name")
+  emergencyContactPhone String?             @map("emergency_contact_phone")
+  insuranceName         String?             @map("insurance_name")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+  appointments          Appointment[]
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files                 PatientFile[]
 
   @@unique([documentType, documentCountry, documentNumber])
   @@map("patients")
@@ -154,27 +154,27 @@ model PatientClinicalProcedure {
 }
 
 model DoctorProfile {
-  userId             String                    @id @map("user_id")
-  bio                String?
-  currency           String                    @default("ARS")
-  isActive           Boolean                   @default(true) @map("is_active")
-  verificationStatus DoctorVerificationStatus  @default(unverified) @map("verification_status")
-  createdAt          DateTime                  @default(now()) @map("created_at")
-  updatedAt          DateTime                  @updatedAt @map("updated_at")
-  location           Unsupported("geography")? @map("location")
-  city               String?                   @map("city")
-  region             String?                   @map("region")
-  countryCode        String?                   @map("country_code")
-  priceCents         Int                       @map("price_cents")
-  firstName          String?                   @map("first_name")
-  lastName           String?                   @map("last_name")
-  appointments       Appointment[]
-  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  specialties        DoctorSpecialty[]
-  availabilityRules  DoctorAvailabilityRule[]
+  userId                 String                        @id @map("user_id")
+  bio                    String?
+  currency               String                        @default("ARS")
+  isActive               Boolean                       @default(true) @map("is_active")
+  verificationStatus     DoctorVerificationStatus      @default(unverified) @map("verification_status")
+  createdAt              DateTime                      @default(now()) @map("created_at")
+  updatedAt              DateTime                      @updatedAt @map("updated_at")
+  location               Unsupported("geography")?     @map("location")
+  city                   String?                       @map("city")
+  region                 String?                       @map("region")
+  countryCode            String?                       @map("country_code")
+  priceCents             Int                           @map("price_cents")
+  firstName              String?                       @map("first_name")
+  lastName               String?                       @map("last_name")
+  appointments           Appointment[]
+  user                   User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialties            DoctorSpecialty[]
+  availabilityRules      DoctorAvailabilityRule[]
   availabilityExceptions DoctorAvailabilityException[]
-  schedulingConfig   DoctorSchedulingConfig?
-  doctorPaymentAccount DoctorPaymentAccount?
+  schedulingConfig       DoctorSchedulingConfig?
+  doctorPaymentAccount   DoctorPaymentAccount?
 
   @@map("doctor_profiles")
 }
@@ -209,14 +209,14 @@ model spatial_ref_sys {
 }
 
 model DoctorAvailabilityRule {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  dayOfWeek Int      @map("day_of_week")
-  startTime String   @map("start_time")
-  endTime   String   @map("end_time")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id            String        @id @default(uuid())
+  userId        String        @map("user_id")
+  dayOfWeek     Int           @map("day_of_week")
+  startTime     String        @map("start_time")
+  endTime       String        @map("end_time")
+  isActive      Boolean       @default(true) @map("is_active")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
   doctorProfile DoctorProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@index([userId])
@@ -238,13 +238,13 @@ model DoctorAvailabilityException {
 }
 
 model DoctorSchedulingConfig {
-  userId              String   @id @map("user_id")
-  slotDurationMinutes Int      @default(60) @map("slot_duration_minutes")
-  leadTimeHours       Int      @default(24) @map("lead_time_hours")
-  horizonDays         Int      @default(60) @map("horizon_days")
-  timezone            String   @default("America/Argentina/Buenos_Aires")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  userId              String        @id @map("user_id")
+  slotDurationMinutes Int           @default(60) @map("slot_duration_minutes")
+  leadTimeHours       Int           @default(24) @map("lead_time_hours")
+  horizonDays         Int           @default(60) @map("horizon_days")
+  timezone            String        @default("America/Argentina/Buenos_Aires")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
   doctorProfile       DoctorProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@map("doctor_scheduling_configs")
@@ -274,25 +274,25 @@ model Appointment {
 }
 
 model Consultation {
-  id             String                 @id @default(uuid())
-  appointmentId  String?                @unique @map("appointment_id")
-  queueItemId    String?                @unique @map("queue_item_id")
-  doctorUserId   String                 @map("doctor_user_id")
-  patientUserId  String                 @map("patient_user_id")
-  status         ConsultationStatus     @default(draft)
-  startedAt      DateTime?              @map("started_at")
-  closedAt       DateTime?              @map("closed_at")
-  videoProvider  String?                @map("video_provider")
-  videoRoomName  String?                @map("video_room_name")
-  videoCreatedAt DateTime?              @map("video_created_at")
-  lastActivityAt DateTime?              @map("last_activity_at")
-  createdAt      DateTime               @default(now()) @map("created_at")
-  updatedAt      DateTime               @updatedAt @map("updated_at")
+  id             String             @id @default(uuid())
+  appointmentId  String?            @unique @map("appointment_id")
+  queueItemId    String?            @unique @map("queue_item_id")
+  doctorUserId   String             @map("doctor_user_id")
+  patientUserId  String             @map("patient_user_id")
+  status         ConsultationStatus @default(draft)
+  startedAt      DateTime?          @map("started_at")
+  closedAt       DateTime?          @map("closed_at")
+  videoProvider  String?            @map("video_provider")
+  videoRoomName  String?            @map("video_room_name")
+  videoCreatedAt DateTime?          @map("video_created_at")
+  lastActivityAt DateTime?          @map("last_activity_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
 
-  appointment    Appointment?           @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  queueItem      ConsultationQueueItem? @relation(fields: [queueItemId], references: [id], onDelete: SetNull)
-  chatMessages   ChatMessage[]          @relation("ChatMessageConsultation")
-  relatedFiles   PatientFile[]          @relation("PatientFileConsultation")
+  appointment     Appointment?           @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  queueItem       ConsultationQueueItem? @relation(fields: [queueItemId], references: [id], onDelete: SetNull)
+  chatMessages    ChatMessage[]          @relation("ChatMessageConsultation")
+  relatedFiles    PatientFile[]          @relation("PatientFileConsultation")
   clinicalEpisode ClinicalEpisode?
 
   @@index([doctorUserId, createdAt])
@@ -301,15 +301,15 @@ model Consultation {
 }
 
 model ClinicalEpisode {
-  id             String      @id @default(uuid())
-  consultationId String      @unique @map("consultation_id")
-  patientUserId  String      @map("patient_user_id")
-  doctorUserId   String      @map("doctor_user_id")
-  deletedAt      DateTime?   @map("deleted_at")
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  consultationId String    @unique @map("consultation_id")
+  patientUserId  String    @map("patient_user_id")
+  doctorUserId   String    @map("doctor_user_id")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  consultation Consultation          @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   notes        ClinicalEpisodeNote[]
 
   @@index([doctorUserId, createdAt])
@@ -318,23 +318,24 @@ model ClinicalEpisode {
 }
 
 model ClinicalEpisodeNote {
-  id              String                 @id @default(uuid())
-  episodeId       String                 @map("episode_id")
-  kind            ClinicalEpisodeNoteKind
-  title           String
-  body            String                 @db.Text
-  formattedBody   String?                @db.Text @map("formatted_body")
-  formattedAt     DateTime?              @map("formatted_at")
-  formattedByUserId String?              @map("formatted_by_user_id")
-  formatVersion   Int?                   @map("format_version")
-  aiMeta          Json?                  @map("ai_meta")
-  createdByUserId String                 @map("created_by_user_id")
-  createdByRole   UserRole               @map("created_by_role")
-  deletedAt       DateTime?              @map("deleted_at")
-  createdAt       DateTime               @default(now()) @map("created_at")
-  updatedAt       DateTime               @updatedAt @map("updated_at")
+  id                String                  @id @default(uuid())
+  episodeId         String                  @map("episode_id")
+  kind              ClinicalEpisodeNoteKind
+  title             String
+  body              String                  @db.Text
+  formattedBody     String?                 @map("formatted_body") @db.Text
+  formattedAt       DateTime?               @map("formatted_at")
+  formattedByUserId String?                 @map("formatted_by_user_id")
+  formatVersion     Int?                    @map("format_version")
+  aiMeta            Json?                   @map("ai_meta")
+  createdByUserId   String                  @map("created_by_user_id")
+  createdByRole     UserRole                @map("created_by_role")
+  deletedAt         DateTime?               @map("deleted_at")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
 
-  episode ClinicalEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episode    ClinicalEpisode         @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  formatJobs ClinicalNoteFormatJob[]
 
   @@index([episodeId, kind])
   @@index([createdByUserId, createdAt])
@@ -342,15 +343,15 @@ model ClinicalEpisodeNote {
 }
 
 model FileObject {
-  id               String                  @id @default(uuid())
+  id               String        @id @default(uuid())
   bucket           String
-  objectKey        String                  @map("object_key")
-  mimeType         String                  @map("mime_type")
-  sizeBytes        Int                     @map("size_bytes")
-  sha256           String?                 @map("sha256")
-  uploadedByUserId String                  @map("uploaded_by_user_id")
-  createdAt        DateTime                @default(now()) @map("created_at")
-  uploadedBy       User                    @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+  objectKey        String        @map("object_key")
+  mimeType         String        @map("mime_type")
+  sizeBytes        Int           @map("size_bytes")
+  sha256           String?       @map("sha256")
+  uploadedByUserId String        @map("uploaded_by_user_id")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  uploadedBy       User          @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
   patientFiles     PatientFile[]
 
   @@index([uploadedByUserId, createdAt(sort: Desc)])
@@ -510,6 +511,20 @@ enum ClinicalEpisodeNoteKind {
   addendum
 }
 
+enum ClinicalNoteFormatJobStatus {
+  queued
+  processing
+  completed
+  failed
+  cancelled
+}
+
+enum ClinicalNoteFormatProposalVariant {
+  A
+  B
+  C
+}
+
 enum AppointmentStatus {
   scheduled
   cancelled
@@ -610,17 +625,17 @@ model ChatThread {
 }
 
 model ChatPolicy {
-  threadId                      String   @id @map("thread_id")
-  patientCanMessage              Boolean  @default(true) @map("patient_can_message")
-  allowedSchedule                Json?    @map("allowed_schedule")
-  dailyLimit                    Int      @default(10) @map("daily_limit")
-  burstLimit                    Int      @default(3) @map("burst_limit")
-  burstWindowSeconds            Int      @default(30) @map("burst_window_seconds")
-  requireRecentConsultation      Boolean  @default(true) @map("require_recent_consultation")
-  recentConsultationWindowHours Int      @default(72) @map("recent_consultation_window_hours")
-  closedByDoctor                 Boolean  @default(false) @map("closed_by_doctor")
-  createdAt                     DateTime @default(now()) @map("created_at")
-  updatedAt                     DateTime @updatedAt @map("updated_at")
+  threadId                      String     @id @map("thread_id")
+  patientCanMessage             Boolean    @default(true) @map("patient_can_message")
+  allowedSchedule               Json?      @map("allowed_schedule")
+  dailyLimit                    Int        @default(10) @map("daily_limit")
+  burstLimit                    Int        @default(3) @map("burst_limit")
+  burstWindowSeconds            Int        @default(30) @map("burst_window_seconds")
+  requireRecentConsultation     Boolean    @default(true) @map("require_recent_consultation")
+  recentConsultationWindowHours Int        @default(72) @map("recent_consultation_window_hours")
+  closedByDoctor                Boolean    @default(false) @map("closed_by_doctor")
+  createdAt                     DateTime   @default(now()) @map("created_at")
+  updatedAt                     DateTime   @updatedAt @map("updated_at")
   thread                        ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@map("chat_policies")
@@ -634,12 +649,12 @@ model ChatMessage {
   kind                  ChatMessageKind
   text                  String?             @db.Text
   clientMessageId       String?             @map("client_message_id")
-  contextConsultationId String?            @map("context_consultation_id")
+  contextConsultationId String?             @map("context_consultation_id")
   deliveredAt           DateTime?           @map("delivered_at")
-  createdAt             DateTime             @default(now()) @map("created_at")
-  updatedAt             DateTime             @updatedAt @map("updated_at")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
   thread                ChatThread          @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  sender                 User                @relation("ChatMessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+  sender                User                @relation("ChatMessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
   contextConsultation   Consultation?       @relation("ChatMessageConsultation", fields: [contextConsultationId], references: [id], onDelete: SetNull)
 
   @@unique([threadId, senderUserId, clientMessageId])
@@ -663,27 +678,77 @@ enum PatientFileCategory {
 }
 
 model PatientFile {
-  id                    String               @id @default(uuid())
-  patientId             String               @map("patient_id")
-  fileObjectId          String               @unique @map("file_object_id")
-  status                PatientFileStatus    @default(pending_upload)
-  originalName          String               @map("original_name")
-  mimeType              String               @map("mime_type")
-  sizeBytes             Int                  @map("size_bytes")
-  sha256                String?              @map("sha256")
-  category              PatientFileCategory  @default(other)
-  notes                 String?              @db.Text
-  uploadedByUserId      String               @map("uploaded_by_user_id")
-  uploadedByRole        UserRole             @map("uploaded_by_role")
-  relatedConsultationId String?              @map("related_consultation_id")
-  createdAt             DateTime             @default(now()) @map("created_at")
-  updatedAt             DateTime             @updatedAt @map("updated_at")
-  patient               Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  fileObject            FileObject           @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
-  relatedConsultation   Consultation?        @relation("PatientFileConsultation", fields: [relatedConsultationId], references: [id], onDelete: SetNull)
+  id                    String              @id @default(uuid())
+  patientId             String              @map("patient_id")
+  fileObjectId          String              @unique @map("file_object_id")
+  status                PatientFileStatus   @default(pending_upload)
+  originalName          String              @map("original_name")
+  mimeType              String              @map("mime_type")
+  sizeBytes             Int                 @map("size_bytes")
+  sha256                String?             @map("sha256")
+  category              PatientFileCategory @default(other)
+  notes                 String?             @db.Text
+  uploadedByUserId      String              @map("uploaded_by_user_id")
+  uploadedByRole        UserRole            @map("uploaded_by_role")
+  relatedConsultationId String?             @map("related_consultation_id")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+  patient               Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fileObject            FileObject          @relation(fields: [fileObjectId], references: [id], onDelete: Cascade)
+  relatedConsultation   Consultation?       @relation("PatientFileConsultation", fields: [relatedConsultationId], references: [id], onDelete: SetNull)
 
   @@index([patientId, createdAt(sort: Desc)])
   @@index([patientId, category, createdAt(sort: Desc)])
   @@index([relatedConsultationId])
   @@map("patient_files")
+}
+
+model ClinicalNoteFormatJob {
+  id             String @id @default(uuid())
+  finalNoteId    String @map("final_note_id")
+  consultationId String @map("consultation_id")
+  patientUserId  String @map("patient_user_id")
+  doctorUserId   String @map("doctor_user_id")
+
+  preset        String @map("preset")
+  options       Json?  @map("options")
+  promptVersion Int    @map("prompt_version")
+  inputHash     String @map("input_hash")
+
+  status       ClinicalNoteFormatJobStatus @default(queued)
+  provider     String?                     @map("provider")
+  model        String?                     @map("model")
+  startedAt    DateTime?                   @map("started_at")
+  finishedAt   DateTime?                   @map("finished_at")
+  errorCode    String?                     @map("error_code")
+  errorMessage String?                     @map("error_message")
+
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  finalNote ClinicalEpisodeNote          @relation(fields: [finalNoteId], references: [id], onDelete: Cascade)
+  proposals ClinicalNoteFormatProposal[]
+
+  @@unique([inputHash])
+  @@index([finalNoteId, status])
+  @@index([doctorUserId, createdAt(sort: Desc)])
+  @@index([consultationId])
+  @@map("clinical_note_format_jobs")
+}
+
+model ClinicalNoteFormatProposal {
+  id        String                            @id @default(uuid())
+  jobId     String                            @map("job_id")
+  variant   ClinicalNoteFormatProposalVariant
+  title     String?
+  body      String                            @db.Text
+  deletedAt DateTime?                         @map("deleted_at")
+  createdAt DateTime                          @default(now()) @map("created_at")
+
+  job ClinicalNoteFormatJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, variant])
+  @@index([jobId])
+  @@map("clinical_note_format_proposals")
 }

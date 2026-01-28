@@ -243,6 +243,42 @@ export const envSchema = z.object({
     .default(1.0),
   GEO_EMERGENCY_DAILY_LIMIT: z.coerce.number().int().positive().default(5),
   GEO_EMERGENCY_MONTHLY_LIMIT: z.coerce.number().int().positive().default(30),
-});
+  // Clinical Note Format
+  CLINICAL_NOTE_FORMAT_PROVIDER: z
+    .enum(['dummy', 'openai'])
+    .default('dummy'),
+  CLINICAL_NOTE_FORMAT_CONCURRENCY: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(2),
+  CLINICAL_NOTE_FORMAT_MAX_ATTEMPTS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(3),
+  CLINICAL_NOTE_FORMAT_BACKOFF_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5000),
+  // OpenAI (required if provider=openai)
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+  OPENAI_BASE_URL: z.string().url().optional(),
+})
+  .refine(
+    (data) => {
+      if (data.CLINICAL_NOTE_FORMAT_PROVIDER === 'openai') {
+        return !!data.OPENAI_API_KEY && data.OPENAI_API_KEY.length > 0;
+      }
+      return true;
+    },
+    {
+      message:
+        'OPENAI_API_KEY is required when CLINICAL_NOTE_FORMAT_PROVIDER=openai',
+      path: ['OPENAI_API_KEY'],
+    },
+  );
 
 export type EnvSchema = z.infer<typeof envSchema>;

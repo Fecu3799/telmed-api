@@ -445,6 +445,76 @@ export class ConsultationRealtimeGateway
     });
   }
 
+  emitFormatJobReady(
+    consultationId: string,
+    jobId: string,
+    finalNoteId: string,
+    traceId?: string | null,
+  ) {
+    if (!this.server) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'format_job_ready_publish_failed',
+          consultationId,
+          jobId,
+          reason: 'WebSocket server not initialized',
+          traceId: traceId ?? null,
+        }),
+      );
+      return;
+    }
+
+    const payload = {
+      jobId,
+      consultationId,
+      finalNoteId,
+    };
+
+    const room = this.roomName(consultationId);
+    this.server.to(room).emit('clinicalNote.format.ready', payload);
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'format_job_ready_published',
+        consultationId,
+        jobId,
+        room,
+        traceId: traceId ?? null,
+      }),
+    );
+  }
+
+  emitFormatJobFailed(
+    consultationId: string,
+    jobId: string,
+    errorCode: string,
+    traceId?: string | null,
+  ) {
+    if (!this.server) {
+      return;
+    }
+
+    const payload = {
+      jobId,
+      consultationId,
+      errorCode,
+    };
+
+    const room = this.roomName(consultationId);
+    this.server.to(room).emit('clinicalNote.format.failed', payload);
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'format_job_failed_published',
+        consultationId,
+        jobId,
+        errorCode,
+        room,
+        traceId: traceId ?? null,
+      }),
+    );
+  }
+
   // Removed: emitMessageCreated - chat messages are now handled by chats module (ChatsGateway)
 
   private roomName(consultationId: string) {

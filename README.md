@@ -32,6 +32,46 @@
 - Payments config: set `MERCADOPAGO_MODE=sandbox` for dev/test, `MERCADOPAGO_MODE=live` for production.
 - Geo emergency quotas: `GEO_EMERGENCY_DAILY_LIMIT` (default 5) and `GEO_EMERGENCY_MONTHLY_LIMIT` (default 30).
 
+## Clinical Note Format (AI Redaction)
+
+The clinical note format feature uses a queue-based system to format final clinical notes. Configure it via environment variables:
+
+### Provider Selection
+
+- `CLINICAL_NOTE_FORMAT_PROVIDER`: `dummy` (default) or `openai`
+  - `dummy`: Uses a simple formatter for development/testing (no AI)
+  - `openai`: Uses OpenAI API (requires `OPENAI_API_KEY`)
+
+### Worker Configuration
+
+- `CLINICAL_NOTE_FORMAT_CONCURRENCY`: Number of concurrent jobs (default: 2)
+- `CLINICAL_NOTE_FORMAT_MAX_ATTEMPTS`: Max retry attempts (default: 3)
+- `CLINICAL_NOTE_FORMAT_BACKOFF_MS`: Initial backoff delay in ms (default: 5000)
+
+### OpenAI Configuration (required if provider=openai)
+
+- `OPENAI_API_KEY`: Your OpenAI API key (required when provider=openai)
+- `OPENAI_MODEL`: Model to use (default: `gpt-4o-mini`)
+- `OPENAI_BASE_URL`: Optional custom base URL (for proxies)
+
+### Running the Worker
+
+The worker processes format jobs in the background. Run it separately from the API:
+
+```bash
+# Development (with watch)
+npm run dev:worker
+
+# Production
+npm run start:worker
+```
+
+**Prerequisites**: 
+- Redis must be running (the worker will check and fail with a clear error if Redis is unavailable)
+- Start Redis with: `docker compose up -d redis` (or `npm run dev:infra`)
+
+**Note**: The worker requires Redis to be running (same `REDIS_URL` as the API). If Redis is not available, the worker will exit with a clear error message.
+
 ## Project setup
 
 ```bash

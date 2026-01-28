@@ -22,6 +22,7 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
   private readonly slowQueryMs: number;
   private readonly queryLogEnabled: boolean;
+  private isPoolEnded = false;
 
   constructor(
     config: ConfigService,
@@ -127,7 +128,25 @@ export class PrismaService
   }
 
   async onModuleDestroy() {
-    await this.$disconnect();
-    await this.pool.end();
+    try {
+      await this.$disconnect();
+    } catch (error) {
+      this.logger.warn('Error disconnecting Prisma client:', error);
+    }
+
+    if (!this.isPoolEnded) {
+      this.isPoolEnded = true;
+      try {
+        await this.pool.end();
+      } catch (error) {
+        // Ignore errors if pool is already ended
+        if (
+          error instanceof Error &&
+          !error.message.includes('Called end on pool more than once')
+        ) {
+          this.logger.warn('Error ending pool:', error);
+        }
+      }
+    }
   }
 }
