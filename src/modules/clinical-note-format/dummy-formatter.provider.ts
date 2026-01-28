@@ -15,10 +15,15 @@ export class DummyFormatterProvider implements FormatterProvider {
   private readonly logger = new Logger(DummyFormatterProvider.name);
 
   formatClinicalNote(input: {
-    rawText: string;
-    preset: string;
+    rawTitle?: string | null;
+    rawBody: string;
+    formatProfile: string;
     options: Record<string, unknown>;
     promptVersion: number;
+    traceId?: string | null;
+    consultationId?: string;
+    episodeId?: string;
+    finalNoteId?: string;
   }): Promise<{
     A: { title?: string; body: string };
     B: { title?: string; body: string };
@@ -27,39 +32,38 @@ export class DummyFormatterProvider implements FormatterProvider {
     this.logger.log(
       JSON.stringify({
         event: 'dummy_formatter_called',
-        preset: input.preset,
+        formatProfile: input.formatProfile,
         options: input.options,
         promptVersion: input.promptVersion,
-        textLength: input.rawText.length,
+        traceId: input.traceId ?? null,
+        consultationId: input.consultationId ?? null,
+        episodeId: input.episodeId ?? null,
+        finalNoteId: input.finalNoteId ?? null,
+        titleLength: input.rawTitle?.length ?? 0,
+        bodyLength: input.rawBody.length,
       }),
     );
 
-    // Simple restructuring: add headings and create variants
-    const baseText = input.rawText.trim();
-    const useBullets = input.options.bullets === true;
-    const length = (input.options.length ?? 'medium') as
-      | 'short'
-      | 'medium'
-      | 'long';
+    // Simple restructuring: add headings and create variants with clear differences
+    const sourceText = [input.rawTitle, input.rawBody]
+      .filter(Boolean)
+      .join('\n');
+    const sections = this.buildSections(sourceText);
 
-    // Variant A: Brief (shorter)
-    const variantA = this.createVariant(baseText, 'brief', useBullets, length);
+    const variantA = this.renderSections(sections, {
+      maxWords: 120,
+      bullets: false,
+    });
 
-    // Variant B: Standard (balanced)
-    const variantB = this.createVariant(
-      baseText,
-      'standard',
-      useBullets,
-      length,
-    );
+    const variantB = this.renderSections(sections, {
+      maxWords: 250,
+      bullets: false,
+    });
 
-    // Variant C: Detailed (more structured)
-    const variantC = this.createVariant(
-      baseText,
-      'detailed',
-      useBullets,
-      length,
-    );
+    const variantC = this.renderSections(sections, {
+      maxWords: 450,
+      bullets: true,
+    });
 
     return Promise.resolve({
       A: { title: 'Resumen breve', body: variantA },
@@ -68,81 +72,124 @@ export class DummyFormatterProvider implements FormatterProvider {
     });
   }
 
-  private createVariant(
+  private buildSections(
     text: string,
-    style: 'brief' | 'standard' | 'detailed',
-    useBullets: boolean,
-    length: 'short' | 'medium' | 'long',
-  ): string {
-    // Simple restructuring: add basic sections
-    const sections: string[] = [];
+  ): Array<{ label: string; content: string }> {
+    const lower = text.toLowerCase();
+    const firstSentence = this.firstSentence(text);
 
-    // Try to detect common patterns
-    if (
-      text.toLowerCase().includes('motivo') ||
-      text.toLowerCase().includes('consulta')
-    ) {
-      sections.push('## Motivo de consulta');
-      sections.push(
-        this.extractSection(text, 'motivo') ||
-          text.substring(0, Math.min(200, text.length)),
-      );
-    }
+    const motivo =
+      this.extractSectionByKeywords(text, ['motivo', 'consulta']) ??
+      firstSentence ??
+      'No aplica';
+    const sintomas =
+      this.extractSectionByKeywords(text, [
+        'síntoma',
+        'sintoma',
+        'dolor',
+        'fiebre',
+      ]) ?? 'No aplica';
+    const hallazgos =
+      this.extractSectionByKeywords(text, [
+        'hallazgo',
+        'examen',
+        'signo',
+        'signos',
+      ]) ?? 'No aplica';
+    const plan =
+      this.extractSectionByKeywords(text, [
+        'plan',
+        'tratamiento',
+        'conducta',
+      ]) ??
+      (lower.includes('indicaciones') ? 'Ver indicaciones.' : 'No aplica');
+    const indicaciones =
+      this.extractSectionByKeywords(text, [
+        'indicaciones',
+        'recomend',
+        'medic',
+        'dosis',
+      ]) ?? 'No aplica';
+    const alertas =
+      this.extractSectionByKeywords(text, [
+        'alarma',
+        'alerta',
+        'urgencia',
+        'emergencia',
+      ]) ?? 'No aplica';
 
-    if (
-      text.toLowerCase().includes('examen') ||
-      text.toLowerCase().includes('hallazgo')
-    ) {
-      sections.push('## Hallazgos');
-      sections.push(
-        this.extractSection(text, 'hallazgo') || 'Sin hallazgos relevantes.',
-      );
-    }
-
-    if (
-      text.toLowerCase().includes('plan') ||
-      text.toLowerCase().includes('tratamiento')
-    ) {
-      sections.push('## Plan de tratamiento');
-      sections.push(
-        this.extractSection(text, 'plan') || 'Seguimiento según evolución.',
-      );
-    }
-
-    // If no sections detected, use original text with minimal formatting
-    if (sections.length === 0) {
-      sections.push(text);
-    }
-
-    let result = sections.join('\n\n');
-
-    // Apply length adjustment
-    if (length === 'short' && result.length > 500) {
-      result = result.substring(0, 500) + '...';
-    } else if (length === 'long' && result.length < 1000) {
-      // Add some padding for "long" variant
-      result =
-        result + '\n\n---\n\nNota: Resumen extendido generado automáticamente.';
-    }
-
-    // Apply bullets if requested
-    if (useBullets && style === 'detailed') {
-      result = result.replace(/\n/g, '\n- ');
-      result = '- ' + result;
-    }
-
-    return result;
+    return [
+      { label: 'Motivo', content: motivo },
+      { label: 'Síntomas', content: sintomas },
+      { label: 'Hallazgos', content: hallazgos },
+      { label: 'Plan', content: plan },
+      { label: 'Indicaciones', content: indicaciones },
+      { label: 'Alertas', content: alertas },
+    ];
   }
 
-  private extractSection(text: string, keyword: string): string | null {
+  private renderSections(
+    sections: Array<{ label: string; content: string }>,
+    options: { maxWords: number; bullets: boolean },
+  ): string {
+    const lines = sections.map((section) => {
+      const content =
+        section.content.trim().length > 0
+          ? section.content.trim()
+          : 'No aplica';
+      if (
+        options.bullets &&
+        ['Plan', 'Indicaciones', 'Alertas'].includes(section.label)
+      ) {
+        return `${section.label}:\n${this.toBullets(content)}`;
+      }
+      return `${section.label}: ${content}`;
+    });
+
+    const body = lines.join('\n');
+    return this.trimToMaxWords(body, options.maxWords);
+  }
+
+  private extractSectionByKeywords(
+    text: string,
+    keywords: string[],
+  ): string | null {
     const lowerText = text.toLowerCase();
-    const keywordIndex = lowerText.indexOf(keyword.toLowerCase());
-    if (keywordIndex === -1) {
+    const keywordIndex = keywords
+      .map((keyword) => lowerText.indexOf(keyword))
+      .filter((index) => index >= 0)
+      .sort((a, b) => a - b)[0];
+
+    if (keywordIndex === undefined) {
       return null;
     }
-    // Extract a reasonable chunk around the keyword
+
     const start = Math.max(0, keywordIndex - 50);
-    const end = Math.min(text.length, keywordIndex + 300);
+    const end = Math.min(text.length, keywordIndex + 280);
     return text.substring(start, end).trim();
+  }
+
+  private firstSentence(text: string): string | null {
+    const match = text.trim().match(/^[^.!?]{20,200}[.!?]/);
+    return match ? match[0].trim() : null;
+  }
+
+  private toBullets(text: string): string {
+    const parts = text
+      .split(/[\n;•-]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length <= 1) {
+      return `- ${text.trim()}`;
+    }
+    return parts.map((part) => `- ${part}`).join('\n');
+  }
+
+  private trimToMaxWords(text: string, maxWords: number): string {
+    const words = text.trim().split(/\s+/);
+    if (words.length <= maxWords) {
+      return text.trim();
+    }
+    return words.slice(0, maxWords).join(' ') + '...';
   }
 }

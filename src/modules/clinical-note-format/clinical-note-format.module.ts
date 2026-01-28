@@ -5,8 +5,10 @@ import { ClinicalNoteFormatController } from './clinical-note-format.controller'
 import { ClinicalNoteFormatService } from './clinical-note-format.service';
 import { ClinicalNoteFormatProcessor } from './clinical-note-format.processor';
 import { DummyFormatterProvider } from './dummy-formatter.provider';
-import { OpenAiFormatterProvider } from './openai-formatter.provider';
 import { FormatterProviderFactory } from './formatter-provider.factory';
+import { FORMAT_JOB_EVENTS_PUBLISHER } from './format-job-events.types';
+import { RedisFormatJobEventsPublisher } from './redis-format-job-events.publisher';
+import { RedisFormatJobEventsSubscriber } from './redis-format-job-events.subscriber';
 import { ConsultationsModule } from '../consultations/consultations.module';
 
 /**
@@ -74,12 +76,17 @@ import { ConsultationsModule } from '../consultations/consultations.module';
     ClinicalNoteFormatService,
     ClinicalNoteFormatProcessor,
     DummyFormatterProvider,
-    OpenAiFormatterProvider,
     FormatterProviderFactory,
+    RedisFormatJobEventsPublisher,
+    RedisFormatJobEventsSubscriber,
     {
       provide: 'FormatterProvider',
       useFactory: (factory: FormatterProviderFactory) => factory.create(),
       inject: [FormatterProviderFactory],
+    },
+    {
+      provide: FORMAT_JOB_EVENTS_PUBLISHER,
+      useExisting: RedisFormatJobEventsPublisher,
     },
   ],
   exports: [ClinicalNoteFormatService],

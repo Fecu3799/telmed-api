@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import { GeoEmergencyCoordinator } from './geo-emergency-coordinator.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DoctorAvailabilityService } from '../doctors/availability/doctor-availability.service';
+import { getTraceId } from '../../common/request-context';
 
 const ONLINE_GEO_KEY = 'geo:doctors:online';
 const DEFAULT_PAGE_SIZE = 20;
@@ -29,6 +31,7 @@ const PRESENCE_TTL_SECONDS = 60;
 @Injectable()
 export class GeoService {
   private readonly groupTtlSeconds = 15 * 60;
+  private readonly logger = new Logger(GeoService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -291,8 +294,14 @@ export class GeoService {
     const dailyLimit = Number(process.env.GEO_EMERGENCY_DAILY_LIMIT ?? 5);
     const monthlyLimit = Number(process.env.GEO_EMERGENCY_MONTHLY_LIMIT ?? 30);
 
-    const { dayKey, dayTtlSeconds, monthKey, monthTtlSeconds } =
-      this.buildQuotaKeys(patientId);
+    const {
+      dayKey,
+      dayTtlSeconds,
+      monthKey,
+      monthTtlSeconds,
+      dayResetAt,
+      monthResetAt,
+    } = this.buildQuotaKeys(patientId);
 
     const dailyCount = await client.incr(dayKey);
     if (dailyCount === 1) {
@@ -304,8 +313,45 @@ export class GeoService {
       await client.expire(monthKey, monthTtlSeconds);
     }
 
-    if (dailyCount > dailyLimit || monthlyCount > monthlyLimit) {
-      throw new HttpException('Quota exceeded', HttpStatus.TOO_MANY_REQUESTS);
+    const dailyExceeded = dailyCount > dailyLimit;
+    const monthlyExceeded = monthlyCount > monthlyLimit;
+
+    if (dailyExceeded || monthlyExceeded) {
+      const retryAfterSeconds = monthlyExceeded
+        ? monthTtlSeconds
+        : dayTtlSeconds;
+      const resetAt = monthlyExceeded ? monthResetAt : dayResetAt;
+      const traceId = getTraceId() ?? null;
+
+      this.logger.log(
+        JSON.stringify({
+          event: 'geo_emergency_quota_exceeded',
+          patientId,
+          dailyCount,
+          dailyLimit,
+          monthlyCount,
+          monthlyLimit,
+          retryAfterSeconds,
+          resetAt,
+          traceId,
+        }),
+      );
+
+      throw new HttpException(
+        {
+          type: 'https://telmed/errors/emergency-limit-reached',
+          title: 'Límite de emergencias alcanzado',
+          detail:
+            'Se alcanzó el límite de emergencias permitido para este período.',
+          status: HttpStatus.CONFLICT,
+          extensions: {
+            code: 'emergency_limit_reached',
+            retryAfterSeconds,
+            resetAt,
+          },
+        },
+        HttpStatus.CONFLICT,
+      );
     }
   }
 
@@ -328,7 +374,14 @@ export class GeoService {
       (nextMonth.getTime() - now.getTime()) / 1000,
     );
 
-    return { dayKey, monthKey, dayTtlSeconds, monthTtlSeconds };
+    return {
+      dayKey,
+      monthKey,
+      dayTtlSeconds,
+      monthTtlSeconds,
+      dayResetAt: nextDay.toISOString(),
+      monthResetAt: nextMonth.toISOString(),
+    };
   }
 
   private formatDateUTC(date: Date) {

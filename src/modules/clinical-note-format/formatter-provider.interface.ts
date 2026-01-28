@@ -9,10 +9,15 @@
  */
 export interface FormatterProvider {
   formatClinicalNote(input: {
-    rawText: string;
-    preset: string;
+    rawTitle?: string | null;
+    rawBody: string;
+    formatProfile: string;
     options: Record<string, unknown>;
     promptVersion: number;
+    traceId?: string | null;
+    consultationId?: string;
+    episodeId?: string;
+    finalNoteId?: string;
   }): Promise<{
     A: { title?: string; body: string };
     B: { title?: string; body: string };

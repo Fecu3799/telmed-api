@@ -194,9 +194,15 @@ export async function postClinicalEpisodeFinalize(
   );
 }
 
+export type SetClinicalEpisodeFormattedPayload = {
+  formattedBody: string;
+  formatVersion?: number;
+  aiMeta?: Record<string, unknown>;
+};
+
 export async function putClinicalEpisodeFinalFormatted(
   consultationId: string,
-  payload: { formattedBody: string },
+  payload: SetClinicalEpisodeFormattedPayload,
 ): Promise<ClinicalEpisodeResponse> {
   return http<ClinicalEpisodeResponse>(
     endpoints.consultations.clinicalEpisode(consultationId) +
@@ -219,4 +225,75 @@ export async function postClinicalEpisodeAddendum(
       body: JSON.stringify(payload),
     },
   );
+}
+
+// Format Jobs (AI Redaction)
+export type FormatJobStatus =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export type FormatJobProposal = {
+  title?: string | null;
+  body: string;
+};
+
+export type FormatJobProposals = {
+  A?: FormatJobProposal;
+  B?: FormatJobProposal;
+  C?: FormatJobProposal;
+};
+
+export type FormatJobError = {
+  code?: string | null;
+  message?: string | null;
+};
+
+export type FormatJob = {
+  id: string;
+  status: FormatJobStatus;
+  preset: string;
+  options?: Record<string, unknown> | null;
+  promptVersion: number;
+  provider?: string | null;
+  model?: string | null;
+  createdAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  proposals?: FormatJobProposals;
+  error?: FormatJobError;
+};
+
+export type CreateFormatJobPayload = {
+  preset?: 'standard' | 'brief' | 'detailed';
+  options?: {
+    length?: 'short' | 'medium' | 'long';
+    bullets?: boolean;
+    keywords?: boolean;
+    tone?: 'clinical' | 'mixed';
+  };
+};
+
+export type CreateFormatJobResponse = {
+  jobId: string;
+  status: FormatJobStatus;
+};
+
+export async function createFormatJob(
+  consultationId: string,
+  payload?: CreateFormatJobPayload,
+): Promise<CreateFormatJobResponse> {
+  return http<CreateFormatJobResponse>(
+    endpoints.consultations.createFormatJob(consultationId),
+    {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    },
+  );
+}
+
+export async function getFormatJob(jobId: string): Promise<FormatJob> {
+  return http<FormatJob>(endpoints.consultations.getFormatJob(jobId));
 }

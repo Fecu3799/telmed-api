@@ -23,6 +23,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     let errorCode: string | undefined;
     let errors: Record<string, string[]> | string[] | undefined;
     let extensions: Record<string, unknown> | undefined;
+    let type = 'about:blank';
+    let title = 'Error';
 
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       errorCode = exception.code;
@@ -54,6 +56,14 @@ export class ProblemDetailsFilter implements ExceptionFilter {
           detail = responseBody.detail;
         }
 
+        if (typeof responseBody.type === 'string') {
+          type = responseBody.type;
+        }
+
+        if (typeof responseBody.title === 'string') {
+          title = responseBody.title;
+        }
+
         if (responseBody.errors) {
           errors = responseBody.errors as Record<string, string[]>;
         }
@@ -64,9 +74,13 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       }
     }
 
+    if (title === 'Error') {
+      title = HttpStatus[status] ?? 'Error';
+    }
+
     const body: Record<string, unknown> = {
-      type: 'about:blank',
-      title: HttpStatus[status] ?? 'Error',
+      type,
+      title,
       status,
       detail,
       instance: request.originalUrl,

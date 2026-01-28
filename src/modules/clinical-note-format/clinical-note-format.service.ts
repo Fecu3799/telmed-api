@@ -94,12 +94,16 @@ export class ClinicalNoteFormatService {
 
     // Resolve preset and options with defaults
     const preset = dto.preset ?? 'standard';
+    const formatProfile = 'clinical_default';
     const options = (dto.options ?? {}) as Record<string, unknown>;
 
     // Calculate inputHash
     const inputHash = this.calculateInputHash(
-      finalNote.body,
-      preset,
+      {
+        title: finalNote.title,
+        body: finalNote.body,
+      },
+      formatProfile,
       options,
       this.promptVersion,
     );
@@ -163,6 +167,7 @@ export class ClinicalNoteFormatService {
           finalNoteId: finalNote.id,
           consultationId,
           preset,
+          formatProfile,
           options,
           promptVersion: this.promptVersion,
         },
@@ -270,6 +275,8 @@ export class ClinicalNoteFormatService {
       preset: string;
       options: Record<string, unknown> | null;
       promptVersion: number;
+      provider?: string | null;
+      model?: string | null;
       createdAt: string;
       startedAt: string | null;
       finishedAt: string | null;
@@ -281,6 +288,8 @@ export class ClinicalNoteFormatService {
       preset: job.preset,
       options: (job.options as Record<string, unknown>) ?? null,
       promptVersion: job.promptVersion,
+      provider: job.provider ?? null,
+      model: job.model ?? null,
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,
       finishedAt: job.finishedAt?.toISOString() ?? null,
@@ -305,14 +314,15 @@ export class ClinicalNoteFormatService {
    * Calculate input hash for deduplication.
    */
   private calculateInputHash(
-    body: string,
-    preset: string,
+    note: { title?: string | null; body: string },
+    formatProfile: string,
     options: Record<string, unknown>,
     promptVersion: number,
   ): string {
     const input = JSON.stringify({
-      body,
-      preset,
+      title: note.title ?? null,
+      body: note.body,
+      formatProfile,
       options,
       promptVersion,
     });

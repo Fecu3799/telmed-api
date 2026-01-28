@@ -111,11 +111,24 @@ export function RoomPage() {
   };
 
   const handleLeave = () => {
+    // Cleanup: reset all state to ensure LiveKitRoom unmounts
     setTokenData(null);
     setSelectedRole(null);
     setConnectionState('idle');
     hasAutoJoinedRef.current = false;
+    setError(null);
   };
+
+  // Cleanup on unmount or when consultationId changes
+  useEffect(() => {
+    return () => {
+      // Ensure cleanup when component unmounts or consultationId changes
+      setTokenData(null);
+      setSelectedRole(null);
+      setConnectionState('idle');
+      hasAutoJoinedRef.current = false;
+    };
+  }, [consultationId]);
 
   const handleCloseConsultation = async () => {
     if (!consultationId || activeRole !== 'doctor') {
@@ -565,11 +578,11 @@ export function RoomPage() {
               if (import.meta.env.DEV) {
                 console.log('[RoomPage] LiveKit disconnected:', reason);
               }
-              // Don't navigate away automatically, just reset state
-              // User can retry or manually go back
+              // Cleanup on disconnect to prevent regions spam
               setConnectionState('idle');
               setTokenData(null);
               setSelectedRole(null);
+              hasAutoJoinedRef.current = false;
             }}
             style={{
               height: '100%',

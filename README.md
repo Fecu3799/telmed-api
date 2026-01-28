@@ -72,6 +72,10 @@ npm run start:worker
 
 **Note**: The worker requires Redis to be running (same `REDIS_URL` as the API). If Redis is not available, the worker will exit with a clear error message.
 
+**Realtime updates**: The worker publishes format job completion events to Redis (`clinical-note-format-events`).
+The API process subscribes to that channel and emits Socket.IO events to connected clients.
+If the API is not running, jobs still complete and can be fetched via polling.
+
 ## Project setup
 
 ```bash

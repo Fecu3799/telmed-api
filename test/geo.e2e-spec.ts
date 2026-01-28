@@ -400,6 +400,15 @@ describe('Geo emergency flows (e2e)', () => {
         patientLocation: { lat: -34.6037, lng: -58.3816 },
         note: 'Dolor fuerte',
       })
-      .expect(429);
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.type).toBe(
+          'https://telmed/errors/emergency-limit-reached',
+        );
+        expect(response.body.status).toBe(409);
+        expect(response.body.extensions?.code).toBe('emergency_limit_reached');
+        expect(response.body.extensions?.retryAfterSeconds).toBeGreaterThan(0);
+        expect(response.body.extensions?.resetAt).toBeTruthy();
+      });
   });
 });

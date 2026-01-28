@@ -80,6 +80,12 @@ export class FormatJobDto {
   @ApiProperty({ example: 1 })
   promptVersion!: number;
 
+  @ApiPropertyOptional({ example: 'openai' })
+  provider?: string | null;
+
+  @ApiPropertyOptional({ example: 'gpt-4o-mini' })
+  model?: string | null;
+
   @ApiProperty({ example: '2025-01-26T23:00:00.000Z' })
   createdAt!: string;
 

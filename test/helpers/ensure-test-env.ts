@@ -9,24 +9,23 @@
  * so that PrismaService and all database operations use the test database.
  */
 export function ensureTestEnv() {
-  // Set other required env vars with defaults
-  process.env.APP_ENV = process.env.APP_ENV ?? 'test';
-  process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
-  process.env.THROTTLE_ENABLED = process.env.THROTTLE_ENABLED ?? 'false';
-  process.env.APP_PORT = process.env.APP_PORT ?? '3001';
-  process.env.JWT_ACCESS_SECRET =
-    process.env.JWT_ACCESS_SECRET ?? 'test_access_secret_123456';
-  process.env.JWT_REFRESH_SECRET =
-    process.env.JWT_REFRESH_SECRET ?? 'test_refresh_secret_123456';
-  process.env.JWT_ACCESS_TTL_SECONDS =
-    process.env.JWT_ACCESS_TTL_SECONDS ?? '900';
-  process.env.JWT_REFRESH_TTL_SECONDS =
-    process.env.JWT_REFRESH_TTL_SECONDS ?? '2592000';
+  // Set required env vars explicitly for deterministic tests (ignore .env)
+  process.env.APP_ENV = 'test';
+  process.env.NODE_ENV = 'test';
+  process.env.THROTTLE_ENABLED = 'false';
+  process.env.RATE_LIMIT_ENABLED = 'false';
+  process.env.APP_PORT = '3001';
+  process.env.JWT_ACCESS_SECRET = 'test_access_secret_123456';
+  process.env.JWT_REFRESH_SECRET = 'test_refresh_secret_123456';
+  process.env.JWT_ACCESS_TTL_SECONDS = '900';
+  process.env.JWT_REFRESH_TTL_SECONDS = '2592000';
+  process.env.DEBUG_AUTH = 'false';
+  process.env.DEBUG_DB = 'false';
   process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
-  process.env.MERCADOPAGO_ACCESS_TOKEN =
-    process.env.MERCADOPAGO_ACCESS_TOKEN ?? 'test_mp_access_token';
-  process.env.MERCADOPAGO_WEBHOOK_SECRET =
-    process.env.MERCADOPAGO_WEBHOOK_SECRET ?? 'test_mp_webhook_secret';
+  process.env.MERCADOPAGO_ACCESS_TOKEN = 'test_mp_access_token';
+  process.env.MERCADOPAGO_WEBHOOK_SECRET = 'test_mp_webhook_secret';
+  process.env.FORMATTER_PROVIDER = 'dummy';
+  process.env.CLINICAL_NOTE_FORMAT_PROVIDER = 'dummy';
 
   // Validate DATABASE_URL_TEST is set
   const databaseUrlTest = process.env.DATABASE_URL_TEST;

@@ -452,15 +452,6 @@ export class ConsultationRealtimeGateway
     traceId?: string | null,
   ) {
     if (!this.server) {
-      this.logger.warn(
-        JSON.stringify({
-          event: 'format_job_ready_publish_failed',
-          consultationId,
-          jobId,
-          reason: 'WebSocket server not initialized',
-          traceId: traceId ?? null,
-        }),
-      );
       return;
     }
 

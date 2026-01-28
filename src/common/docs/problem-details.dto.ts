@@ -21,4 +21,10 @@ export class ProblemDetailsDto {
     example: { email: ['email must be an email'] },
   })
   errors?: Record<string, string[]> | string[];
+
+  @ApiPropertyOptional({
+    description: 'Additional metadata for the error (domain-specific).',
+    example: { code: 'emergency_limit_reached', retryAfterSeconds: 3600 },
+  })
+  extensions?: Record<string, unknown>;
 }

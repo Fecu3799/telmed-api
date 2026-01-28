@@ -284,6 +284,98 @@ class ConsultationSocketClient {
   }
 
   /**
+   * Listen to clinicalNote.format.ready event
+   * @param callback - Callback when format job completes
+   */
+  onFormatJobReady(
+    callback: (payload: {
+      consultationId: string;
+      jobId: string;
+      finalNoteId: string;
+      traceId?: string | null;
+    }) => void,
+  ): void {
+    if (!this.socket) {
+      return;
+    }
+
+    this.socket.on('clinicalNote.format.ready', (payload) => {
+      if (config.DEBUG_SOCKET || import.meta.env.DEV) {
+        console.log('[Socket] Received clinicalNote.format.ready:', payload);
+      }
+      callback(payload);
+    });
+  }
+
+  /**
+   * Remove clinicalNote.format.ready listener
+   */
+  offFormatJobReady(
+    callback?: (payload: {
+      consultationId: string;
+      jobId: string;
+      finalNoteId: string;
+      traceId?: string | null;
+    }) => void,
+  ): void {
+    if (!this.socket) {
+      return;
+    }
+
+    if (callback) {
+      this.socket.off('clinicalNote.format.ready', callback);
+    } else {
+      this.socket.off('clinicalNote.format.ready');
+    }
+  }
+
+  /**
+   * Listen to clinicalNote.format.failed event
+   * @param callback - Callback when format job fails
+   */
+  onFormatJobFailed(
+    callback: (payload: {
+      consultationId: string;
+      jobId: string;
+      errorCode: string;
+      traceId?: string | null;
+    }) => void,
+  ): void {
+    if (!this.socket) {
+      return;
+    }
+
+    this.socket.on('clinicalNote.format.failed', (payload) => {
+      if (config.DEBUG_SOCKET || import.meta.env.DEV) {
+        console.log('[Socket] Received clinicalNote.format.failed:', payload);
+      }
+      callback(payload);
+    });
+  }
+
+  /**
+   * Remove clinicalNote.format.failed listener
+   */
+  offFormatJobFailed(
+    callback?: (payload: {
+      consultationId: string;
+      jobId: string;
+      errorCode: string;
+      traceId?: string | null;
+    }) => void,
+  ): void {
+    if (!this.socket) {
+      return;
+    }
+
+    if (callback) {
+      this.socket.off('clinicalNote.format.failed', callback);
+    } else {
+      this.socket.off('clinicalNote.format.failed');
+    }
+  }
+
+  /**
    * Check if socket is connected
    */
   isConnected(): boolean {

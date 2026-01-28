@@ -26,7 +26,7 @@ async function checkRedisConnection(redisUrl: string): Promise<boolean> {
     await testClient.ping();
     await testClient.quit();
     return true;
-  } catch (error) {
+  } catch {
     try {
       await testClient.quit();
     } catch {
@@ -40,6 +40,7 @@ async function bootstrapWorker() {
   const logger = new Logger('WorkerBootstrap');
 
   try {
+    process.env.APP_PROCESS_ROLE = process.env.APP_PROCESS_ROLE ?? 'worker';
     logger.log('Starting clinical note format worker...');
 
     // Check Redis connection before initializing app
@@ -91,8 +92,12 @@ async function bootstrapWorker() {
     };
 
     // Keep the process alive
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => {
+      void shutdown('SIGTERM');
+    });
+    process.on('SIGINT', () => {
+      void shutdown('SIGINT');
+    });
   } catch (error) {
     logger.error('Failed to start worker', error);
     process.exit(1);

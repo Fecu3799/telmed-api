@@ -16,7 +16,10 @@ import {
   type ClinicalEpisodeResponse,
   type ConsultationStatus,
 } from '../../api/consultations';
+import { ClinicalNoteFormatPanel } from '../../components/ClinicalNoteFormatPanel';
 import type { ProblemDetails } from '../../api/http';
+import { consultationSocket } from '../../api/socket';
+import { useAuth } from '../../auth/AuthContext';
 
 /**
  * RoomLayout: All components that require LiveKit room context.
@@ -37,6 +40,27 @@ export function RoomLayout({
   onCloseConsultation,
   closing = false,
 }: RoomLayoutProps) {
+  const { getActiveToken } = useAuth();
+
+  // Connect socket for format job events
+  useEffect(() => {
+    if (!activeRole || !consultationId) {
+      return;
+    }
+
+    const token = getActiveToken();
+    if (token) {
+      consultationSocket.connect(token);
+      // Join consultation room for socket events
+      consultationSocket.joinConsultation(consultationId);
+    }
+
+    return () => {
+      // Don't disconnect socket here - it may be used by other components
+      // Just unsubscribe from consultation room if needed
+    };
+  }, [activeRole, consultationId, getActiveToken]);
+
   // Get all camera tracks (remote and local)
   const tracks = useTracks(
     [{ source: Track.Source.Camera, withPlaceholder: true }],
@@ -515,67 +539,18 @@ export function RoomLayout({
             </div>
           </div>
         )}
-        {activeRole === 'doctor' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 600 }}>
-              Versión formateada (opcional)
-            </div>
-            {!finalNote && (
-              <div style={{ fontSize: '13px', color: '#737373' }}>
-                Primero finalizá las notas para poder guardar una versión
-                formateada.
-              </div>
-            )}
-            <textarea
-              value={formattedBody}
-              onChange={(event) => {
-                setFormattedBody(event.target.value);
-                setFormattedDirty(true);
-              }}
-              placeholder="Ingresá la versión formateada"
-              disabled={!finalNote || savingFormatted}
-              style={{
-                width: '100%',
-                minHeight: '140px',
-                padding: '12px',
-                border: '1px solid #d4d4d4',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-              }}
-            />
-            <button
-              onClick={() => void handleSaveFormatted()}
-              disabled={
-                !finalNote || savingFormatted || formattedBody.trim() === ''
+        {activeRole === 'doctor' && finalNote && (
+          <ClinicalNoteFormatPanel
+            consultationId={consultationId}
+            finalNoteId={finalNote.id}
+            originalBody={finalNote.body ?? ''}
+            onFormattedSaved={() => {
+              // Reload episode to get updated formattedBody
+              if (activeRole === 'doctor') {
+                loadEpisode('doctor');
               }
-              style={{
-                alignSelf: 'flex-start',
-                padding: '8px 14px',
-                border: 'none',
-                borderRadius: '6px',
-                backgroundColor:
-                  !finalNote || savingFormatted || formattedBody.trim() === ''
-                    ? '#9ca3af'
-                    : '#16a34a',
-                color: 'white',
-                fontSize: '13px',
-                fontWeight: '500',
-                cursor:
-                  !finalNote || savingFormatted || formattedBody.trim() === ''
-                    ? 'not-allowed'
-                    : 'pointer',
-              }}
-            >
-              {savingFormatted ? 'Guardando...' : 'Guardar versión formateada'}
-            </button>
-            {formattedError && (
-              <div style={{ fontSize: '13px', color: '#b91c1c' }}>
-                {formattedError}
-              </div>
-            )}
-          </div>
+            }}
+          />
         )}
         {canShowAddendumForm && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

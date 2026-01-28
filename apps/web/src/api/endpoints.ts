@@ -75,6 +75,9 @@ export const endpoints = {
     historyPatient: '/patients/me/consultations',
     historyDoctorPatient: (patientUserId: string) =>
       `/doctor-patients/${patientUserId}/consultations`,
+    createFormatJob: (consultationId: string) =>
+      `/consultations/${consultationId}/clinical-episode/final/format-jobs`,
+    getFormatJob: (jobId: string) => `/clinical-note-format-jobs/${jobId}`,
   },
   emergencies: {
     doctor: '/doctors/me/emergencies',
