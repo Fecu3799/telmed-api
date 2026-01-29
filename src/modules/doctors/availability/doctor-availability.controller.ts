@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -19,6 +20,7 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
+  ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { ProblemDetailsDto } from '../../../common/docs/problem-details.dto';
@@ -29,10 +31,14 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import type { Actor } from '../../../common/types/actor.type';
 import { AvailabilityExceptionDto } from './docs/availability-exception.dto';
 import { AvailabilityRuleDto } from './docs/availability-rule.dto';
+import { DoctorSchedulingConfigDto } from './docs/doctor-scheduling-config.dto';
+import { DoctorSlotsResponseDto } from './docs/doctor-slots.dto';
 import { PublicAvailabilityResponseDto } from './docs/public-availability.dto';
 import { AvailabilityExceptionCreateDto } from './dto/availability-exception-create.dto';
 import { AvailabilityExceptionsQueryDto } from './dto/availability-exceptions-query.dto';
 import { AvailabilityRulesPutDto } from './dto/availability-rules-put.dto';
+import { DoctorSchedulingConfigUpdateDto } from './dto/doctor-scheduling-config-update.dto';
+import { DoctorSlotsQueryDto } from './dto/doctor-slots-query.dto';
 import { PublicAvailabilityQueryDto } from './dto/public-availability-query.dto';
 import { DoctorAvailabilityService } from './doctor-availability.service';
 
@@ -53,6 +59,38 @@ export class DoctorAvailabilityController {
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async listRules(@CurrentUser() actor: Actor) {
     return this.availabilityService.listRules(actor.id);
+  }
+
+  @Get('me/scheduling-config')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get scheduling config for current doctor' })
+  @ApiOkResponse({ type: DoctorSchedulingConfigDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async getSchedulingConfig(@CurrentUser() actor: Actor) {
+    return this.availabilityService.getOrCreateSchedulingConfig(actor.id);
+  }
+
+  @Patch('me/scheduling-config')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update scheduling config for current doctor' })
+  @ApiOkResponse({ type: DoctorSchedulingConfigDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async updateSchedulingConfig(
+    @CurrentUser() actor: Actor,
+    @Body() dto: DoctorSchedulingConfigUpdateDto,
+  ) {
+    return this.availabilityService.updateSchedulingConfig(actor.id, dto);
   }
 
   @Put('me/availability-rules')
@@ -130,5 +168,23 @@ export class DoctorAvailabilityController {
     @Query() query: PublicAvailabilityQueryDto,
   ) {
     return this.availabilityService.getPublicAvailability(doctorUserId, query);
+  }
+
+  @Get(':doctorUserId/slots')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient, UserRole.doctor)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get bookable slots for a doctor' })
+  @ApiOkResponse({ type: DoctorSlotsResponseDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
+  async slots(
+    @Param('doctorUserId') doctorUserId: string,
+    @Query() query: DoctorSlotsQueryDto,
+  ) {
+    return this.availabilityService.getSlots(doctorUserId, query);
   }
 }

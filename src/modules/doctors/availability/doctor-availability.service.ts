@@ -1,21 +1,26 @@
 import {
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   DoctorAvailabilityExceptionType,
   DoctorSchedulingConfig,
+  AppointmentStatus,
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { PaymentsService } from '../../payments/payments.service';
 import { CLOCK, type Clock } from '../../../common/clock/clock';
+import { getTraceId } from '../../../common/request-context';
 import { AvailabilityExceptionCreateDto } from './dto/availability-exception-create.dto';
 import { AvailabilityExceptionsQueryDto } from './dto/availability-exceptions-query.dto';
 import { AvailabilityRuleInputDto } from './dto/availability-rule-input.dto';
 import { AvailabilityRulesPutDto } from './dto/availability-rules-put.dto';
+import { DoctorSchedulingConfigUpdateDto } from './dto/doctor-scheduling-config-update.dto';
+import { DoctorSlotsQueryDto } from './dto/doctor-slots-query.dto';
 import { PublicAvailabilityQueryDto } from './dto/public-availability-query.dto';
 import { AvailabilityWindowDto } from './dto/availability-window.dto';
 
@@ -29,8 +34,13 @@ const DEFAULT_CONFIG: DoctorSchedulingConfig = {
   updatedAt: new Date(0),
 };
 
+const ALLOWED_SLOT_DURATIONS = [15, 20, 30, 45, 60] as const;
+const MAX_SLOTS_RANGE_DAYS = 30;
+
 @Injectable()
 export class DoctorAvailabilityService {
+  private readonly logger = new Logger(DoctorAvailabilityService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -42,6 +52,60 @@ export class DoctorAvailabilityService {
       where: { userId },
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
     });
+  }
+
+  async getOrCreateSchedulingConfig(userId: string) {
+    const existing = await this.prisma.doctorSchedulingConfig.findUnique({
+      where: { userId },
+    });
+    if (existing) {
+      return existing;
+    }
+    await this.assertDoctorProfileExists(userId);
+    return this.prisma.doctorSchedulingConfig.create({
+      data: {
+        userId,
+        slotDurationMinutes: DEFAULT_CONFIG.slotDurationMinutes,
+        leadTimeHours: DEFAULT_CONFIG.leadTimeHours,
+        horizonDays: DEFAULT_CONFIG.horizonDays,
+        timezone: DEFAULT_CONFIG.timezone,
+      },
+    });
+  }
+
+  async updateSchedulingConfig(
+    userId: string,
+    dto: DoctorSchedulingConfigUpdateDto,
+  ) {
+    const allowedDurations: ReadonlyArray<number> = ALLOWED_SLOT_DURATIONS;
+    if (!allowedDurations.includes(dto.slotDurationMinutes)) {
+      throw new UnprocessableEntityException('Invalid slot duration');
+    }
+
+    await this.assertDoctorProfileExists(userId);
+
+    const config = await this.prisma.doctorSchedulingConfig.upsert({
+      where: { userId },
+      create: {
+        userId,
+        slotDurationMinutes: dto.slotDurationMinutes,
+        leadTimeHours: DEFAULT_CONFIG.leadTimeHours,
+        horizonDays: DEFAULT_CONFIG.horizonDays,
+        timezone: DEFAULT_CONFIG.timezone,
+      },
+      update: {
+        slotDurationMinutes: dto.slotDurationMinutes,
+      },
+    });
+
+    const traceId = getTraceId() ?? null;
+    this.logger.log('scheduling_config_updated', {
+      traceId,
+      userId,
+      slotDurationMinutes: dto.slotDurationMinutes,
+    });
+
+    return config;
   }
 
   async replaceRules(userId: string, dto: AvailabilityRulesPutDto) {
@@ -167,70 +231,13 @@ export class DoctorAvailabilityService {
       throw new UnprocessableEntityException('from/to outside allowed range');
     }
 
-    const rules = await this.prisma.doctorAvailabilityRule.findMany({
-      where: { userId: doctorUserId, isActive: true },
+    const slots = await this.buildSlots({
+      doctorUserId,
+      config,
+      from,
+      to,
+      minStart,
     });
-
-    const exceptions = await this.prisma.doctorAvailabilityException.findMany({
-      where: {
-        userId: doctorUserId,
-        date: {
-          gte: this.parseDate(this.formatDateInTimeZone(from, config.timezone)),
-          lte: this.parseDate(this.formatDateInTimeZone(to, config.timezone)),
-        },
-      },
-    });
-
-    const rulesByDay = new Map<number, AvailabilityRuleInputDto[]>();
-    for (const rule of rules) {
-      const list = rulesByDay.get(rule.dayOfWeek) ?? [];
-      list.push({
-        dayOfWeek: rule.dayOfWeek,
-        startTime: rule.startTime,
-        endTime: rule.endTime,
-        isActive: rule.isActive,
-      });
-      rulesByDay.set(rule.dayOfWeek, list);
-    }
-
-    const exceptionByDate = new Map<string, (typeof exceptions)[number]>();
-    for (const exception of exceptions) {
-      const dateKey = this.formatDate(exception.date);
-      exceptionByDate.set(dateKey, exception);
-    }
-
-    const dateRange = this.getDateRange(
-      this.formatDateInTimeZone(from, config.timezone),
-      this.formatDateInTimeZone(to, config.timezone),
-    );
-
-    const slots: { startAt: string; endAt: string }[] = [];
-    for (const dateStr of dateRange) {
-      const exception = exceptionByDate.get(dateStr);
-      if (
-        exception &&
-        exception.type === DoctorAvailabilityExceptionType.closed
-      ) {
-        continue;
-      }
-
-      const windows = this.resolveWindows(
-        exception,
-        rulesByDay.get(this.getWeekday(dateStr, config.timezone)) ?? [],
-      );
-
-      for (const window of windows) {
-        const windowSlots = this.buildSlotsForWindow(
-          dateStr,
-          window,
-          config,
-          from,
-          to,
-          minStart,
-        );
-        slots.push(...windowSlots);
-      }
-    }
 
     return {
       items: slots,
@@ -240,6 +247,90 @@ export class DoctorAvailabilityService {
         leadTimeHours: config.leadTimeHours,
         horizonDays: config.horizonDays,
       },
+    };
+  }
+
+  async getSlots(doctorUserId: string, query: DoctorSlotsQueryDto) {
+    const doctor = await this.prisma.user.findUnique({
+      where: { id: doctorUserId },
+      select: { id: true, role: true, status: true },
+    });
+
+    if (!doctor || doctor.role !== 'doctor' || doctor.status !== 'active') {
+      throw new NotFoundException('Doctor not found');
+    }
+
+    await this.paymentsService.expirePendingAppointmentPayments({
+      doctorUserId,
+    });
+
+    const config = await this.getSchedulingConfig(doctorUserId);
+    const from = this.parseDateTime(query.from);
+    const to = this.parseDateTime(query.to);
+    if (from >= to) {
+      throw new UnprocessableEntityException('from must be before to');
+    }
+
+    const rangeMs = to.getTime() - from.getTime();
+    if (rangeMs > MAX_SLOTS_RANGE_DAYS * 24 * 3600 * 1000) {
+      throw new UnprocessableEntityException('from/to range too large');
+    }
+
+    const now = this.clock.now();
+    const minStart = new Date(
+      now.getTime() + config.leadTimeHours * 3600 * 1000,
+    );
+    const maxEnd = new Date(
+      now.getTime() + config.horizonDays * 24 * 3600 * 1000,
+    );
+
+    if (from < minStart || to > maxEnd) {
+      throw new UnprocessableEntityException('from/to outside allowed range');
+    }
+
+    const slots = await this.buildSlots({
+      doctorUserId,
+      config,
+      from,
+      to,
+      minStart,
+    });
+
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        doctorUserId,
+        status: {
+          in: [
+            AppointmentStatus.pending_payment,
+            AppointmentStatus.confirmed,
+            AppointmentStatus.scheduled,
+          ],
+        },
+        startAt: { lt: to },
+        endAt: { gt: from },
+      },
+      select: { startAt: true, endAt: true },
+    });
+
+    const slotsWithStatus = slots.map((slot) => {
+      const slotStart = new Date(slot.startAt);
+      const slotEnd = new Date(slot.endAt);
+      const isBooked = appointments.some(
+        (appointment) =>
+          appointment.startAt < slotEnd && appointment.endAt > slotStart,
+      );
+      return {
+        ...slot,
+        status: isBooked ? 'booked' : 'available',
+      };
+    });
+
+    return {
+      doctorId: doctorUserId,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      slotDurationMinutes: config.slotDurationMinutes,
+      slots: slotsWithStatus,
     };
   }
 
@@ -487,6 +578,92 @@ export class DoctorAvailabilityService {
       }
 
       cursor += slotMinutes;
+    }
+
+    return slots;
+  }
+
+  private async assertDoctorProfileExists(userId: string) {
+    const profile = await this.prisma.doctorProfile.findUnique({
+      where: { userId },
+      select: { userId: true },
+    });
+    if (!profile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+  }
+
+  private async buildSlots(input: {
+    doctorUserId: string;
+    config: DoctorSchedulingConfig;
+    from: Date;
+    to: Date;
+    minStart: Date;
+  }) {
+    const { doctorUserId, config, from, to, minStart } = input;
+    const rules = await this.prisma.doctorAvailabilityRule.findMany({
+      where: { userId: doctorUserId, isActive: true },
+    });
+
+    const exceptions = await this.prisma.doctorAvailabilityException.findMany({
+      where: {
+        userId: doctorUserId,
+        date: {
+          gte: this.parseDate(this.formatDateInTimeZone(from, config.timezone)),
+          lte: this.parseDate(this.formatDateInTimeZone(to, config.timezone)),
+        },
+      },
+    });
+
+    const rulesByDay = new Map<number, AvailabilityRuleInputDto[]>();
+    for (const rule of rules) {
+      const list = rulesByDay.get(rule.dayOfWeek) ?? [];
+      list.push({
+        dayOfWeek: rule.dayOfWeek,
+        startTime: rule.startTime,
+        endTime: rule.endTime,
+        isActive: rule.isActive,
+      });
+      rulesByDay.set(rule.dayOfWeek, list);
+    }
+
+    const exceptionByDate = new Map<string, (typeof exceptions)[number]>();
+    for (const exception of exceptions) {
+      const dateKey = this.formatDate(exception.date);
+      exceptionByDate.set(dateKey, exception);
+    }
+
+    const dateRange = this.getDateRange(
+      this.formatDateInTimeZone(from, config.timezone),
+      this.formatDateInTimeZone(to, config.timezone),
+    );
+
+    const slots: { startAt: string; endAt: string }[] = [];
+    for (const dateStr of dateRange) {
+      const exception = exceptionByDate.get(dateStr);
+      if (
+        exception &&
+        exception.type === DoctorAvailabilityExceptionType.closed
+      ) {
+        continue;
+      }
+
+      const windows = this.resolveWindows(
+        exception,
+        rulesByDay.get(this.getWeekday(dateStr, config.timezone)) ?? [],
+      );
+
+      for (const window of windows) {
+        const windowSlots = this.buildSlotsForWindow(
+          dateStr,
+          window,
+          config,
+          from,
+          to,
+          minStart,
+        );
+        slots.push(...windowSlots);
+      }
     }
 
     return slots;
