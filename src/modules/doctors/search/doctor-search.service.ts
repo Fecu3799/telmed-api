@@ -67,6 +67,22 @@ export class DoctorSearchService {
       throw new UnprocessableEntityException('relevance sort requires q');
     }
 
+    if (query.specialtyId) {
+      const specialty = await this.prisma.specialty.findUnique({
+        where: { id: query.specialtyId },
+        select: { isActive: true },
+      });
+      if (!specialty || !specialty.isActive) {
+        throw new UnprocessableEntityException({
+          type: 'https://telmed/errors/specialty-invalid',
+          title: 'Invalid specialty',
+          detail: 'Specialty filter is invalid or inactive',
+          status: 422,
+          extensions: { code: 'specialty_invalid' },
+        });
+      }
+    }
+
     const cursor = query.cursor ? this.decodeCursor(query.cursor, sort) : null;
 
     const conditions: Prisma.Sql[] = [

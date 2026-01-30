@@ -171,6 +171,25 @@ describe('Doctor search (e2e)', () => {
     expect(ids).not.toEqual(expect.arrayContaining([doctorB.id]));
   });
 
+  it('rejects inactive specialty filter', async () => {
+    const inactive = await prisma.specialty.create({
+      data: {
+        name: `Inactive_${randomUUID()}`,
+        slug: `inactive-${randomUUID().slice(0, 8)}`,
+        sortOrder: 1,
+        isActive: false,
+        deactivatedAt: new Date(),
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/doctors/search')
+      .query({ specialtyId: inactive.id })
+      .expect(422);
+
+    expect(response.body.extensions?.code).toBe('specialty_invalid');
+  });
+
   it('paginates with cursor for relevance search', async () => {
     const doctorA = await prisma.user.create({
       data: {

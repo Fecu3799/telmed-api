@@ -6,7 +6,7 @@ import {
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { ProblemDetailsDto } from '../../common/docs/problem-details.dto';
-import { SpecialtyDto } from './docs/specialty.dto';
+import { PublicSpecialtyDto } from './docs/public-specialty.dto';
 import { SpecialtiesQueryDto } from './dto/specialties-query.dto';
 import { SpecialtiesService } from './specialties.service';
 
@@ -17,7 +17,7 @@ export class SpecialtiesController {
 
   @Get()
   @ApiOperation({ summary: 'List active specialties' })
-  @ApiOkResponse({ type: [SpecialtyDto] })
+  @ApiOkResponse({ type: [PublicSpecialtyDto] })
   @ApiTooManyRequestsResponse({ type: ProblemDetailsDto })
   async list(@Query() query: SpecialtiesQueryDto) {
     return this.specialtiesService.listActive(query);

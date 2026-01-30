@@ -7,6 +7,21 @@ export class SpecialtyDto {
   @ApiProperty({ example: 'Cardiologia' })
   name!: string;
 
+  @ApiProperty({ example: 'cardiologia' })
+  slug!: string;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+
   @ApiProperty({ example: true })
   isActive!: boolean;
+
+  @ApiProperty({ example: '2025-01-01T00:00:00.000Z' })
+  createdAt!: string;
+
+  @ApiProperty({ example: '2025-01-01T00:00:00.000Z' })
+  updatedAt!: string;
+
+  @ApiProperty({ example: null, nullable: true })
+  deactivatedAt?: string | null;
 }

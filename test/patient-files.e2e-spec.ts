@@ -32,17 +32,20 @@ async function registerAndLogin(
 ) {
   const email = `user_${randomUUID()}@test.com`;
   const password = 'Passw0rd!123';
+  let accessToken: string | undefined;
 
   if (role !== 'admin') {
-    await request(httpServer(app))
+    const registerResponse = await request(httpServer(app))
       .post('/api/v1/auth/register')
       .send({ email, password, role })
       .expect(201);
+    accessToken = registerResponse.body.accessToken as string;
   } else {
-    await request(httpServer(app))
+    const registerResponse = await request(httpServer(app))
       .post('/api/v1/auth/register')
       .send({ email, password, role: 'patient' })
       .expect(201);
+    accessToken = registerResponse.body.accessToken as string;
   }
 
   if (role === 'admin') {
@@ -53,13 +56,16 @@ async function registerAndLogin(
     });
   }
 
-  const loginResponse = await request(httpServer(app))
-    .post('/api/v1/auth/login')
-    .send({ email, password })
-    .expect(201);
+  if (role === 'admin') {
+    const loginResponse = await request(httpServer(app))
+      .post('/api/v1/auth/login')
+      .send({ email, password })
+      .expect(201);
+    accessToken = loginResponse.body.accessToken as string;
+  }
 
   return {
-    accessToken: loginResponse.body.accessToken as string,
+    accessToken: accessToken,
     email,
   };
 }

@@ -170,7 +170,7 @@ export class DoctorProfilesService {
     }
 
     const specialties = await this.prisma.doctorSpecialty.findMany({
-      where: { doctorUserId: userId },
+      where: { doctorUserId: userId, specialty: { isActive: true } },
       include: { specialty: true },
     });
 
@@ -195,12 +195,18 @@ export class DoctorProfilesService {
     const uniqueIds = Array.from(new Set(dto.specialtyIds));
     if (uniqueIds.length > 0) {
       const found = await this.prisma.specialty.findMany({
-        where: { id: { in: uniqueIds } },
+        where: { id: { in: uniqueIds }, isActive: true },
         select: { id: true },
       });
 
       if (found.length !== uniqueIds.length) {
-        throw new UnprocessableEntityException('Invalid specialtyIds');
+        throw new UnprocessableEntityException({
+          type: 'https://telmed/errors/specialty-invalid',
+          title: 'Invalid specialty',
+          detail: 'One or more specialtyIds are invalid or inactive',
+          status: 422,
+          extensions: { code: 'specialty_invalid' },
+        });
       }
     }
 

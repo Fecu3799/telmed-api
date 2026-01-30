@@ -123,10 +123,20 @@ describe('Doctor profiles (e2e)', () => {
       .expect(200);
 
     const specialtyA = await prisma.specialty.create({
-      data: { name: `Cardiologia_${randomUUID()}` },
+      data: {
+        name: `Cardiologia_${randomUUID()}`,
+        slug: `cardiologia-${randomUUID().slice(0, 8)}`,
+        sortOrder: 1,
+        isActive: true,
+      },
     });
     const specialtyB = await prisma.specialty.create({
-      data: { name: `Clinica_${randomUUID()}` },
+      data: {
+        name: `Clinica_${randomUUID()}`,
+        slug: `clinica-${randomUUID().slice(0, 8)}`,
+        sortOrder: 2,
+        isActive: true,
+      },
     });
 
     await request(app.getHttpServer())
@@ -153,5 +163,33 @@ describe('Doctor profiles (e2e)', () => {
       .get('/api/v1/doctors/me/profile')
       .set('Authorization', `Bearer ${token}`)
       .expect(403);
+  });
+
+  it('rejects inactive specialties on update', async () => {
+    const token = await registerAndLogin(app, 'doctor');
+
+    await request(app.getHttpServer())
+      .put('/api/v1/doctors/me/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ priceCents: 100000, firstName: 'Ana', lastName: 'Perez' })
+      .expect(200);
+
+    const inactive = await prisma.specialty.create({
+      data: {
+        name: `Inactiva_${randomUUID()}`,
+        slug: `inactiva-${randomUUID().slice(0, 8)}`,
+        sortOrder: 10,
+        isActive: false,
+        deactivatedAt: new Date(),
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .put('/api/v1/doctors/me/specialties')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ specialtyIds: [inactive.id] })
+      .expect(422);
+
+    expect(response.body.extensions?.code).toBe('specialty_invalid');
   });
 });
