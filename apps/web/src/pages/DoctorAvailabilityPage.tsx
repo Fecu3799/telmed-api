@@ -7,13 +7,15 @@ import {
   listAvailabilityExceptions,
   createAvailabilityException,
   deleteAvailabilityException,
+  getMyDoctorSchedulingConfig,
+  patchMyDoctorSchedulingConfig,
   type AvailabilityRule,
   type AvailabilityRuleInput,
   type AvailabilityException,
   type AvailabilityExceptionCreateRequest,
   type AvailabilityWindow,
+  type DoctorSchedulingConfig,
 } from '../api/scheduling';
-import { getDoctorProfile } from '../api/doctor-profile';
 import { type ProblemDetails } from '../api/http';
 
 const DAYS_OF_WEEK = [
@@ -43,6 +45,15 @@ export function DoctorAvailabilityPage() {
   const [savingRules, setSavingRules] = useState(false);
   const [rulesError, setRulesError] = useState<ProblemDetails | null>(null);
   const [rulesSuccess, setRulesSuccess] = useState(false);
+
+  // Scheduling config state
+  const [schedulingConfig, setSchedulingConfig] =
+    useState<DoctorSchedulingConfig | null>(null);
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configError, setConfigError] = useState<ProblemDetails | null>(null);
+  const [configSuccess, setConfigSuccess] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState<number>(30);
 
   // Local rules editing state (for form)
   const [editingRules, setEditingRules] = useState<
@@ -125,6 +136,40 @@ export function DoctorAvailabilityPage() {
     };
 
     void loadRules();
+  }, [getActiveToken, activeRole]);
+
+  // Load scheduling config on mount
+  useEffect(() => {
+    const loadConfig = async () => {
+      if (!getActiveToken() || activeRole !== 'doctor') {
+        return;
+      }
+
+      setLoadingConfig(true);
+      setConfigError(null);
+      try {
+        const data = await getMyDoctorSchedulingConfig();
+        setSchedulingConfig(data);
+        setSelectedDuration(data.slotDurationMinutes);
+      } catch (err) {
+        const apiError = err as {
+          problemDetails?: ProblemDetails;
+          status?: number;
+        };
+        if (apiError.problemDetails) {
+          setConfigError(apiError.problemDetails);
+        } else {
+          setConfigError({
+            status: apiError.status || 500,
+            detail: 'Error al cargar configuración',
+          });
+        }
+      } finally {
+        setLoadingConfig(false);
+      }
+    };
+
+    void loadConfig();
   }, [getActiveToken, activeRole]);
 
   // Load exceptions when date range changes
@@ -218,6 +263,40 @@ export function DoctorAvailabilityPage() {
       }
     } finally {
       setSavingRules(false);
+    }
+  };
+
+  const handleSaveConfig = async () => {
+    if (!getActiveToken()) {
+      return;
+    }
+
+    setSavingConfig(true);
+    setConfigError(null);
+    setConfigSuccess(false);
+
+    try {
+      const data = await patchMyDoctorSchedulingConfig({
+        slotDurationMinutes: selectedDuration,
+      });
+      setSchedulingConfig(data);
+      setConfigSuccess(true);
+      setTimeout(() => setConfigSuccess(false), 3000);
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        setConfigError(apiError.problemDetails);
+      } else {
+        setConfigError({
+          status: apiError.status || 500,
+          detail: 'Error al guardar configuración',
+        });
+      }
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -430,6 +509,107 @@ export function DoctorAvailabilityPage() {
         }}
       >
         <h2 style={{ marginTop: 0 }}>Reglas Semanales</h2>
+
+        {/* Scheduling Config */}
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: '#f9f9f9',
+            borderRadius: '4px',
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Duración de consulta</h3>
+
+          {loadingConfig ? (
+            <div style={{ padding: '8px 0' }}>Cargando configuración...</div>
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <select
+                value={selectedDuration}
+                onChange={(e) => setSelectedDuration(Number(e.target.value))}
+                style={{
+                  padding: '8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                }}
+              >
+                {[15, 20, 30, 45, 60].map((value) => (
+                  <option key={value} value={value}>
+                    {value} minutos
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => void handleSaveConfig()}
+                disabled={savingConfig}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: savingConfig ? '#ccc' : '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: savingConfig ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {savingConfig ? 'Guardando...' : 'Guardar'}
+              </button>
+              {schedulingConfig && (
+                <span style={{ color: '#666', fontSize: '14px' }}>
+                  Actual: {schedulingConfig.slotDurationMinutes} min
+                </span>
+              )}
+            </div>
+          )}
+
+          {configError && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                backgroundColor: '#fee',
+                border: '1px solid #fcc',
+                borderRadius: '4px',
+                color: '#c33',
+              }}
+            >
+              <strong>Error {configError.status}:</strong> {configError.detail}
+              {configError.errors && (
+                <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                  {Object.entries(configError.errors).map(
+                    ([field, messages]) => (
+                      <li key={field}>
+                        <strong>{field}:</strong> {messages.join(', ')}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {configSuccess && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                backgroundColor: '#d4edda',
+                border: '1px solid #c3e6cb',
+                borderRadius: '4px',
+                color: '#155724',
+              }}
+            >
+              Configuración guardada
+            </div>
+          )}
+        </div>
 
         {loadingRules && (
           <div style={{ textAlign: 'center', padding: '24px' }}>

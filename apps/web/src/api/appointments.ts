@@ -6,16 +6,16 @@ export interface AvailabilitySlot {
   endAt: string;
 }
 
-export interface AvailabilityMeta {
-  timezone: string;
-  slotDurationMinutes: number;
-  leadTimeHours: number;
-  horizonDays: number;
+export interface DoctorSlot extends AvailabilitySlot {
+  status: 'available' | 'booked';
 }
 
-export interface AvailabilityResponse {
-  items: AvailabilitySlot[];
-  meta: AvailabilityMeta;
+export interface DoctorSlotsResponse {
+  doctorId: string;
+  from: string;
+  to: string;
+  slotDurationMinutes: number;
+  slots: DoctorSlot[];
 }
 
 export interface ConsultationInfo {
@@ -75,21 +75,21 @@ export interface CancelAppointmentRequest {
 }
 
 /**
- * Get public availability slots for a doctor
+ * Get canonical slots for a doctor
  * @param doctorUserId - The doctor's user ID
  * @param from - Start date/time in ISO UTC (e.g., "2025-01-05T00:00:00.000Z")
  * @param to - End date/time in ISO UTC (e.g., "2025-01-06T00:00:00.000Z")
  */
-export async function getDoctorAvailability(
+export async function getDoctorSlots(
   doctorUserId: string,
   from: string,
   to: string,
-): Promise<AvailabilityResponse> {
+): Promise<DoctorSlotsResponse> {
   const params = new URLSearchParams();
   params.append('from', from);
   params.append('to', to);
-  const url = `${endpoints.doctorAvailability.get(doctorUserId)}?${params.toString()}`;
-  return http<AvailabilityResponse>(url);
+  const url = `${endpoints.doctorAvailability.slots(doctorUserId)}?${params.toString()}`;
+  return http<DoctorSlotsResponse>(url);
 }
 
 /**

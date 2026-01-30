@@ -45,6 +45,39 @@ export interface AvailabilityExceptionsQuery {
   to: string; // YYYY-MM-DD
 }
 
+export interface DoctorSchedulingConfig {
+  userId: string;
+  slotDurationMinutes: number;
+  leadTimeHours: number;
+  horizonDays: number;
+  timezone: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DoctorSchedulingConfigUpdateRequest {
+  slotDurationMinutes: number;
+}
+
+/**
+ * Get scheduling config for current doctor
+ */
+export async function getMyDoctorSchedulingConfig(): Promise<DoctorSchedulingConfig> {
+  return http<DoctorSchedulingConfig>(endpoints.availability.schedulingConfig);
+}
+
+/**
+ * Update scheduling config for current doctor
+ */
+export async function patchMyDoctorSchedulingConfig(
+  data: DoctorSchedulingConfigUpdateRequest,
+): Promise<DoctorSchedulingConfig> {
+  return http<DoctorSchedulingConfig>(endpoints.availability.schedulingConfig, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 /**
  * Get availability rules for current doctor
  */

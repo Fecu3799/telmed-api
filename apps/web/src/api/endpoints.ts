@@ -109,6 +109,7 @@ export const endpoints = {
   // Doctor Availability (public)
   doctorAvailability: {
     get: (doctorUserId: string) => `/doctors/${doctorUserId}/availability`,
+    slots: (doctorUserId: string) => `/doctors/${doctorUserId}/slots`,
   },
   // Availability (doctor management)
   availability: {
@@ -118,6 +119,7 @@ export const endpoints = {
     createException: '/doctors/me/availability-exceptions',
     deleteException: (id: string) =>
       `/doctors/me/availability-exceptions/${id}`,
+    schedulingConfig: '/doctors/me/scheduling-config',
   },
   // Appointments
   appointments: {

@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import {
-  getDoctorAvailability,
+  getDoctorSlots,
   createAppointment,
-  type AvailabilitySlot,
-  type AvailabilityResponse,
+  type DoctorSlot,
+  type DoctorSlotsResponse,
   type AppointmentWithPayment,
 } from '../api/appointments';
 import { type DoctorSearchItem } from '../api/doctor-search';
@@ -126,14 +126,13 @@ export function DoctorProfilePage() {
     date.setDate(date.getDate() + 2 + 14);
     return date.toISOString().split('T')[0];
   });
-  const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [slots, setSlots] = useState<DoctorSlot[]>([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [availabilityError, setAvailabilityError] =
     useState<ProblemDetails | null>(null);
-  const [availabilityMeta, setAvailabilityMeta] = useState<{
-    leadTimeHours: number;
-    horizonDays: number;
-  } | null>(null);
+  const [slotDurationMinutes, setSlotDurationMinutes] = useState<number | null>(
+    null,
+  );
 
   // Booking state
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
@@ -196,17 +195,14 @@ export function DoctorProfilePage() {
       const from = getStartOfDayUTC(dateFrom);
       const to = getEndOfDayUTC(dateTo);
 
-      const response: AvailabilityResponse = await getDoctorAvailability(
+      const response: DoctorSlotsResponse = await getDoctorSlots(
         doctorUserId,
         from,
         to,
       );
 
-      setSlots(response.items);
-      setAvailabilityMeta({
-        leadTimeHours: response.meta.leadTimeHours,
-        horizonDays: response.meta.horizonDays,
-      });
+      setSlots(response.slots);
+      setSlotDurationMinutes(response.slotDurationMinutes);
     } catch (err) {
       const apiError = err as {
         problemDetails?: ProblemDetails;
@@ -248,12 +244,9 @@ export function DoctorProfilePage() {
       if (dateFrom && dateTo) {
         const from = getStartOfDayUTC(dateFrom);
         const to = getEndOfDayUTC(dateTo);
-        const updatedResponse = await getDoctorAvailability(
-          doctorUserId,
-          from,
-          to,
-        );
-        setSlots(updatedResponse.items);
+        const updatedResponse = await getDoctorSlots(doctorUserId, from, to);
+        setSlots(updatedResponse.slots);
+        setSlotDurationMinutes(updatedResponse.slotDurationMinutes);
       }
     } catch (err) {
       const apiError = err as {
@@ -320,12 +313,8 @@ export function DoctorProfilePage() {
     : '';
 
   // Calculate min/max dates for date inputs
-  const minDate = availabilityMeta
-    ? getMinDate(availabilityMeta.leadTimeHours)
-    : getMinDate();
-  const maxDate = availabilityMeta
-    ? getMaxDate(availabilityMeta.horizonDays)
-    : getMaxDate();
+  const minDate = getMinDate();
+  const maxDate = getMaxDate();
 
   return (
     <div style={{ padding: '16px', maxWidth: '1200px', margin: '0 auto' }}>
@@ -482,11 +471,12 @@ export function DoctorProfilePage() {
               </button>
             </div>
           </div>
-          {availabilityMeta && (
-            <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
-              Puedes reservar desde {minDate} hasta {maxDate}
-            </div>
-          )}
+          <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
+            Puedes reservar desde {minDate} hasta {maxDate}
+            {slotDurationMinutes
+              ? ` · Duración: ${slotDurationMinutes} min`
+              : ''}
+          </div>
         </div>
 
         {/* Availability Error */}
@@ -551,7 +541,7 @@ export function DoctorProfilePage() {
             </h3>
             {/* Group slots by date */}
             {(() => {
-              const slotsByDate = new Map<string, AvailabilitySlot[]>();
+              const slotsByDate = new Map<string, DoctorSlot[]>();
               for (const slot of slots) {
                 const dateKey = isoToLocalDate(slot.startAt);
                 if (!slotsByDate.has(dateKey)) {
@@ -583,26 +573,36 @@ export function DoctorProfilePage() {
                       }}
                     >
                       {dateSlots.map((slot) => {
+                        const isBooked = slot.status === 'booked';
                         const isBooking =
                           bookingSlot === slot.startAt && bookingLoading;
                         return (
                           <button
                             key={slot.startAt}
                             onClick={() => void handleBookSlot(slot.startAt)}
-                            disabled={isBooking || bookingLoading}
+                            disabled={isBooking || bookingLoading || isBooked}
                             style={{
                               padding: '12px',
-                              backgroundColor: isBooking ? '#ccc' : '#007bff',
-                              color: 'white',
+                              backgroundColor: isBooked
+                                ? '#e0e0e0'
+                                : isBooking
+                                  ? '#ccc'
+                                  : '#007bff',
+                              color: isBooked ? '#666' : 'white',
                               border: 'none',
                               borderRadius: '4px',
-                              cursor: isBooking ? 'not-allowed' : 'pointer',
+                              cursor:
+                                isBooking || isBooked
+                                  ? 'not-allowed'
+                                  : 'pointer',
                               fontSize: '14px',
                             }}
                           >
                             {isBooking
                               ? 'Reservando...'
-                              : formatTimeLocal(slot.startAt)}
+                              : isBooked
+                                ? `${formatTimeLocal(slot.startAt)} (Ocupado)`
+                                : formatTimeLocal(slot.startAt)}
                           </button>
                         );
                       })}
