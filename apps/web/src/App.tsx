@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { PrivateRoute } from './components/PrivateRoute';
+import { RequireRole } from './components/RequireRole';
 import { LoginPage } from './pages/LoginPage';
 import { LobbyPage } from './pages/LobbyPage';
 import { ChatsPage } from './pages/ChatsPage';
@@ -17,6 +18,9 @@ import { PatientHistoryPage } from './pages/PatientHistoryPage';
 import { AppointmentsPage } from './pages/AppointmentsPage';
 import { DoctorLocationPage } from './pages/DoctorLocationPage';
 import { GeoNearbyPage } from './pages/GeoNearbyPage';
+import { AdminLayout } from './pages/admin/AdminLayout';
+import { AdminHomePage } from './pages/admin/AdminHomePage';
+import { AdminSpecialtiesPage } from './pages/admin/AdminSpecialtiesPage';
 
 // Lazy load RoomPage to reduce initial bundle size (LiveKit is large)
 const RoomPage = lazy(() =>
@@ -35,6 +39,26 @@ function App() {
               <PrivateRoute>
                 <LobbyPage />
               </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <RequireRole role="admin">
+                <AdminLayout>
+                  <AdminHomePage />
+                </AdminLayout>
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/admin/specialties"
+            element={
+              <RequireRole role="admin">
+                <AdminLayout>
+                  <AdminSpecialtiesPage />
+                </AdminLayout>
+              </RequireRole>
             }
           />
           <Route

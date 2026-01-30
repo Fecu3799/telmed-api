@@ -106,6 +106,16 @@ export const endpoints = {
   specialties: {
     list: '/specialties',
   },
+  // Admin
+  admin: {
+    specialties: {
+      list: '/admin/specialties',
+      create: '/admin/specialties',
+      update: (id: string) => `/admin/specialties/${id}`,
+      activate: (id: string) => `/admin/specialties/${id}/activate`,
+      deactivate: (id: string) => `/admin/specialties/${id}/deactivate`,
+    },
+  },
   // Doctor Availability (public)
   doctorAvailability: {
     get: (doctorUserId: string) => `/doctors/${doctorUserId}/availability`,

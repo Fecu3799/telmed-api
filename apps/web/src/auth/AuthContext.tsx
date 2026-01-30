@@ -8,14 +8,16 @@ import {
 } from 'react';
 import { setAccessTokenGetter } from '../api/http';
 
-export type ActiveRole = 'doctor' | 'patient';
+export type ActiveRole = 'doctor' | 'patient' | 'admin';
 
 interface AuthContextType {
   doctorToken: string | null;
   patientToken: string | null;
+  adminToken: string | null;
   activeRole: ActiveRole | null;
   setDoctorToken: (token: string | null) => void;
   setPatientToken: (token: string | null) => void;
+  setAdminToken: (token: string | null) => void;
   setActiveRole: (role: ActiveRole | null) => void;
   getActiveToken: () => string | null;
   logout: () => void;
@@ -26,6 +28,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   doctorToken: 'telmed.auth.doctorToken',
   patientToken: 'telmed.auth.patientToken',
+  adminToken: 'telmed.auth.adminToken',
   activeRole: 'telmed.auth.activeRole',
 } as const;
 
@@ -75,10 +78,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   });
 
+  const [adminToken, setAdminTokenState] = useState<string | null>(() => {
+    if (import.meta.env.DEV) {
+      const stored = localStorage.getItem(STORAGE_KEYS.adminToken);
+      const normalized = normalizeToken(stored);
+      if (import.meta.env.DEV && normalized) {
+        const tokenPreview =
+          normalized.length > 12
+            ? `${normalized.substring(0, 6)}...${normalized.substring(normalized.length - 6)}`
+            : normalized.substring(0, 6);
+        console.log(
+          `[AuthContext] Boot: Loaded adminToken from storage (${tokenPreview})`,
+        );
+      }
+      return normalized;
+    }
+    return null;
+  });
+
   const [activeRole, setActiveRoleState] = useState<ActiveRole | null>(() => {
     if (import.meta.env.DEV) {
       const stored = localStorage.getItem(STORAGE_KEYS.activeRole);
-      const role = stored === 'doctor' || stored === 'patient' ? stored : null;
+      const role =
+        stored === 'doctor' || stored === 'patient' || stored === 'admin'
+          ? stored
+          : null;
       if (import.meta.env.DEV && role) {
         console.log(
           `[AuthContext] Boot: Loaded activeRole from storage (${role})`,
@@ -97,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const getActiveTokenFn = (): string | null => {
       if (activeRole === 'doctor') return doctorToken;
       if (activeRole === 'patient') return patientToken;
+      if (activeRole === 'admin') return adminToken;
       return null;
     };
 
@@ -125,12 +150,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       setAccessTokenGetter(null);
     };
-  }, [activeRole, doctorToken, patientToken]);
+  }, [activeRole, doctorToken, patientToken, adminToken]);
 
   // getActiveToken para uso en componentes (exportado en context)
   const getActiveToken = (): string | null => {
     if (activeRole === 'doctor') return doctorToken;
     if (activeRole === 'patient') return patientToken;
+    if (activeRole === 'admin') return adminToken;
     return null;
   };
 
@@ -160,6 +186,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (import.meta.env.DEV) {
+      const normalized = normalizeToken(adminToken);
+      if (normalized) {
+        localStorage.setItem(STORAGE_KEYS.adminToken, normalized);
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.adminToken);
+      }
+    }
+  }, [adminToken]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
       if (activeRole) {
         localStorage.setItem(STORAGE_KEYS.activeRole, activeRole);
       } else {
@@ -178,6 +215,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPatientTokenState(normalizeToken(token));
   };
 
+  const setAdminToken = (token: string | null) => {
+    setAdminTokenState(normalizeToken(token));
+  };
+
   const setActiveRole = (role: ActiveRole | null) => {
     setActiveRoleState(role);
   };
@@ -185,10 +226,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setDoctorTokenState(null);
     setPatientTokenState(null);
+    setAdminTokenState(null);
     setActiveRoleState(null);
     if (import.meta.env.DEV) {
       localStorage.removeItem(STORAGE_KEYS.doctorToken);
       localStorage.removeItem(STORAGE_KEYS.patientToken);
+      localStorage.removeItem(STORAGE_KEYS.adminToken);
       localStorage.removeItem(STORAGE_KEYS.activeRole);
     }
   };
@@ -198,9 +241,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         doctorToken,
         patientToken,
+        adminToken,
         activeRole,
         setDoctorToken,
         setPatientToken,
+        setAdminToken,
         setActiveRole,
         getActiveToken,
         logout,

@@ -19,14 +19,14 @@ import {
 import { ClinicalNoteFormatPanel } from '../../components/ClinicalNoteFormatPanel';
 import type { ProblemDetails } from '../../api/http';
 import { consultationSocket } from '../../api/socket';
-import { useAuth } from '../../auth/AuthContext';
+import { type ActiveRole, useAuth } from '../../auth/AuthContext';
 
 /**
  * RoomLayout: All components that require LiveKit room context.
  * This component MUST be rendered inside <LiveKitRoom>.
  */
 type RoomLayoutProps = {
-  activeRole: 'doctor' | 'patient' | null;
+  activeRole: ActiveRole | null;
   consultationId: string;
   consultationStatus?: ConsultationStatus | null;
   onCloseConsultation?: () => void;
@@ -44,7 +44,7 @@ export function RoomLayout({
 
   // Connect socket for format job events
   useEffect(() => {
-    if (!activeRole || !consultationId) {
+    if (!activeRole || activeRole === 'admin' || !consultationId) {
       return;
     }
 

@@ -33,6 +33,8 @@ export function LobbyPage() {
       ? doctorToken
       : activeRole === 'patient'
         ? patientToken
+        : activeRole === 'admin'
+          ? null
         : null;
 
   // Demo credentials state
@@ -79,6 +81,11 @@ export function LobbyPage() {
   // Load session status when activeRole changes
   // Sincroniza http client con el token del rol activo antes de hacer la llamada
   useEffect(() => {
+    if (activeRole === 'admin') {
+      navigate('/admin');
+      return;
+    }
+
     const loadSessionStatus = async () => {
       if (!activeToken) {
         setSessionStatus(null);
@@ -142,6 +149,7 @@ export function LobbyPage() {
     patientToken,
     activeToken,
     sessionCooldownUntil,
+    navigate,
   ]);
 
   useEffect(() => {

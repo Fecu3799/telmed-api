@@ -7,7 +7,8 @@ import { type ProblemDetails, type ApiError } from '../api/http';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { setDoctorToken, setPatientToken, setActiveRole } = useAuth();
+  const { setDoctorToken, setPatientToken, setAdminToken, setActiveRole } =
+    useAuth();
 
   // Manual login state
   const [email, setEmail] = useState('');
@@ -37,11 +38,21 @@ export function LoginPage() {
       if (response.user.role === 'doctor') {
         setDoctorToken(response.accessToken);
         setActiveRole('doctor');
-      } else if (response.user.role === 'patient') {
+        navigate('/lobby');
+        return;
+      }
+      if (response.user.role === 'patient') {
         setPatientToken(response.accessToken);
         setActiveRole('patient');
+        navigate('/lobby');
+        return;
       }
-      navigate('/lobby');
+      if (response.user.role === 'admin') {
+        setAdminToken(response.accessToken);
+        setActiveRole('admin');
+        navigate('/admin');
+        return;
+      }
     } catch (err) {
       const apiError = err as ApiError;
       if (apiError.problemDetails) {
