@@ -9,6 +9,7 @@ import { ChatsPage } from './pages/ChatsPage';
 import { PatientFilesPage } from './pages/PatientFilesPage';
 import { DoctorSearchPage } from './pages/DoctorSearchPage';
 import { DoctorProfilePage } from './pages/DoctorProfilePage';
+import { DoctorProfileSettingsPage } from './pages/DoctorProfileSettingsPage';
 import { DoctorAvailabilityPage } from './pages/DoctorAvailabilityPage';
 import { DoctorPatientsPage } from './pages/DoctorPatientsPage';
 import { DoctorPatientDetailPage } from './pages/DoctorPatientDetailPage';
@@ -90,6 +91,14 @@ function App() {
             element={
               <PrivateRoute>
                 <DoctorProfilePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/doctor-profile"
+            element={
+              <PrivateRoute>
+                <DoctorProfileSettingsPage />
               </PrivateRoute>
             }
           />

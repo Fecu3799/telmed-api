@@ -59,9 +59,7 @@ export function AdminSpecialtiesPage() {
         pageSize,
         q: query || undefined,
         isActive:
-          statusFilter === 'all'
-            ? undefined
-            : statusFilter === 'active',
+          statusFilter === 'all' ? undefined : statusFilter === 'active',
       });
       setItems(response.items);
       setPageInfo(response.pageInfo);
@@ -241,7 +239,7 @@ export function AdminSpecialtiesPage() {
 
         <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
           <button
-            onClick={handleSubmit}
+            onClick={() => void handleSubmit()}
             disabled={saving || !name.trim() || !slug.trim()}
             style={{
               padding: '8px 16px',
@@ -302,9 +300,7 @@ export function AdminSpecialtiesPage() {
             />
             <select
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as StatusFilter)
-              }
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
               style={{
                 padding: '6px 8px',
                 borderRadius: '6px',
@@ -362,9 +358,7 @@ export function AdminSpecialtiesPage() {
                   <td style={{ padding: '10px 0', color: '#6b7280' }}>
                     {specialty.slug}
                   </td>
-                  <td style={{ padding: '10px 0' }}>
-                    {specialty.sortOrder}
-                  </td>
+                  <td style={{ padding: '10px 0' }}>{specialty.sortOrder}</td>
                   <td style={{ padding: '10px 0' }}>
                     <span
                       style={{
@@ -396,7 +390,7 @@ export function AdminSpecialtiesPage() {
                         Editar
                       </button>
                       <button
-                        onClick={() => handleToggleActive(specialty)}
+                        onClick={() => void handleToggleActive(specialty)}
                         style={{
                           padding: '6px 10px',
                           borderRadius: '6px',

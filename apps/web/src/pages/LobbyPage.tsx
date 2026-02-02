@@ -6,7 +6,6 @@ import {
   getPatientIdentity,
   type PatientIdentity,
 } from '../api/patient-identity';
-import { getDoctorProfile, type DoctorProfile } from '../api/doctor-profile';
 import { getOnlineStatus, goOffline, goOnline, pingOnline } from '../api/geo';
 import {
   getActiveConsultation,
@@ -15,7 +14,8 @@ import {
 import { notificationsSocket } from '../api/notifications-socket';
 import { type ProblemDetails } from '../api/http';
 import { PatientIdentityModal } from '../components/PatientIdentityModal';
-import { DoctorProfileModal } from '../components/DoctorProfileModal';
+import { LobbyTopActions } from '../components/LobbyTopActions';
+import { DoctorLobbyMinimal } from '../components/DoctorLobbyMinimal';
 
 export function LobbyPage() {
   const ONLINE_STORAGE_KEY = 'telmed.doctor.online';
@@ -35,7 +35,9 @@ export function LobbyPage() {
         ? patientToken
         : activeRole === 'admin'
           ? null
-        : null;
+          : null;
+  const isDoctorActive = activeRole === 'doctor';
+  const isPatientActive = activeRole === 'patient';
 
   // Demo credentials state
   const [doctorEmail, setDoctorEmail] = useState('doctor.demo@telmed.test');
@@ -62,11 +64,6 @@ export function LobbyPage() {
   const [identityModalOpen, setIdentityModalOpen] = useState(false);
 
   // Doctor profile
-  const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(
-    null,
-  );
-  const [loadingProfile, setLoadingProfile] = useState(false);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [presenceLoading, setPresenceLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
   const [activeConsultationId, setActiveConsultationId] = useState<
@@ -186,31 +183,6 @@ export function LobbyPage() {
 
     void loadIdentity();
   }, [activeRole, patientToken]);
-
-  // Load doctor profile when activeRole is doctor
-  useEffect(() => {
-    const loadProfile = async () => {
-      if (activeRole !== 'doctor' || !doctorToken) {
-        setDoctorProfile(null);
-        setIsOnline(false);
-        return;
-      }
-
-      setLoadingProfile(true);
-      try {
-        const profile = await getDoctorProfile();
-        setDoctorProfile(profile);
-      } catch (err) {
-        if ((err as { status?: number }).status === 404) {
-          setDoctorProfile(null);
-        }
-      } finally {
-        setLoadingProfile(false);
-      }
-    };
-
-    void loadProfile();
-  }, [activeRole, doctorToken]);
 
   useEffect(() => {
     const loadPresenceStatus = async () => {
@@ -478,80 +450,32 @@ export function LobbyPage() {
         }}
       >
         <h1 style={{ margin: 0 }}>TelMed Lobby (Alpha v0)</h1>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => navigate('/doctor-search')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '0.9em',
-            }}
-          >
-            Buscar médicos
-          </button>
-          {activeConsultationId && (
-            <button
-              onClick={() => navigate(`/room/${activeConsultationId}`)}
-              disabled={activeConsultationStatus !== 'in_progress'}
-              style={{
-                padding: '8px 16px',
-                backgroundColor:
-                  activeConsultationStatus === 'in_progress'
-                    ? '#007bff'
-                    : '#9ca3af',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor:
-                  activeConsultationStatus === 'in_progress'
-                    ? 'pointer'
-                    : 'not-allowed',
-                fontSize: '0.9em',
-              }}
-            >
-              {activeConsultationStatus === 'in_progress'
-                ? 'Entrar a consulta'
-                : 'Consulta cerrada'}
-            </button>
-          )}
-          <button
-            onClick={() => navigate('/chats')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#2196F3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '0.9em',
-            }}
-          >
-            Open Chats
-          </button>
-          {activeRole === 'patient' && (
-            <button
-              onClick={() => navigate('/patient-history')}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#6f42c1',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '0.9em',
-              }}
-            >
-              Historia Clínica
-            </button>
-          )}
-        </div>
+        {activeRole === 'doctor' && (
+          <LobbyTopActions
+            role="doctor"
+            onSearchDoctors={() => navigate('/doctor-search')}
+            onOpenChats={() => navigate('/chats')}
+            onOpenProfile={() => navigate('/doctor-profile')}
+          />
+        )}
+        {activeRole === 'patient' && (
+          <LobbyTopActions
+            role="patient"
+            onSearchDoctors={() => navigate('/doctor-search')}
+            onOpenChats={() => navigate('/chats')}
+            onOpenPatientHistory={() => navigate('/patient-history')}
+            activeConsultationId={activeConsultationId}
+            activeConsultationStatus={activeConsultationStatus}
+            onOpenActiveConsultation={() =>
+              activeConsultationId
+                ? navigate(`/room/${activeConsultationId}`)
+                : undefined
+            }
+          />
+        )}
       </div>
 
-      {error && (
+      {error && activeRole !== 'doctor' && (
         <div
           style={{
             marginBottom: '16px',
@@ -576,184 +500,191 @@ export function LobbyPage() {
       )}
 
       {/* Session Selector */}
-      <div style={sectionStyle}>
-        <h2>Active Session</h2>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          <button
-            onClick={() => setActiveRole('doctor')}
-            disabled={!doctorToken}
-            style={{
-              ...buttonStyle,
-              backgroundColor: activeRole === 'doctor' ? '#28a745' : '#6c757d',
-            }}
-          >
-            Use Doctor Session
-          </button>
-          <button
-            onClick={() => setActiveRole('patient')}
-            disabled={!patientToken}
-            style={{
-              ...buttonStyle,
-              backgroundColor: activeRole === 'patient' ? '#28a745' : '#6c757d',
-            }}
-          >
-            Use Patient Session
-          </button>
+      {activeRole !== 'doctor' && (
+        <div style={sectionStyle}>
+          <h2>Active Session</h2>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            <button
+              onClick={() => setActiveRole('doctor')}
+              disabled={!doctorToken}
+              style={{
+                ...buttonStyle,
+                backgroundColor: isDoctorActive ? '#28a745' : '#6c757d',
+              }}
+            >
+              Use Doctor Session
+            </button>
+            <button
+              onClick={() => setActiveRole('patient')}
+              disabled={!patientToken}
+              style={{
+                ...buttonStyle,
+                backgroundColor: isPatientActive ? '#28a745' : '#6c757d',
+              }}
+            >
+              Use Patient Session
+            </button>
+          </div>
+          <div>
+            <strong>Active Role:</strong> {activeRole || 'None'}
+          </div>
         </div>
-        <div>
-          <strong>Active Role:</strong> {activeRole || 'None'}
-        </div>
-      </div>
+      )}
 
       {/* Demo Credentials */}
-      <div style={sectionStyle}>
-        <h2>Demo Credentials</h2>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '16px',
-            marginBottom: '16px',
-          }}
-        >
-          <div>
-            <h3>Doctor</h3>
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', marginBottom: '4px' }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={doctorEmail}
-                onChange={(e) => setDoctorEmail(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                }}
-              />
-            </div>
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', marginBottom: '4px' }}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={doctorPassword}
-                onChange={(e) => setDoctorPassword(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                }}
-              />
-            </div>
-            <button
-              onClick={() => void handleLoginDoctor()}
-              style={buttonStyle}
-            >
-              Login Doctor
-            </button>
-          </div>
-          <div>
-            <h3>Patient</h3>
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', marginBottom: '4px' }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={patientEmail}
-                onChange={(e) => setPatientEmail(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                }}
-              />
-            </div>
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', marginBottom: '4px' }}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={patientPassword}
-                onChange={(e) => setPatientPassword(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                }}
-              />
-            </div>
-            <button
-              onClick={() => void handleLoginPatient()}
-              style={buttonStyle}
-            >
-              Login Patient
-            </button>
-          </div>
-        </div>
-        <button
-          onClick={() => void handleRegisterDemo()}
-          style={{ ...buttonStyle, backgroundColor: '#6c757d' }}
-        >
-          Register Demo Users
-        </button>
-      </div>
-
-      {/* Session Status */}
-      <div style={sectionStyle}>
-        <h2>Session Status</h2>
-        {loadingSession ? (
-          <div>Loading...</div>
-        ) : sessionError ? (
+      {activeRole !== 'doctor' && (
+        <div style={sectionStyle}>
+          <h2>Demo Credentials</h2>
           <div
             style={{
-              padding: '12px',
-              backgroundColor: '#fee',
-              border: '1px solid #fcc',
-              borderRadius: '4px',
-              color: '#c33',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '16px',
+              marginBottom: '16px',
             }}
           >
-            <strong>Error {sessionError.status}:</strong> {sessionError.detail}
-            {sessionError.errors && (
-              <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                {Object.entries(sessionError.errors).map(
-                  ([field, messages]) => (
-                    <li key={field}>
-                      <strong>{field}:</strong> {messages.join(', ')}
-                    </li>
-                  ),
-                )}
-              </ul>
-            )}
-          </div>
-        ) : sessionStatus ? (
-          <div>
             <div>
-              <strong>User ID:</strong> {sessionStatus.id}
-            </div>
-            <div>
-              <strong>Role:</strong> {sessionStatus.role}
-            </div>
-            {sessionStatus.hasPatientIdentity !== undefined && (
-              <div>
-                <strong>Has Patient Identity:</strong>{' '}
-                {sessionStatus.hasPatientIdentity ? 'Yes' : 'No'}
+              <h3>Doctor</h3>
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'block', marginBottom: '4px' }}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={doctorEmail}
+                  onChange={(e) => setDoctorEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                  }}
+                />
               </div>
-            )}
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'block', marginBottom: '4px' }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={doctorPassword}
+                  onChange={(e) => setDoctorPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => void handleLoginDoctor()}
+                style={buttonStyle}
+              >
+                Login Doctor
+              </button>
+            </div>
+            <div>
+              <h3>Patient</h3>
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'block', marginBottom: '4px' }}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={patientEmail}
+                  onChange={(e) => setPatientEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'block', marginBottom: '4px' }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={patientPassword}
+                  onChange={(e) => setPatientPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => void handleLoginPatient()}
+                style={buttonStyle}
+              >
+                Login Patient
+              </button>
+            </div>
           </div>
-        ) : (
-          <div>No active session</div>
-        )}
-      </div>
+          <button
+            onClick={() => void handleRegisterDemo()}
+            style={{ ...buttonStyle, backgroundColor: '#6c757d' }}
+          >
+            Register Demo Users
+          </button>
+        </div>
+      )}
+
+      {/* Session Status */}
+      {activeRole !== 'doctor' && (
+        <div style={sectionStyle}>
+          <h2>Session Status</h2>
+          {loadingSession ? (
+            <div>Loading...</div>
+          ) : sessionError ? (
+            <div
+              style={{
+                padding: '12px',
+                backgroundColor: '#fee',
+                border: '1px solid #fcc',
+                borderRadius: '4px',
+                color: '#c33',
+              }}
+            >
+              <strong>Error {sessionError.status}:</strong>{' '}
+              {sessionError.detail}
+              {sessionError.errors && (
+                <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                  {Object.entries(sessionError.errors).map(
+                    ([field, messages]) => (
+                      <li key={field}>
+                        <strong>{field}:</strong> {messages.join(', ')}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              )}
+            </div>
+          ) : sessionStatus ? (
+            <div>
+              <div>
+                <strong>User ID:</strong> {sessionStatus.id}
+              </div>
+              <div>
+                <strong>Role:</strong> {sessionStatus.role}
+              </div>
+              {sessionStatus.hasPatientIdentity !== undefined && (
+                <div>
+                  <strong>Has Patient Identity:</strong>{' '}
+                  {sessionStatus.hasPatientIdentity ? 'Yes' : 'No'}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>No active session</div>
+          )}
+        </div>
+      )}
 
       {/* Patient Identity Checklist */}
       {activeRole === 'patient' && (
@@ -827,100 +758,14 @@ export function LobbyPage() {
         </div>
       )}
 
-      {/* Doctor Profile Checklist */}
       {activeRole === 'doctor' && (
-        <div style={sectionStyle}>
-          <h2>Doctor Profile Checklist</h2>
-          {loadingProfile ? (
-            <div>Loading...</div>
-          ) : doctorProfile ? (
-            <div>
-              <div style={{ color: '#28a745', marginBottom: '8px' }}>
-                ✓ Complete
-              </div>
-              <div>
-                <strong>Name:</strong> {doctorProfile.firstName}{' '}
-                {doctorProfile.lastName}
-              </div>
-              <div>
-                <strong>Price:</strong> $
-                {(doctorProfile.priceCents / 100).toFixed(2)}{' '}
-                {doctorProfile.currency}
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div style={{ color: '#dc3545', marginBottom: '8px' }}>
-                ✗ Incomplete
-              </div>
-              <button
-                onClick={() => setProfileModalOpen(true)}
-                style={buttonStyle}
-              >
-                Complete Now
-              </button>
-            </div>
-          )}
-          <div
-            style={{
-              marginTop: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-            }}
-          >
-            <button
-              onClick={() => void handleTogglePresence()}
-              disabled={presenceLoading}
-              style={{
-                ...buttonStyle,
-                backgroundColor: isOnline ? '#dc3545' : '#28a745',
-              }}
-            >
-              {presenceLoading
-                ? 'Actualizando...'
-                : isOnline
-                  ? 'Pasar offline'
-                  : 'Pasar online'}
-            </button>
-            <button
-              onClick={() => navigate('/doctor-availability')}
-              style={{
-                ...buttonStyle,
-                backgroundColor: '#17a2b8',
-              }}
-            >
-              Mi Disponibilidad
-            </button>
-            <button
-              onClick={() => navigate('/doctor-location')}
-              style={{
-                ...buttonStyle,
-                backgroundColor: '#ff9800',
-              }}
-            >
-              Mi ubicación
-            </button>
-            <button
-              onClick={() => navigate('/appointments')}
-              style={{
-                ...buttonStyle,
-                backgroundColor: '#007bff',
-              }}
-            >
-              Mis Turnos
-            </button>
-            <button
-              onClick={() => navigate('/doctor-patients')}
-              style={{
-                ...buttonStyle,
-                backgroundColor: '#6f42c1',
-              }}
-            >
-              Mis Pacientes
-            </button>
-          </div>
-        </div>
+        <DoctorLobbyMinimal
+          isOnline={isOnline}
+          presenceLoading={presenceLoading}
+          onTogglePresence={() => void handleTogglePresence()}
+          onOpenAppointments={() => navigate('/appointments')}
+          onOpenPatients={() => navigate('/doctor-patients')}
+        />
       )}
 
       <PatientIdentityModal
@@ -940,26 +785,6 @@ export function LobbyPage() {
             }
           };
           void loadIdentity();
-        }}
-      />
-
-      <DoctorProfileModal
-        isOpen={profileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
-        onSuccess={() => {
-          // Reload profile
-          const loadProfile = async () => {
-            setLoadingProfile(true);
-            try {
-              const profile = await getDoctorProfile();
-              setDoctorProfile(profile);
-            } catch {
-              setDoctorProfile(null);
-            } finally {
-              setLoadingProfile(false);
-            }
-          };
-          void loadProfile();
         }}
       />
     </div>

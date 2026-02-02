@@ -115,6 +115,11 @@ export const endpoints = {
       activate: (id: string) => `/admin/specialties/${id}/activate`,
       deactivate: (id: string) => `/admin/specialties/${id}/deactivate`,
     },
+    metrics: {
+      overview: '/admin/metrics/overview',
+      health: '/admin/metrics/health',
+      jobs: '/admin/metrics/jobs',
+    },
   },
   // Doctor Availability (public)
   doctorAvailability: {

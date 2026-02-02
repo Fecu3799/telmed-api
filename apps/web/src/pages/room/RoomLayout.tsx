@@ -163,7 +163,7 @@ export function RoomLayout({
   };
 
   useEffect(() => {
-    if (!activeRole || !consultationId) {
+    if (!activeRole || activeRole === 'admin' || !consultationId) {
       return;
     }
 

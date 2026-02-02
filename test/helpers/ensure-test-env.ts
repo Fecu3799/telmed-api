@@ -22,6 +22,7 @@ export function ensureTestEnv() {
   process.env.DEBUG_AUTH = 'false';
   process.env.DEBUG_DB = 'false';
   process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  process.env.WORKERS_ENABLED = 'false';
   process.env.MERCADOPAGO_ACCESS_TOKEN = 'test_mp_access_token';
   process.env.MERCADOPAGO_WEBHOOK_SECRET = 'test_mp_webhook_secret';
   process.env.FORMATTER_PROVIDER = 'dummy';

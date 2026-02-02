@@ -20,6 +20,11 @@ import { ConsultationsModule } from '../consultations/consultations.module';
  * Gotchas:
  * - Uses DummyFormatterProvider by default; can be swapped for LLM provider later.
  */
+const workersEnabled =
+  String(process.env.WORKERS_ENABLED).toLowerCase() !== 'false' &&
+  process.env.NODE_ENV !== 'test' &&
+  process.env.APP_ENV !== 'test';
+
 @Module({
   imports: [
     BullModule.forRootAsync({
@@ -74,11 +79,11 @@ import { ConsultationsModule } from '../consultations/consultations.module';
   controllers: [ClinicalNoteFormatController],
   providers: [
     ClinicalNoteFormatService,
-    ClinicalNoteFormatProcessor,
+    ...(workersEnabled ? [ClinicalNoteFormatProcessor] : []),
     DummyFormatterProvider,
     FormatterProviderFactory,
     RedisFormatJobEventsPublisher,
-    RedisFormatJobEventsSubscriber,
+    ...(workersEnabled ? [RedisFormatJobEventsSubscriber] : []),
     {
       provide: 'FormatterProvider',
       useFactory: (factory: FormatterProviderFactory) => factory.create(),

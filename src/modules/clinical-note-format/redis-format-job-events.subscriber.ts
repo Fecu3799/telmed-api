@@ -25,11 +25,16 @@ export class RedisFormatJobEventsSubscriber
   ) {}
 
   async onModuleInit() {
-    if (process.env.APP_PROCESS_ROLE === 'worker') {
+    if (
+      process.env.APP_PROCESS_ROLE === 'worker' ||
+      String(process.env.WORKERS_ENABLED).toLowerCase() === 'false' ||
+      process.env.NODE_ENV === 'test' ||
+      process.env.APP_ENV === 'test'
+    ) {
       this.logger.log(
         JSON.stringify({
           event: 'format_job_events_subscriber_skipped',
-          reason: 'worker_process',
+          reason: 'disabled',
         }),
       );
       return;

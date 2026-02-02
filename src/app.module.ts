@@ -26,6 +26,7 @@ import { PatientFilesModule } from './modules/patient-files/patient-files.module
 import { GeoModule } from './modules/geo/geo.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ClinicalNoteFormatModule } from './modules/clinical-note-format/clinical-note-format.module';
+import { AdminMetricsModule } from './modules/admin-metrics/admin-metrics.module';
 import { ClockModule } from './common/clock/clock.module';
 import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware';
@@ -121,6 +122,7 @@ import { BenchmarkThrottlerGuard } from './common/guards/benchmark-throttler.gua
     GeoModule,
     NotificationsModule,
     ClinicalNoteFormatModule,
+    AdminMetricsModule,
   ],
   controllers: [AppController],
   providers: [

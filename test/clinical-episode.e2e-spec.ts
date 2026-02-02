@@ -146,7 +146,7 @@ describe('Clinical episode (e2e)', () => {
 
   afterAll(async () => {
     if (app) {
-      await app.close();
+      await app?.close();
     }
   });
 
