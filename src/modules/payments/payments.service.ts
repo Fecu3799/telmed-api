@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
   ForbiddenException,
+  ConflictException,
   UnprocessableEntityException,
   Logger,
   BadRequestException,
@@ -11,6 +12,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   AppointmentStatus,
+  ConsultationQueueEntryType,
+  ConsultationQueueStatus,
   ConsultationQueuePaymentStatus,
   PaymentKind,
   PaymentProvider,
@@ -28,6 +31,8 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { MERCADOPAGO_CLIENT } from './mercadopago.client';
 import type { MercadoPagoClient } from './mercadopago.client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { calculatePlatformFee } from './fee-calculator';
+import { PaymentQuoteRequestDto } from './dto/payment-quote.dto';
 
 const PAYMENT_TTL_MINUTES = 10;
 
@@ -36,6 +41,10 @@ type PaymentPreferenceResult = {
   providerPreferenceId: string;
   checkoutUrl: string;
   expiresAt: Date;
+  grossAmountCents: number;
+  platformFeeCents: number;
+  totalChargedCents: number;
+  commissionRateBps: number;
 };
 
 @Injectable()
@@ -55,7 +64,7 @@ export class PaymentsService {
     doctorUserId: string;
     patientUserId: string;
     appointmentId: string;
-    amountCents: number;
+    grossAmountCents: number;
     currency: string;
     idempotencyKey?: string | null;
   }): Promise<PaymentPreferenceResult> {
@@ -63,12 +72,14 @@ export class PaymentsService {
       this.clock.now().getTime() + PAYMENT_TTL_MINUTES * 60 * 1000,
     );
     const paymentId = randomUUID();
+    const { platformFeeCents, totalChargedCents, commissionRateBps } =
+      calculatePlatformFee(input.grossAmountCents);
 
     const accessToken = await this.resolveAccessToken(input.doctorUserId);
 
     const preference = await this.mercadoPago.createPreference({
       title: 'TelMed - Turno programado',
-      amountCents: input.amountCents,
+      totalChargedCents,
       currency: input.currency,
       externalReference: paymentId,
       metadata: {
@@ -88,6 +99,10 @@ export class PaymentsService {
       providerPreferenceId: preference.providerPreferenceId,
       checkoutUrl: this.selectCheckoutUrl(preference),
       expiresAt,
+      grossAmountCents: input.grossAmountCents,
+      platformFeeCents,
+      totalChargedCents,
+      commissionRateBps,
     };
   }
 
@@ -95,7 +110,7 @@ export class PaymentsService {
     doctorUserId: string;
     patientUserId: string;
     queueItemId: string;
-    amountCents: number;
+    grossAmountCents: number;
     currency: string;
     idempotencyKey?: string | null;
   }): Promise<PaymentPreferenceResult> {
@@ -103,12 +118,14 @@ export class PaymentsService {
       this.clock.now().getTime() + PAYMENT_TTL_MINUTES * 60 * 1000,
     );
     const paymentId = randomUUID();
+    const { platformFeeCents, totalChargedCents, commissionRateBps } =
+      calculatePlatformFee(input.grossAmountCents);
 
     const accessToken = await this.resolveAccessToken(input.doctorUserId);
 
     const preference = await this.mercadoPago.createPreference({
       title: 'TelMed - Emergencia',
-      amountCents: input.amountCents,
+      totalChargedCents,
       currency: input.currency,
       externalReference: paymentId,
       metadata: {
@@ -129,6 +146,10 @@ export class PaymentsService {
       providerPreferenceId: preference.providerPreferenceId,
       checkoutUrl: this.selectCheckoutUrl(preference),
       expiresAt,
+      grossAmountCents: input.grossAmountCents,
+      platformFeeCents,
+      totalChargedCents,
+      commissionRateBps,
     };
   }
 
@@ -155,7 +176,7 @@ export class PaymentsService {
     appointmentId: string;
     doctorUserId: string;
     patientUserId: string;
-    amountCents: number;
+    grossAmountCents: number;
     currency: string;
     providerPreferenceId: string;
     checkoutUrl: string;
@@ -165,13 +186,18 @@ export class PaymentsService {
     if (!input.appointmentId) {
       throw new UnprocessableEntityException('appointmentId is required');
     }
+    const { platformFeeCents, totalChargedCents, commissionRateBps } =
+      calculatePlatformFee(input.grossAmountCents);
     return this.prisma.payment.create({
       data: {
         id: input.paymentId,
         provider: PaymentProvider.mercadopago,
         kind: PaymentKind.appointment,
         status: PaymentStatus.pending,
-        amountCents: input.amountCents,
+        grossAmountCents: input.grossAmountCents,
+        platformFeeCents,
+        totalChargedCents,
+        commissionRateBps,
         currency: input.currency,
         doctorUserId: input.doctorUserId,
         patientUserId: input.patientUserId,
@@ -190,7 +216,7 @@ export class PaymentsService {
     queueItemId: string;
     doctorUserId: string;
     patientUserId: string;
-    amountCents: number;
+    grossAmountCents: number;
     currency: string;
     providerPreferenceId: string;
     checkoutUrl: string;
@@ -200,13 +226,18 @@ export class PaymentsService {
     if (!input.queueItemId) {
       throw new UnprocessableEntityException('queueItemId is required');
     }
+    const { platformFeeCents, totalChargedCents, commissionRateBps } =
+      calculatePlatformFee(input.grossAmountCents);
     return this.prisma.payment.create({
       data: {
         id: input.paymentId,
         provider: PaymentProvider.mercadopago,
         kind: PaymentKind.emergency,
         status: PaymentStatus.pending,
-        amountCents: input.amountCents,
+        grossAmountCents: input.grossAmountCents,
+        platformFeeCents,
+        totalChargedCents,
+        commissionRateBps,
         currency: input.currency,
         doctorUserId: input.doctorUserId,
         patientUserId: input.patientUserId,
@@ -228,7 +259,10 @@ export class PaymentsService {
         provider: true,
         kind: true,
         status: true,
-        amountCents: true,
+        grossAmountCents: true,
+        platformFeeCents: true,
+        totalChargedCents: true,
+        commissionRateBps: true,
         currency: true,
         doctorUserId: true,
         patientUserId: true,
@@ -256,6 +290,164 @@ export class PaymentsService {
     }
 
     return payment;
+  }
+
+  async getPaymentQuote(actor: Actor, input: PaymentQuoteRequestDto) {
+    if (actor.role !== UserRole.patient) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    if (input.kind === PaymentKind.appointment) {
+      if (!input.appointmentId) {
+        throw new UnprocessableEntityException('appointmentId is required');
+      }
+
+      const appointment = await this.prisma.appointment.findUnique({
+        where: { id: input.appointmentId },
+        include: { patient: { select: { userId: true } } },
+      });
+
+      if (!appointment) {
+        throw new NotFoundException('Appointment not found');
+      }
+
+      if (appointment.patient.userId !== actor.id) {
+        throw new ForbiddenException('Forbidden');
+      }
+
+      if (appointment.status !== AppointmentStatus.pending_payment) {
+        throw new ConflictException('Appointment is not in a payable state');
+      }
+
+      if (
+        appointment.paymentExpiresAt &&
+        this.clock.now() > appointment.paymentExpiresAt
+      ) {
+        throw new ConflictException('Payment window expired');
+      }
+
+      const doctorProfile = await this.prisma.doctorProfile.findUnique({
+        where: { userId: appointment.doctorUserId },
+        select: {
+          priceCents: true,
+          currency: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+
+      if (!doctorProfile) {
+        throw new NotFoundException('Doctor not found');
+      }
+
+      if (doctorProfile.priceCents <= 0) {
+        throw new UnprocessableEntityException('Doctor price not configured');
+      }
+
+      // Use shared fee calculator so quote matches checkout creation.
+      const { platformFeeCents, totalChargedCents } = calculatePlatformFee(
+        doctorProfile.priceCents,
+      );
+
+      return {
+        kind: PaymentKind.appointment,
+        referenceId: appointment.id,
+        doctorUserId: appointment.doctorUserId,
+        grossCents: doctorProfile.priceCents,
+        platformFeeCents,
+        totalChargedCents,
+        currency: doctorProfile.currency,
+        doctorDisplayName: this.buildDoctorDisplayName(doctorProfile),
+      };
+    }
+
+    if (input.kind === PaymentKind.emergency) {
+      if (!input.queueItemId) {
+        throw new UnprocessableEntityException('queueItemId is required');
+      }
+
+      const queueItem = await this.prisma.consultationQueueItem.findUnique({
+        where: { id: input.queueItemId },
+      });
+
+      if (!queueItem) {
+        throw new NotFoundException('Queue item not found');
+      }
+
+      if (queueItem.patientUserId !== actor.id) {
+        throw new ForbiddenException('Forbidden');
+      }
+
+      if (queueItem.entryType !== ConsultationQueueEntryType.emergency) {
+        throw new ConflictException('Payment only allowed for emergencies');
+      }
+
+      if (queueItem.status !== ConsultationQueueStatus.accepted) {
+        throw new ConflictException('Queue status invalid');
+      }
+
+      if (queueItem.paymentStatus === ConsultationQueuePaymentStatus.expired) {
+        throw new ConflictException('Payment window expired');
+      }
+
+      if (queueItem.paymentStatus !== ConsultationQueuePaymentStatus.pending) {
+        throw new ConflictException('Payment not enabled');
+      }
+
+      if (
+        queueItem.paymentExpiresAt &&
+        this.clock.now() > queueItem.paymentExpiresAt
+      ) {
+        throw new ConflictException('Payment window expired');
+      }
+
+      const doctorProfile = await this.prisma.doctorProfile.findUnique({
+        where: { userId: queueItem.doctorUserId },
+        select: {
+          priceCents: true,
+          currency: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+
+      if (!doctorProfile) {
+        throw new NotFoundException('Doctor not found');
+      }
+
+      if (doctorProfile.priceCents <= 0) {
+        throw new UnprocessableEntityException('Doctor price not configured');
+      }
+
+      // Use shared fee calculator so quote matches checkout creation.
+      const { platformFeeCents, totalChargedCents } = calculatePlatformFee(
+        doctorProfile.priceCents,
+      );
+
+      return {
+        kind: PaymentKind.emergency,
+        referenceId: queueItem.id,
+        doctorUserId: queueItem.doctorUserId,
+        grossCents: doctorProfile.priceCents,
+        platformFeeCents,
+        totalChargedCents,
+        currency: doctorProfile.currency,
+        doctorDisplayName: this.buildDoctorDisplayName(doctorProfile),
+      };
+    }
+
+    throw new UnprocessableEntityException('Invalid payment kind');
+  }
+
+  private buildDoctorDisplayName(profile: {
+    firstName: string | null;
+    lastName: string | null;
+  }) {
+    // Keep display name optional to avoid extra joins.
+    const firstName = profile.firstName?.trim() ?? '';
+    const lastName = profile.lastName?.trim() ?? '';
+    const name = `${firstName} ${lastName}`.trim();
+    return name.length > 0 ? name : null;
   }
 
   async expirePendingAppointmentPayments(scope: {

@@ -95,7 +95,7 @@ export async function acceptQueue(
 
 export async function rejectQueue(
   queueItemId: string,
-  reason: string,
+  reason?: string,
 ): Promise<ConsultationQueueItem> {
   return http<ConsultationQueueItem>(endpoints.queue.reject(queueItemId), {
     method: 'POST',

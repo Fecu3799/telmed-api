@@ -472,6 +472,7 @@ describe('Consultation queue (e2e)', () => {
       .expect(201);
 
     expect(rejectResponse.body.status).toBe('rejected');
+    expect(rejectResponse.body.reason).toBe('No disponible');
   });
 
   it('orders queue with accepted, ontime, early, walk-ins, expired', async () => {

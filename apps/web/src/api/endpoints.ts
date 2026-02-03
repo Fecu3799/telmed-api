@@ -48,6 +48,10 @@ export const endpoints = {
   doctorPatients: {
     list: '/doctors/me/patients',
   },
+  doctorDashboard: {
+    overview: '/doctors/me/dashboard/overview',
+    payments: '/doctors/me/payments',
+  },
   // Consultation Queue
   queue: {
     create: '/consultations/queue',
@@ -93,6 +97,9 @@ export const endpoints = {
   // Doctor Search
   doctorSearch: {
     search: '/doctors/search',
+  },
+  payments: {
+    quote: '/payments/quote',
   },
   geo: {
     online: '/doctors/me/geo/online',

@@ -368,7 +368,10 @@ model Payment {
   provider             PaymentProvider
   kind                 PaymentKind
   status               PaymentStatus          @default(pending)
-  amountCents          Int                    @map("amount_cents")
+  grossAmountCents     Int                    @default(0) @map("gross_amount_cents")
+  platformFeeCents     Int                    @default(0) @map("platform_fee_cents")
+  totalChargedCents    Int                    @default(0) @map("total_charged_cents")
+  commissionRateBps    Int                    @default(1500) @map("commission_rate_bps")
   currency             String                 @default("ARS")
   doctorUserId         String                 @map("doctor_user_id")
   patientUserId        String                 @map("patient_user_id")

@@ -379,6 +379,7 @@ export class ConsultationQueueService {
     actor: Actor,
     queueItemId: string,
     idempotencyKey?: string | null,
+    traceId?: string | null,
   ) {
     let queue = await this.getQueueById(actor, queueItemId);
 
@@ -446,7 +447,7 @@ export class ConsultationQueueService {
         doctorUserId: queue.doctorUserId,
         patientUserId: queue.patientUserId,
         queueItemId: queue.id,
-        amountCents: doctorProfile.priceCents,
+        grossAmountCents: doctorProfile.priceCents,
         currency: doctorProfile.currency,
         idempotencyKey,
       });
@@ -458,7 +459,10 @@ export class ConsultationQueueService {
           provider: PaymentProvider.mercadopago,
           kind: PaymentKind.emergency,
           status: PaymentStatus.pending,
-          amountCents: doctorProfile.priceCents,
+          grossAmountCents: preference.grossAmountCents,
+          platformFeeCents: preference.platformFeeCents,
+          totalChargedCents: preference.totalChargedCents,
+          commissionRateBps: preference.commissionRateBps,
           currency: doctorProfile.currency,
           doctorUserId: queue.doctorUserId,
           patientUserId: queue.patientUserId,
@@ -480,6 +484,19 @@ export class ConsultationQueueService {
 
       return createdPayment;
     });
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'payment_created',
+        paymentId: payment.id,
+        grossAmountCents: payment.grossAmountCents,
+        platformFeeCents: payment.platformFeeCents,
+        totalChargedCents: payment.totalChargedCents,
+        commissionRateBps: payment.commissionRateBps,
+        actorUserId: actor.id,
+        traceId: traceId ?? null,
+      }),
+    );
 
     return this.toPaymentResponse(payment);
   }

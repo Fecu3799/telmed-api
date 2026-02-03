@@ -4,10 +4,12 @@ import { useAuth } from '../auth/AuthContext';
 import {
   getDoctorSlots,
   createAppointment,
+  payAppointment,
   type DoctorSlot,
   type DoctorSlotsResponse,
   type AppointmentWithPayment,
 } from '../api/appointments';
+import { getPaymentQuote, type PaymentQuoteResponse } from '../api/payments';
 import { type DoctorSearchItem } from '../api/doctor-search';
 import { type ProblemDetails } from '../api/http';
 import { PatientIdentityModal } from '../components/PatientIdentityModal';
@@ -21,6 +23,32 @@ function isoToLocalDate(iso: string): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function randomUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback para navegadores antiguos
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function getIdempotencyKey(appointmentId: string): string {
+  const key = localStorage.getItem(`telmed.payment.${appointmentId}`);
+  if (key) {
+    return key;
+  }
+  const newKey = randomUUID();
+  localStorage.setItem(`telmed.payment.${appointmentId}`, newKey);
+  return newKey;
+}
+
+function formatMoney(cents: number, currency: string): string {
+  return `${(cents / 100).toFixed(2)} ${currency}`;
 }
 
 /**
@@ -140,6 +168,13 @@ export function DoctorProfilePage() {
   const [bookingError, setBookingError] = useState<ProblemDetails | null>(null);
   const [bookingSuccess, setBookingSuccess] =
     useState<AppointmentWithPayment | null>(null);
+  const [bookingQuote, setBookingQuote] = useState<PaymentQuoteResponse | null>(
+    null,
+  );
+  const [bookingQuoteError, setBookingQuoteError] =
+    useState<ProblemDetails | null>(null);
+  const [bookingQuoteLoading, setBookingQuoteLoading] = useState(false);
+  const [bookingQuoteConfirming, setBookingQuoteConfirming] = useState(false);
 
   // Patient identity modal
   const [showIdentityModal, setShowIdentityModal] = useState(false);
@@ -272,6 +307,74 @@ export function DoctorProfilePage() {
       }
     } finally {
       setBookingLoading(false);
+    }
+  };
+
+  const handleQuotePayment = async (appointmentId: string) => {
+    if (!getActiveToken()) {
+      return;
+    }
+
+    setBookingQuoteLoading(true);
+    setBookingQuoteError(null);
+
+    try {
+      const quote = await getPaymentQuote({
+        kind: 'appointment',
+        appointmentId,
+      });
+      setBookingQuote(quote);
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        setBookingQuoteError(apiError.problemDetails);
+      } else {
+        setBookingQuoteError({
+          status: apiError.status || 500,
+          detail: 'Error al obtener pre-pago',
+        });
+      }
+    } finally {
+      setBookingQuoteLoading(false);
+    }
+  };
+
+  const handleConfirmQuote = async () => {
+    if (!bookingQuote || !getActiveToken()) {
+      return;
+    }
+
+    setBookingQuoteConfirming(true);
+    setBookingQuoteError(null);
+
+    try {
+      const idempotencyKey = getIdempotencyKey(bookingQuote.referenceId);
+      const payment = await payAppointment(
+        bookingQuote.referenceId,
+        idempotencyKey,
+      );
+      if (payment.checkoutUrl) {
+        window.open(payment.checkoutUrl, '_blank', 'noopener,noreferrer');
+      }
+      setBookingQuote(null);
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        setBookingQuoteError(apiError.problemDetails);
+      } else {
+        setBookingQuoteError({
+          status: apiError.status || 500,
+          detail: 'Error al iniciar pago',
+        });
+      }
+    } finally {
+      setBookingQuoteConfirming(false);
     }
   };
 
@@ -672,23 +775,31 @@ export function DoctorProfilePage() {
             <div>
               <strong>Estado:</strong> {bookingSuccess.appointment.status}
             </div>
-            {bookingSuccess.payment.checkoutUrl && (
+            {bookingSuccess.appointment.status === 'pending_payment' && (
               <div style={{ marginTop: '12px' }}>
-                <a
-                  href={bookingSuccess.payment.checkoutUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() =>
+                    void handleQuotePayment(bookingSuccess.appointment.id)
+                  }
+                  disabled={bookingQuoteLoading || bookingQuoteConfirming}
                   style={{
                     display: 'inline-block',
                     padding: '8px 16px',
-                    backgroundColor: '#28a745',
+                    backgroundColor:
+                      bookingQuoteLoading || bookingQuoteConfirming
+                        ? '#ccc'
+                        : '#28a745',
                     color: 'white',
-                    textDecoration: 'none',
+                    border: 'none',
                     borderRadius: '4px',
+                    cursor:
+                      bookingQuoteLoading || bookingQuoteConfirming
+                        ? 'not-allowed'
+                        : 'pointer',
                   }}
                 >
-                  Ir a Pagar
-                </a>
+                  {bookingQuoteLoading ? 'Calculando...' : 'Pagar'}
+                </button>
               </div>
             )}
           </div>
@@ -740,6 +851,102 @@ export function DoctorProfilePage() {
             }
           }}
         />
+      )}
+
+      {bookingQuote && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '16px',
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              padding: '16px',
+              width: 'min(420px, 100%)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>Resumen de pago</h3>
+            {bookingQuote.doctorDisplayName && (
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Doctor:</strong> {bookingQuote.doctorDisplayName}
+              </div>
+            )}
+            <div style={{ marginBottom: '6px' }}>
+              <strong>Consulta:</strong>{' '}
+              {formatMoney(bookingQuote.grossCents, bookingQuote.currency)}
+            </div>
+            <div style={{ marginBottom: '6px' }}>
+              <strong>Comisión TelMed (15%):</strong>{' '}
+              {formatMoney(
+                bookingQuote.platformFeeCents,
+                bookingQuote.currency,
+              )}
+            </div>
+            <div style={{ marginBottom: '12px' }}>
+              <strong>Total a pagar:</strong>{' '}
+              {formatMoney(
+                bookingQuote.totalChargedCents,
+                bookingQuote.currency,
+              )}
+            </div>
+            {bookingQuoteError && (
+              <div
+                style={{
+                  marginBottom: '12px',
+                  color: '#991b1b',
+                  backgroundColor: '#fee2e2',
+                  padding: '8px',
+                  borderRadius: '4px',
+                }}
+              >
+                {bookingQuoteError.detail || 'Error al obtener pre-pago'}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => void handleConfirmQuote()}
+                disabled={bookingQuoteConfirming}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: bookingQuoteConfirming ? '#ccc' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: bookingQuoteConfirming ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {bookingQuoteConfirming ? 'Procesando...' : 'Continuar'}
+              </button>
+              <button
+                onClick={() => {
+                  setBookingQuote(null);
+                  setBookingQuoteError(null);
+                }}
+                disabled={bookingQuoteConfirming}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: bookingQuoteConfirming ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

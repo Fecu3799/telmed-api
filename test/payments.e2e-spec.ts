@@ -190,10 +190,18 @@ describe('Payments (e2e)', () => {
     const appointmentId = createAppointment.body.appointment.id as string;
     const paymentId = createAppointment.body.payment.id as string;
 
+    const createdPayment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    expect(createdPayment?.grossAmountCents).toBe(120000);
+    expect(createdPayment?.platformFeeCents).toBe(18000);
+    expect(createdPayment?.totalChargedCents).toBe(138000);
+    expect(createdPayment?.commissionRateBps).toBe(1500);
+
     fakeMp.setPayment('mp_1', {
       id: 'mp_1',
       status: 'approved',
-      transaction_amount: 1200,
+      transaction_amount: 1380,
       currency_id: 'ARS',
       metadata: { paymentId },
     });
@@ -302,6 +310,124 @@ describe('Payments (e2e)', () => {
     expect(list.body.items[0].status).toBe('cancelled');
   });
 
+  it('quotes appointment payment for patient and enforces access', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    await createDoctorProfile(app, doctor.accessToken);
+    await setAvailabilityRules(app, doctor.accessToken);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+
+    const availability = await request(httpServer(app))
+      .get(`/api/v1/doctors/${doctorUserId}/availability`)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const startAt = availability.body.items[0]?.startAt as string;
+    expect(startAt).toBeTruthy();
+
+    const createAppointment = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt })
+      .expect(201);
+
+    const appointmentId = createAppointment.body.appointment.id as string;
+
+    const quote = await request(httpServer(app))
+      .post('/api/v1/payments/quote')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ kind: 'appointment', appointmentId })
+      .expect(200);
+
+    expect(quote.body).toMatchObject({
+      kind: 'appointment',
+      referenceId: appointmentId,
+      doctorUserId,
+      grossCents: 120000,
+      platformFeeCents: 18000,
+      totalChargedCents: 138000,
+      currency: 'ARS',
+    });
+
+    const otherPatient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, otherPatient.accessToken);
+
+    await request(httpServer(app))
+      .post('/api/v1/payments/quote')
+      .set('Authorization', `Bearer ${otherPatient.accessToken}`)
+      .send({ kind: 'appointment', appointmentId })
+      .expect(403);
+
+    await prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: 'confirmed' },
+    });
+
+    await request(httpServer(app))
+      .post('/api/v1/payments/quote')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ kind: 'appointment', appointmentId })
+      .expect(409);
+  });
+
+  it('quotes emergency payment when enabled and blocks invalid state', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    await createDoctorProfile(app, doctor.accessToken);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const queue = await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, reason: 'Dolor agudo' })
+      .expect(201);
+
+    const queueId = queue.body.id as string;
+
+    await request(httpServer(app))
+      .post('/api/v1/payments/quote')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ kind: 'emergency', queueItemId: queueId })
+      .expect(409);
+
+    await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${queueId}/accept`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(201);
+
+    const quote = await request(httpServer(app))
+      .post('/api/v1/payments/quote')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ kind: 'emergency', queueItemId: queueId })
+      .expect(200);
+
+    expect(quote.body).toMatchObject({
+      kind: 'emergency',
+      referenceId: queueId,
+      doctorUserId,
+      grossCents: 120000,
+      platformFeeCents: 18000,
+      totalChargedCents: 138000,
+      currency: 'ARS',
+    });
+
+    const otherPatient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, otherPatient.accessToken);
+
+    await request(httpServer(app))
+      .post('/api/v1/payments/quote')
+      .set('Authorization', `Bearer ${otherPatient.accessToken}`)
+      .send({ kind: 'emergency', queueItemId: queueId })
+      .expect(403);
+  });
+
   it('enables emergency payment and allows accept after paid', async () => {
     const doctor = await registerAndLogin(app, 'doctor');
     const doctorUserId = await getUserId(app, doctor.accessToken);
@@ -330,11 +456,18 @@ describe('Payments (e2e)', () => {
       .expect(201);
 
     const paymentId = enablePayment.body.id as string;
+    const emergencyPayment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    expect(emergencyPayment?.grossAmountCents).toBe(120000);
+    expect(emergencyPayment?.platformFeeCents).toBe(18000);
+    expect(emergencyPayment?.totalChargedCents).toBe(138000);
+    expect(emergencyPayment?.commissionRateBps).toBe(1500);
 
     fakeMp.setPayment('mp_2', {
       id: 'mp_2',
       status: 'approved',
-      transaction_amount: 1200,
+      transaction_amount: 1380,
       currency_id: 'ARS',
       metadata: { paymentId },
     });

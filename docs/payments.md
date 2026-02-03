@@ -3,7 +3,7 @@
 ## Overview
 - Provider: Mercado Pago (Checkout Pro URL).
 - TTL: 10 minutos desde la creación del pago.
-- Unidades monetarias: `amountCents` (centavos), moneda `ARS` por defecto.
+- Unidades monetarias: `grossAmountCents`, `platformFeeCents`, `totalChargedCents` (centavos), moneda `ARS` por defecto.
 - Appointment: se crea en `pending_payment` y pasa a `confirmed` solo por webhook.
 - Emergencia (queue): el doctor acepta para habilitar pago; el paciente inicia el checkout; el pago debe estar `paid` antes de iniciar la consulta.
 

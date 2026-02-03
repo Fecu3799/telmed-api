@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import {
+  getDoctorDashboardOverview,
+  listDoctorPayments,
+  type DashboardRange,
+  type DoctorDashboardOverview,
+  type DoctorPaymentItem,
+  type PaymentStatus,
+} from '../api/doctor-dashboard';
+import { type ProblemDetails } from '../api/http';
 import { DoctorAvailabilityPanel } from '../components/DoctorAvailabilityPanel';
 import { DoctorLocationPanel } from '../components/DoctorLocationPanel';
 import { DoctorProfileModal } from '../components/DoctorProfileModal';
@@ -16,17 +25,115 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id'];
 
+function formatMoney(cents: number, currency: string): string {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency,
+  }).format(cents / 100);
+}
+
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  return date.toLocaleDateString('es-AR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
 export function DoctorProfileSettingsPage() {
   const navigate = useNavigate();
-  const { activeRole } = useAuth();
+  const { activeRole, getActiveToken } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('schedule');
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [metricsRange, setMetricsRange] = useState<DashboardRange>('30d');
+  const [paymentsStatus, setPaymentsStatus] = useState<'all' | PaymentStatus>(
+    'all',
+  );
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState<ProblemDetails | null>(null);
+  const [overview, setOverview] = useState<DoctorDashboardOverview | null>(
+    null,
+  );
+  const [payments, setPayments] = useState<DoctorPaymentItem[]>([]);
+  const [paymentsPageInfo, setPaymentsPageInfo] = useState<{
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (activeRole !== 'doctor') {
       navigate('/lobby');
     }
   }, [activeRole, navigate]);
+
+  useEffect(() => {
+    if (metricsError?.status === 401) {
+      navigate('/login');
+    }
+  }, [metricsError, navigate]);
+
+  useEffect(() => {
+    if (activeTab !== 'metrics') {
+      return;
+    }
+    if (!getActiveToken() || activeRole !== 'doctor') {
+      return;
+    }
+
+    const loadMetrics = async () => {
+      setMetricsLoading(true);
+      setMetricsError(null);
+
+      try {
+        const [overviewResponse, paymentsResponse] = await Promise.all([
+          getDoctorDashboardOverview(metricsRange),
+          listDoctorPayments({
+            page: paymentsPage,
+            pageSize: 20,
+            range: metricsRange,
+            status: paymentsStatus === 'all' ? undefined : paymentsStatus,
+          }),
+        ]);
+
+        setOverview(overviewResponse);
+        setPayments(paymentsResponse.items);
+        setPaymentsPageInfo(paymentsResponse.pageInfo);
+      } catch (err) {
+        const apiError = err as {
+          problemDetails?: ProblemDetails;
+          status?: number;
+        };
+        if (apiError.problemDetails) {
+          setMetricsError(apiError.problemDetails);
+        } else {
+          setMetricsError({
+            status: apiError.status || 500,
+            detail: 'Error al cargar métricas',
+          });
+        }
+        setOverview(null);
+        setPayments([]);
+        setPaymentsPageInfo(null);
+      } finally {
+        setMetricsLoading(false);
+      }
+    };
+
+    void loadMetrics();
+  }, [
+    metricsRange,
+    paymentsPage,
+    paymentsStatus,
+    getActiveToken,
+    activeRole,
+    activeTab,
+  ]);
 
   if (activeRole !== 'doctor') {
     return null;
@@ -161,8 +268,320 @@ export function DoctorProfileSettingsPage() {
               backgroundColor: '#fff',
             }}
           >
-            <h2 style={{ marginTop: 0 }}>Métricas</h2>
-            <p style={{ color: '#666' }}>Sección en preparación.</p>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '12px',
+                gap: '12px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0 }}>Métricas</h2>
+                <div style={{ color: '#666', fontSize: '14px' }}>
+                  Resumen de pagos del período seleccionado.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {(['7d', '30d', 'ytd'] as DashboardRange[]).map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => {
+                      setMetricsRange(range);
+                      setPaymentsPage(1);
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '999px',
+                      border:
+                        metricsRange === range
+                          ? '1px solid #0d6efd'
+                          : '1px solid #ddd',
+                      backgroundColor:
+                        metricsRange === range ? '#e7f1ff' : '#fff',
+                      fontWeight: metricsRange === range ? 600 : 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {range === '7d' && '7 días'}
+                    {range === '30d' && '30 días'}
+                    {range === 'ytd' && 'Año'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {metricsError && metricsError.status !== 401 && (
+              <div
+                style={{
+                  border: '1px solid #f5c2c7',
+                  backgroundColor: '#f8d7da',
+                  color: '#842029',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  marginBottom: '12px',
+                  fontSize: '14px',
+                }}
+              >
+                {metricsError.status === 403
+                  ? 'No autorizado'
+                  : metricsError.detail}
+              </div>
+            )}
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '12px',
+                marginBottom: '16px',
+                opacity: metricsLoading ? 0.6 : 1,
+              }}
+            >
+              <div
+                style={{
+                  border: '1px solid #e3e6ea',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                }}
+              >
+                <div style={{ color: '#6c757d', fontSize: '13px' }}>
+                  Ganancias (bruto)
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 600 }}>
+                  {formatMoney(
+                    overview?.kpis.grossEarningsCents ?? 0,
+                    overview?.currency ?? 'ARS',
+                  )}
+                </div>
+              </div>
+              <div
+                style={{
+                  border: '1px solid #e3e6ea',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                }}
+              >
+                <div style={{ color: '#6c757d', fontSize: '13px' }}>
+                  Comisión TelMed
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 600 }}>
+                  {formatMoney(
+                    overview?.kpis.platformFeesCents ?? 0,
+                    overview?.currency ?? 'ARS',
+                  )}
+                </div>
+              </div>
+              <div
+                style={{
+                  border: '1px solid #e3e6ea',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                }}
+              >
+                <div style={{ color: '#6c757d', fontSize: '13px' }}>
+                  Total cobrado
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 600 }}>
+                  {formatMoney(
+                    overview?.kpis.totalChargedCents ?? 0,
+                    overview?.currency ?? 'ARS',
+                  )}
+                </div>
+              </div>
+              <div
+                style={{
+                  border: '1px solid #e3e6ea',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                }}
+              >
+                <div style={{ color: '#6c757d', fontSize: '13px' }}>
+                  Pagos (paid)
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 600 }}>
+                  {overview?.kpis.paidPaymentsCount ?? 0}
+                </div>
+              </div>
+              <div
+                style={{
+                  border: '1px solid #e3e6ea',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                }}
+              >
+                <div style={{ color: '#6c757d', fontSize: '13px' }}>
+                  Pacientes
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 600 }}>
+                  {overview?.kpis.uniquePatientsCount ?? 0}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                flexWrap: 'wrap',
+                marginBottom: '12px',
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>Pagos</div>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <span style={{ fontSize: '14px', color: '#666' }}>Estado</span>
+                <select
+                  value={paymentsStatus}
+                  onChange={(event) => {
+                    const value = event.target.value as 'all' | PaymentStatus;
+                    setPaymentsStatus(value);
+                    setPaymentsPage(1);
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #ccc',
+                  }}
+                >
+                  <option value="all">Todos</option>
+                  <option value="paid">Paid</option>
+                  <option value="pending">Pending</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: '14px',
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      textAlign: 'left',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    <th style={{ padding: '8px' }}>Fecha</th>
+                    <th style={{ padding: '8px' }}>Tipo</th>
+                    <th style={{ padding: '8px' }}>Monto</th>
+                    <th style={{ padding: '8px' }}>Estado</th>
+                    <th style={{ padding: '8px' }}>Paciente</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((payment) => {
+                    const kindLabel =
+                      payment.kind === 'appointment' ? 'Turno' : 'Emergencia';
+                    const statusLabel = {
+                      paid: 'Pagado',
+                      pending: 'Pendiente',
+                      failed: 'Fallido',
+                      expired: 'Expirado',
+                      refunded: 'Reembolsado',
+                    }[payment.status];
+                    return (
+                      <tr
+                        key={payment.id}
+                        style={{ borderBottom: '1px solid #f0f0f0' }}
+                      >
+                        <td style={{ padding: '8px' }}>
+                          {formatDate(payment.createdAt)}
+                        </td>
+                        <td style={{ padding: '8px' }}>{kindLabel}</td>
+                        <td style={{ padding: '8px' }}>
+                          {formatMoney(
+                            payment.grossAmountCents,
+                            payment.currency,
+                          )}
+                        </td>
+                        <td style={{ padding: '8px' }}>
+                          {statusLabel ?? payment.status}
+                        </td>
+                        <td style={{ padding: '8px' }}>
+                          {payment.patient?.displayName ??
+                            payment.patient?.id ??
+                            '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!metricsLoading && payments.length === 0 && (
+                    <tr>
+                      <td
+                        style={{ padding: '12px', color: '#666' }}
+                        colSpan={5}
+                      >
+                        Sin pagos en este período.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '12px',
+                gap: '12px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                onClick={() => setPaymentsPage((prev) => Math.max(1, prev - 1))}
+                disabled={!paymentsPageInfo?.hasPrevPage || metricsLoading}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#fff',
+                  cursor:
+                    paymentsPageInfo?.hasPrevPage && !metricsLoading
+                      ? 'pointer'
+                      : 'not-allowed',
+                }}
+              >
+                Anterior
+              </button>
+              <div style={{ fontSize: '13px', color: '#666' }}>
+                Página {paymentsPageInfo?.page ?? paymentsPage} de{' '}
+                {paymentsPageInfo?.totalPages ?? 0}
+              </div>
+              <button
+                onClick={() => setPaymentsPage((prev) => prev + 1)}
+                disabled={!paymentsPageInfo?.hasNextPage || metricsLoading}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#fff',
+                  cursor:
+                    paymentsPageInfo?.hasNextPage && !metricsLoading
+                      ? 'pointer'
+                      : 'not-allowed',
+                }}
+              >
+                Siguiente
+              </button>
+            </div>
           </div>
         )}
       </div>

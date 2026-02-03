@@ -24,3 +24,31 @@ export interface PaymentStatusResponse {
     retryAfterSeconds: number;
   }>;
 }
+
+export type PaymentQuoteKind = 'appointment' | 'emergency';
+
+export interface PaymentQuoteRequest {
+  kind: PaymentQuoteKind;
+  appointmentId?: string;
+  queueItemId?: string;
+}
+
+export interface PaymentQuoteResponse {
+  kind: PaymentQuoteKind;
+  referenceId: string;
+  doctorUserId: string;
+  grossCents: number;
+  platformFeeCents: number;
+  totalChargedCents: number;
+  currency: string;
+  doctorDisplayName?: string | null;
+}
+
+export async function getPaymentQuote(
+  input: PaymentQuoteRequest,
+): Promise<PaymentQuoteResponse> {
+  return http<PaymentQuoteResponse>(endpoints.payments.quote, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}

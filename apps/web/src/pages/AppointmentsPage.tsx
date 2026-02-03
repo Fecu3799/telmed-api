@@ -16,7 +16,17 @@ import {
   type EmergencyItem,
   type EmergenciesResponse,
 } from '../api/emergencies';
-import { acceptQueue, payForQueue, startQueue } from '../api/queue';
+import {
+  acceptQueue,
+  payForQueue,
+  rejectQueue,
+  startQueue,
+} from '../api/queue';
+import {
+  getPaymentQuote,
+  type PaymentQuoteRequest,
+  type PaymentQuoteResponse,
+} from '../api/payments';
 import { type ProblemDetails } from '../api/http';
 import { notificationsSocket } from '../api/notifications-socket';
 
@@ -88,6 +98,10 @@ function formatDateTime(iso: string): string {
   });
 }
 
+function formatMoney(cents: number, currency: string): string {
+  return `${(cents / 100).toFixed(2)} ${currency}`;
+}
+
 /**
  * Get date range for appointments list (default: next 30 days)
  */
@@ -155,6 +169,17 @@ export function AppointmentsPage() {
   // Payment state
   const [payingId, setPayingId] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<ProblemDetails | null>(null);
+  const [quotingId, setQuotingId] = useState<string | null>(null);
+  const [paymentQuote, setPaymentQuote] = useState<PaymentQuoteResponse | null>(
+    null,
+  );
+  const [quoteError, setQuoteError] = useState<ProblemDetails | null>(null);
+  const [confirmingQuote, setConfirmingQuote] = useState(false);
+
+  // Emergency reject state
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('');
+  const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
 
   const loadAppointments = useCallback(async () => {
     if (
@@ -292,46 +317,117 @@ export function AppointmentsPage() {
     };
   }, [activeRole, getActiveToken, loadAppointments, loadEmergencies]);
 
-  // Handle payment
-  const handlePay = async (appointmentId: string) => {
+  // Handle payment quote before checkout
+  const handleQuote = async (input: PaymentQuoteRequest) => {
     if (!getActiveToken() || activeRole !== 'patient') {
       return;
     }
 
-    setPayingId(appointmentId);
+    const referenceId =
+      input.kind === 'appointment' ? input.appointmentId : input.queueItemId;
+    if (!referenceId) {
+      return;
+    }
+
+    setQuotingId(referenceId);
+    setQuoteError(null);
     setPaymentError(null);
+    setEmergenciesError(null);
     setError(null);
 
     try {
-      const idempotencyKey = getIdempotencyKey(appointmentId);
-      const payment: PaymentCheckout = await payAppointment(
-        appointmentId,
-        idempotencyKey,
-      );
-
-      // Open checkout URL in new tab
-      if (payment.checkoutUrl) {
-        window.open(payment.checkoutUrl, '_blank', 'noopener,noreferrer');
-      }
+      const quote = await getPaymentQuote(input);
+      setPaymentQuote(quote);
     } catch (err) {
       const apiError = err as {
         problemDetails?: ProblemDetails;
         status?: number;
       };
       if (apiError.problemDetails) {
-        setPaymentError(apiError.problemDetails);
-        // Also set general error for visibility
+        setQuoteError(apiError.problemDetails);
         setError(apiError.problemDetails);
       } else {
         const errorDetails: ProblemDetails = {
           status: apiError.status || 500,
-          detail: 'Error al iniciar pago',
+          detail: 'Error al obtener pre-pago',
         };
-        setPaymentError(errorDetails);
+        setQuoteError(errorDetails);
         setError(errorDetails);
       }
     } finally {
-      setPayingId(null);
+      setQuotingId(null);
+    }
+  };
+
+  const handleConfirmQuote = async () => {
+    if (!paymentQuote || !getActiveToken() || activeRole !== 'patient') {
+      return;
+    }
+
+    setConfirmingQuote(true);
+    setQuoteError(null);
+
+    if (paymentQuote.kind === 'appointment') {
+      setPayingId(paymentQuote.referenceId);
+      try {
+        const idempotencyKey = getIdempotencyKey(paymentQuote.referenceId);
+        const payment: PaymentCheckout = await payAppointment(
+          paymentQuote.referenceId,
+          idempotencyKey,
+        );
+
+        if (payment.checkoutUrl) {
+          window.open(payment.checkoutUrl, '_blank', 'noopener,noreferrer');
+        }
+        setPaymentQuote(null);
+      } catch (err) {
+        const apiError = err as {
+          problemDetails?: ProblemDetails;
+          status?: number;
+        };
+        if (apiError.problemDetails) {
+          setPaymentError(apiError.problemDetails);
+          setQuoteError(apiError.problemDetails);
+          setError(apiError.problemDetails);
+        } else {
+          const errorDetails: ProblemDetails = {
+            status: apiError.status || 500,
+            detail: 'Error al iniciar pago',
+          };
+          setPaymentError(errorDetails);
+          setQuoteError(errorDetails);
+          setError(errorDetails);
+        }
+      } finally {
+        setPayingId(null);
+        setConfirmingQuote(false);
+      }
+      return;
+    }
+
+    setEmergenciesLoading(true);
+    try {
+      const payment = await payForQueue(paymentQuote.referenceId);
+      if (payment.checkoutUrl) {
+        window.open(payment.checkoutUrl, '_blank', 'noopener,noreferrer');
+      }
+      await loadEmergencies();
+      setPaymentQuote(null);
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      const details = apiError.problemDetails || {
+        status: apiError.status || 500,
+        detail: 'Error al iniciar pago de emergencia',
+      };
+      setEmergenciesError(details);
+      setQuoteError(details);
+      setError(details);
+    } finally {
+      setEmergenciesLoading(false);
+      setConfirmingQuote(false);
     }
   };
 
@@ -360,18 +456,33 @@ export function AppointmentsPage() {
     }
   };
 
-  const handlePayEmergency = async (queueItemId: string) => {
+  const handleQuoteAppointment = async (appointmentId: string) => {
     if (!getActiveToken() || activeRole !== 'patient') {
       return;
     }
-    setEmergenciesLoading(true);
+    await handleQuote({ kind: 'appointment', appointmentId });
+  };
+
+  const handleQuoteEmergency = async (queueItemId: string) => {
+    if (!getActiveToken() || activeRole !== 'patient') {
+      return;
+    }
+    await handleQuote({ kind: 'emergency', queueItemId });
+  };
+
+  const handleRejectEmergency = async (queueItemId: string) => {
+    if (!getActiveToken() || activeRole !== 'doctor') {
+      return;
+    }
+
+    setRejectingId(queueItemId);
     setEmergenciesError(null);
+
     try {
-      const payment = await payForQueue(queueItemId);
-      if (payment.checkoutUrl) {
-        window.open(payment.checkoutUrl, '_blank', 'noopener,noreferrer');
-      }
+      await rejectQueue(queueItemId, rejectReason || undefined);
       await loadEmergencies();
+      setShowRejectModal(null);
+      setRejectReason('');
     } catch (err) {
       const apiError = err as {
         problemDetails?: ProblemDetails;
@@ -380,11 +491,11 @@ export function AppointmentsPage() {
       setEmergenciesError(
         apiError.problemDetails || {
           status: apiError.status || 500,
-          detail: 'Error al iniciar pago de emergencia',
+          detail: 'Error al rechazar emergencia',
         },
       );
     } finally {
-      setEmergenciesLoading(false);
+      setRejectingId(null);
     }
   };
 
@@ -847,22 +958,40 @@ export function AppointmentsPage() {
                   >
                     {activeRole === 'doctor' &&
                       emergency.queueStatus === 'queued' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleAcceptEmergency(emergency.id);
-                          }}
-                          style={{
-                            padding: '8px 16px',
-                            backgroundColor: '#28a745',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Aceptar
-                        </button>
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleAcceptEmergency(emergency.id);
+                            }}
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Aceptar
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowRejectModal(emergency.id);
+                            }}
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Rechazar
+                          </button>
+                        </>
                       )}
                     {activeRole === 'doctor' && emergency.canStart && (
                       <button
@@ -905,21 +1034,107 @@ export function AppointmentsPage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            void handlePayEmergency(emergency.id);
+                            void handleQuoteEmergency(emergency.id);
                           }}
+                          disabled={
+                            quotingId === emergency.id || confirmingQuote
+                          }
                           style={{
                             padding: '8px 16px',
                             backgroundColor: '#007bff',
                             color: 'white',
                             border: 'none',
                             borderRadius: '4px',
-                            cursor: 'pointer',
+                            cursor:
+                              quotingId === emergency.id
+                                ? 'not-allowed'
+                                : 'pointer',
                           }}
                         >
-                          Pagar
+                          {quotingId === emergency.id
+                            ? 'Calculando...'
+                            : 'Pagar'}
                         </button>
                       )}
                   </div>
+                  {activeRole === 'doctor' &&
+                    showRejectModal === emergency.id && (
+                      <div
+                        style={{
+                          marginTop: '12px',
+                          padding: '12px',
+                          backgroundColor: '#f5f5f5',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        <label
+                          style={{
+                            display: 'block',
+                            marginBottom: '8px',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          Motivo de rechazo (opcional):
+                        </label>
+                        <textarea
+                          value={rejectReason}
+                          onChange={(e) => setRejectReason(e.target.value)}
+                          placeholder="Ej: No disponible"
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                            marginBottom: '8px',
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleRejectEmergency(emergency.id);
+                            }}
+                            disabled={rejectingId === emergency.id}
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor:
+                                rejectingId === emergency.id
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                            }}
+                          >
+                            {rejectingId === emergency.id
+                              ? 'Rechazando...'
+                              : 'Confirmar Rechazo'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowRejectModal(null);
+                              setRejectReason('');
+                            }}
+                            disabled={rejectingId === emergency.id}
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#6c757d',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor:
+                                rejectingId === emergency.id
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                 </div>
               );
             })}
@@ -1235,29 +1450,36 @@ export function AppointmentsPage() {
                         activeRole === 'patient' &&
                         !isPaymentExpired && (
                           <button
-                            onClick={() => void handlePay(appointment.id)}
+                            onClick={() =>
+                              void handleQuoteAppointment(appointment.id)
+                            }
                             disabled={
                               payingId === appointment.id ||
-                              (payingId !== null && payingId !== appointment.id)
+                              quotingId === appointment.id ||
+                              confirmingQuote
                             }
                             style={{
                               padding: '8px 16px',
                               backgroundColor:
-                                payingId === appointment.id
+                                payingId === appointment.id ||
+                                quotingId === appointment.id
                                   ? '#ccc'
                                   : '#28a745',
                               color: 'white',
                               border: 'none',
                               borderRadius: '4px',
                               cursor:
-                                payingId === appointment.id
+                                payingId === appointment.id ||
+                                quotingId === appointment.id
                                   ? 'not-allowed'
                                   : 'pointer',
                             }}
                           >
-                            {payingId === appointment.id
-                              ? 'Abriendo pago...'
-                              : 'Pagar'}
+                            {quotingId === appointment.id
+                              ? 'Calculando...'
+                              : payingId === appointment.id
+                                ? 'Abriendo pago...'
+                                : 'Pagar'}
                           </button>
                         )}
                       <button
@@ -1408,6 +1630,102 @@ export function AppointmentsPage() {
             </div>
           )}
         </>
+      )}
+
+      {paymentQuote && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '16px',
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              padding: '16px',
+              width: 'min(420px, 100%)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>Resumen de pago</h3>
+            {paymentQuote.doctorDisplayName && (
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Doctor:</strong> {paymentQuote.doctorDisplayName}
+              </div>
+            )}
+            <div style={{ marginBottom: '6px' }}>
+              <strong>Consulta:</strong>{' '}
+              {formatMoney(paymentQuote.grossCents, paymentQuote.currency)}
+            </div>
+            <div style={{ marginBottom: '6px' }}>
+              <strong>Comisión TelMed (15%):</strong>{' '}
+              {formatMoney(
+                paymentQuote.platformFeeCents,
+                paymentQuote.currency,
+              )}
+            </div>
+            <div style={{ marginBottom: '12px' }}>
+              <strong>Total a pagar:</strong>{' '}
+              {formatMoney(
+                paymentQuote.totalChargedCents,
+                paymentQuote.currency,
+              )}
+            </div>
+            {quoteError && (
+              <div
+                style={{
+                  marginBottom: '12px',
+                  color: '#991b1b',
+                  backgroundColor: '#fee2e2',
+                  padding: '8px',
+                  borderRadius: '4px',
+                }}
+              >
+                {quoteError.detail || 'Error al obtener pre-pago'}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => void handleConfirmQuote()}
+                disabled={confirmingQuote}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: confirmingQuote ? '#ccc' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: confirmingQuote ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {confirmingQuote ? 'Procesando...' : 'Continuar'}
+              </button>
+              <button
+                onClick={() => {
+                  setPaymentQuote(null);
+                  setQuoteError(null);
+                }}
+                disabled={confirmingQuote}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: confirmingQuote ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

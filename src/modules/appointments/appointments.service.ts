@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -64,6 +65,8 @@ const MAX_LIMIT = 50;
 
 @Injectable()
 export class AppointmentsService {
+  private readonly logger = new Logger(AppointmentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly availabilityService: DoctorAvailabilityService,
@@ -77,6 +80,7 @@ export class AppointmentsService {
     actor: Actor,
     dto: CreateAppointmentDto,
     idempotencyKey?: string | null,
+    traceId?: string | null,
   ) {
     const startAt = this.parseDateTime(dto.startAt);
     const doctorUserId = dto.doctorUserId;
@@ -165,7 +169,7 @@ export class AppointmentsService {
         doctorUserId,
         patientUserId,
         appointmentId,
-        amountCents: doctorProfile.priceCents,
+        grossAmountCents: doctorProfile.priceCents,
         currency: doctorProfile.currency,
         idempotencyKey,
       });
@@ -212,7 +216,10 @@ export class AppointmentsService {
             provider: PaymentProvider.mercadopago,
             kind: PaymentKind.appointment,
             status: PaymentStatus.pending,
-            amountCents: doctorProfile.priceCents,
+            grossAmountCents: preference.grossAmountCents,
+            platformFeeCents: preference.platformFeeCents,
+            totalChargedCents: preference.totalChargedCents,
+            commissionRateBps: preference.commissionRateBps,
             currency: doctorProfile.currency,
             doctorUserId,
             patientUserId,
@@ -239,6 +246,19 @@ export class AppointmentsService {
       ),
       payment: this.toPaymentResponse(payment),
     };
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'payment_created',
+        paymentId: payment.id,
+        grossAmountCents: payment.grossAmountCents,
+        platformFeeCents: payment.platformFeeCents,
+        totalChargedCents: payment.totalChargedCents,
+        commissionRateBps: payment.commissionRateBps,
+        actorUserId: actor.id,
+        traceId: traceId ?? null,
+      }),
+    );
 
     // Notify both doctor and patient about new appointment.
     this.notifications.appointmentsChanged([doctorUserId, patientUserId]);
@@ -413,6 +433,7 @@ export class AppointmentsService {
     actor: Actor,
     appointmentId: string,
     idempotencyKey?: string | null,
+    traceId?: string | null,
   ) {
     if (actor.role !== UserRole.patient && actor.role !== UserRole.admin) {
       throw new ForbiddenException('Forbidden');
@@ -506,7 +527,7 @@ export class AppointmentsService {
         doctorUserId: appointment.doctorUserId,
         patientUserId: appointment.patient.userId,
         appointmentId: appointment.id,
-        amountCents: doctorProfile.priceCents,
+        grossAmountCents: doctorProfile.priceCents,
         currency: doctorProfile.currency,
         idempotencyKey,
       });
@@ -518,7 +539,10 @@ export class AppointmentsService {
           provider: PaymentProvider.mercadopago,
           kind: PaymentKind.appointment,
           status: PaymentStatus.pending,
-          amountCents: doctorProfile.priceCents,
+          grossAmountCents: preference.grossAmountCents,
+          platformFeeCents: preference.platformFeeCents,
+          totalChargedCents: preference.totalChargedCents,
+          commissionRateBps: preference.commissionRateBps,
           currency: doctorProfile.currency,
           doctorUserId: appointment.doctorUserId,
           patientUserId: appointment.patient.userId,
@@ -540,6 +564,19 @@ export class AppointmentsService {
 
       return createdPayment;
     });
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'payment_created',
+        paymentId: payment.id,
+        grossAmountCents: payment.grossAmountCents,
+        platformFeeCents: payment.platformFeeCents,
+        totalChargedCents: payment.totalChargedCents,
+        commissionRateBps: payment.commissionRateBps,
+        actorUserId: actor.id,
+        traceId: traceId ?? null,
+      }),
+    );
 
     return this.toPaymentResponse(payment);
   }

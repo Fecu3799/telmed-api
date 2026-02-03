@@ -1,5 +1,6 @@
 import { Body, Controller, Headers, HttpCode, Post } from '@nestjs/common';
 import {
+  ApiConflictResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -21,6 +22,8 @@ import { AuditAction, UserRole } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { Actor } from '../../common/types/actor.type';
 import { AuditService } from '../../infra/audit/audit.service';
+import { PaymentQuoteDto } from './docs/payment-quote.dto';
+import { PaymentQuoteRequestDto } from './dto/payment-quote.dto';
 
 @ApiTags('payments')
 @Controller()
@@ -110,5 +113,24 @@ export class PaymentsController {
       userAgent: req.get('user-agent') ?? null,
     });
     return payment;
+  }
+
+  @Post('payments/quote')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.patient)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get payment quote (pre-pago)' })
+  @ApiOkResponse({ type: PaymentQuoteDto })
+  @ApiUnauthorizedResponse({ type: ProblemDetailsDto })
+  @ApiForbiddenResponse({ type: ProblemDetailsDto })
+  @ApiNotFoundResponse({ type: ProblemDetailsDto })
+  @ApiConflictResponse({ type: ProblemDetailsDto })
+  @ApiUnprocessableEntityResponse({ type: ProblemDetailsDto })
+  async getPaymentQuote(
+    @CurrentUser() actor: Actor,
+    @Body() dto: PaymentQuoteRequestDto,
+  ) {
+    return this.paymentsService.getPaymentQuote(actor, dto);
   }
 }
