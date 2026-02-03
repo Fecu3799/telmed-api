@@ -397,14 +397,18 @@ model Payment {
 
 model DoctorPaymentAccount {
   doctorUserId          String          @id @map("doctor_user_id")
-  provider              PaymentProvider
+  provider              PaymentProvider @default(mercadopago)
+  mode                  DoctorPaymentAccountMode   @default(dev) @map("mode")
+  status                DoctorPaymentAccountStatus @default(not_configured) @map("status")
+  devLabel              String?         @map("dev_label")
   mpUserId              String?         @map("mp_user_id")
   collectorId           String?         @map("collector_id")
-  accessTokenEncrypted  String          @map("access_token_encrypted")
-  refreshTokenEncrypted String          @map("refresh_token_encrypted")
-  tokenExpiresAt        DateTime        @map("token_expires_at")
+  accessTokenEncrypted  String?         @map("access_token_encrypted")
+  refreshTokenEncrypted String?         @map("refresh_token_encrypted")
+  tokenExpiresAt        DateTime?       @map("token_expires_at")
   createdAt             DateTime        @default(now()) @map("created_at")
   updatedAt             DateTime        @updatedAt @map("updated_at")
+  deletedAt             DateTime?       @map("deleted_at")
   doctorProfile         DoctorProfile   @relation(fields: [doctorUserId], references: [userId], onDelete: Cascade)
 
   @@map("doctor_payment_accounts")
@@ -556,6 +560,16 @@ enum PaymentStatus {
   failed
   expired
   refunded
+}
+
+enum DoctorPaymentAccountMode {
+  dev
+}
+
+enum DoctorPaymentAccountStatus {
+  not_configured
+  connected
+  disconnected
 }
 
 enum PatientDocumentType {

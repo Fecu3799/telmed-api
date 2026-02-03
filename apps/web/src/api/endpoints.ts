@@ -52,6 +52,11 @@ export const endpoints = {
     overview: '/doctors/me/dashboard/overview',
     payments: '/doctors/me/payments',
   },
+  doctorPaymentAccount: {
+    get: '/doctors/me/payment-account',
+    upsert: '/doctors/me/payment-account',
+    disconnect: '/doctors/me/payment-account/disconnect',
+  },
   // Consultation Queue
   queue: {
     create: '/consultations/queue',

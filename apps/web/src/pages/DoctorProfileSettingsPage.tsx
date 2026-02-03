@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import {
+  disconnectMyDoctorPaymentAccount,
+  getMyDoctorPaymentAccount,
+  upsertMyDoctorPaymentAccount,
+  type DoctorPaymentAccount,
+  type DoctorPaymentAccountStatus,
+} from '../api/doctor-payment-account';
+import {
   getDoctorDashboardOverview,
   listDoctorPayments,
   type DashboardRange,
@@ -65,6 +72,14 @@ export function DoctorProfileSettingsPage() {
     hasNextPage: boolean;
     hasPrevPage: boolean;
   } | null>(null);
+  const [paymentAccount, setPaymentAccount] =
+    useState<DoctorPaymentAccount | null>(null);
+  const [paymentAccountLoading, setPaymentAccountLoading] = useState(false);
+  const [paymentAccountSubmitting, setPaymentAccountSubmitting] =
+    useState(false);
+  const [paymentAccountError, setPaymentAccountError] =
+    useState<ProblemDetails | null>(null);
+  const [devLabelInput, setDevLabelInput] = useState('');
 
   useEffect(() => {
     if (activeRole !== 'doctor') {
@@ -77,6 +92,12 @@ export function DoctorProfileSettingsPage() {
       navigate('/login');
     }
   }, [metricsError, navigate]);
+
+  useEffect(() => {
+    if (paymentAccountError?.status === 401) {
+      navigate('/login');
+    }
+  }, [paymentAccountError, navigate]);
 
   useEffect(() => {
     if (activeTab !== 'metrics') {
@@ -134,6 +155,117 @@ export function DoctorProfileSettingsPage() {
     activeRole,
     activeTab,
   ]);
+
+  useEffect(() => {
+    if (activeTab !== 'payments') {
+      return;
+    }
+    if (!getActiveToken() || activeRole !== 'doctor') {
+      return;
+    }
+
+    const loadPaymentAccount = async () => {
+      setPaymentAccountLoading(true);
+      setPaymentAccountError(null);
+
+      try {
+        const account = await getMyDoctorPaymentAccount();
+        setPaymentAccount(account);
+        setDevLabelInput(account.devLabel ?? '');
+      } catch (err) {
+        const apiError = err as {
+          problemDetails?: ProblemDetails;
+          status?: number;
+        };
+        if (apiError.problemDetails) {
+          setPaymentAccountError(apiError.problemDetails);
+        } else {
+          setPaymentAccountError({
+            status: apiError.status || 500,
+            detail: 'Error al cargar la cuenta de pagos',
+          });
+        }
+        setPaymentAccount(null);
+      } finally {
+        setPaymentAccountLoading(false);
+      }
+    };
+
+    void loadPaymentAccount();
+  }, [activeTab, getActiveToken, activeRole]);
+
+  const accountStatus: DoctorPaymentAccountStatus =
+    paymentAccount?.status ?? 'not_configured';
+  const accountStatusLabel: Record<DoctorPaymentAccountStatus, string> = {
+    not_configured: 'No configurada',
+    connected: 'Conectada',
+    disconnected: 'Desconectada',
+  };
+  const accountStatusColor: Record<DoctorPaymentAccountStatus, string> = {
+    not_configured: '#6c757d',
+    connected: '#198754',
+    disconnected: '#dc3545',
+  };
+
+  const handleConnectAccount = async () => {
+    if (paymentAccountSubmitting) {
+      return;
+    }
+    setPaymentAccountSubmitting(true);
+    setPaymentAccountError(null);
+
+    try {
+      const account = await upsertMyDoctorPaymentAccount({
+        devLabel: devLabelInput.trim(),
+      });
+      setPaymentAccount(account);
+      setDevLabelInput(account.devLabel ?? '');
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        setPaymentAccountError(apiError.problemDetails);
+      } else {
+        setPaymentAccountError({
+          status: apiError.status || 500,
+          detail: 'Error al conectar la cuenta',
+        });
+      }
+    } finally {
+      setPaymentAccountSubmitting(false);
+    }
+  };
+
+  const handleDisconnectAccount = async () => {
+    if (paymentAccountSubmitting) {
+      return;
+    }
+    setPaymentAccountSubmitting(true);
+    setPaymentAccountError(null);
+
+    try {
+      const account = await disconnectMyDoctorPaymentAccount();
+      setPaymentAccount(account);
+      setDevLabelInput('');
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        setPaymentAccountError(apiError.problemDetails);
+      } else {
+        setPaymentAccountError({
+          status: apiError.status || 500,
+          detail: 'Error al desconectar la cuenta',
+        });
+      }
+    } finally {
+      setPaymentAccountSubmitting(false);
+    }
+  };
 
   if (activeRole !== 'doctor') {
     return null;
@@ -253,10 +385,164 @@ export function DoctorProfileSettingsPage() {
               backgroundColor: '#fff',
             }}
           >
-            <h2 style={{ marginTop: 0 }}>Pagos</h2>
-            <p style={{ color: '#666' }}>
-              Próximamente vas a poder configurar tu cuenta de pagos.
-            </p>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '12px',
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0 }}>Pagos</h2>
+                <div style={{ color: '#666', fontSize: '14px' }}>
+                  Cuenta de cobros en modo desarrollo.
+                </div>
+              </div>
+            </div>
+
+            {paymentAccountError && paymentAccountError.status !== 401 && (
+              <div
+                style={{
+                  border: '1px solid #f5c2c7',
+                  backgroundColor: '#f8d7da',
+                  color: '#842029',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  marginBottom: '12px',
+                  fontSize: '14px',
+                }}
+              >
+                {paymentAccountError.status === 403
+                  ? 'No autorizado'
+                  : paymentAccountError.detail}
+              </div>
+            )}
+
+            <div
+              style={{
+                border: '1px solid #e3e6ea',
+                borderRadius: '8px',
+                padding: '16px',
+                backgroundColor: '#f8f9fa',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                    Cuenta Mercado Pago (DEV)
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#666' }}>
+                    Modo desarrollo: esto NO recibe dinero real aún. Sirve para
+                    preparar la conexión real en despliegue.
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    backgroundColor: accountStatusColor[accountStatus],
+                    color: '#fff',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                  }}
+                >
+                  {accountStatusLabel[accountStatus]}
+                </div>
+              </div>
+
+              <div style={{ marginTop: '16px' }}>
+                {paymentAccountLoading ? (
+                  <div style={{ color: '#666' }}>Cargando estado...</div>
+                ) : accountStatus === 'connected' ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '14px', color: '#666' }}>
+                        Label DEV
+                      </div>
+                      <div style={{ fontWeight: 600 }}>
+                        {paymentAccount?.devLabel ?? '-'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => void handleDisconnectAccount()}
+                      disabled={paymentAccountSubmitting}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        border: '1px solid #dc3545',
+                        backgroundColor: '#dc3545',
+                        color: '#fff',
+                        cursor: paymentAccountSubmitting
+                          ? 'not-allowed'
+                          : 'pointer',
+                      }}
+                    >
+                      Desconectar
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <input
+                      value={devLabelInput}
+                      onChange={(event) => setDevLabelInput(event.target.value)}
+                      placeholder="Label (DEV)"
+                      disabled={paymentAccountSubmitting}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid #ccc',
+                        minWidth: '220px',
+                      }}
+                    />
+                    <button
+                      onClick={() => void handleConnectAccount()}
+                      disabled={
+                        paymentAccountSubmitting ||
+                        devLabelInput.trim().length < 3
+                      }
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        border: '1px solid #0d6efd',
+                        backgroundColor: '#0d6efd',
+                        color: '#fff',
+                        cursor:
+                          paymentAccountSubmitting ||
+                          devLabelInput.trim().length < 3
+                            ? 'not-allowed'
+                            : 'pointer',
+                      }}
+                    >
+                      Conectar (DEV)
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
         {activeTab === 'metrics' && (

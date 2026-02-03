@@ -15,6 +15,7 @@ import {
   ConsultationQueueEntryType,
   ConsultationQueueStatus,
   ConsultationQueuePaymentStatus,
+  DoctorPaymentAccountStatus,
   PaymentKind,
   PaymentProvider,
   PaymentStatus,
@@ -34,7 +35,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { calculatePlatformFee } from './fee-calculator';
 import { PaymentQuoteRequestDto } from './dto/payment-quote.dto';
 
-const PAYMENT_TTL_MINUTES = 10;
+const PAYMENT_TTL_MINUTES = 1;
 
 type PaymentPreferenceResult = {
   paymentId: string;
@@ -684,8 +685,12 @@ export class PaymentsService {
   }
 
   private async resolveAccessToken(doctorUserId: string) {
-    const account = await this.prisma.doctorPaymentAccount.findUnique({
-      where: { doctorUserId },
+    const account = await this.prisma.doctorPaymentAccount.findFirst({
+      where: {
+        doctorUserId,
+        deletedAt: null,
+        status: DoctorPaymentAccountStatus.connected,
+      },
       select: { accessTokenEncrypted: true },
     });
 
