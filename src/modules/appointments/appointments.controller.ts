@@ -84,11 +84,13 @@ export class AppointmentsController {
     @CurrentUser() actor: Actor,
     @Body() dto: CreateAppointmentDto,
     @Headers('Idempotency-Key') idempotencyKey?: string,
+    @Req() req?: Request,
   ) {
     return this.appointmentsService.createAppointment(
       actor,
       dto,
       idempotencyKey,
+      (req as Request & { traceId?: string })?.traceId ?? null,
     );
   }
 
@@ -166,6 +168,7 @@ export class AppointmentsController {
       actor,
       id,
       idempotencyKey,
+      (req as Request & { traceId?: string })?.traceId ?? null,
     );
     // Audit payment creation for appointment flows
     await this.auditService.log({

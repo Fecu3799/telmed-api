@@ -192,6 +192,7 @@ export class ConsultationQueueController {
       actor,
       queueItemId,
       idempotencyKey,
+      (req as Request & { traceId?: string }).traceId ?? null,
     );
     // Audit payment creation for emergency flows.
     await this.auditService.log({

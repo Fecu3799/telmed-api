@@ -1,8 +1,13 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { ConfigModule } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PaymentExpirationProcessor } from './payment-expiration.processor';
+import { PaymentExpirationScheduler } from './payment-expiration.scheduler';
+import { PAYMENTS_QUEUE } from './payment-expiration.constants';
 import {
   MERCADOPAGO_CLIENT,
   MercadoPagoClient,
@@ -45,11 +50,25 @@ class MercadoPagoTestClient implements MercadoPagoClient {
   }
 }
 
+const workersEnabled =
+  String(process.env.WORKERS_ENABLED).toLowerCase() !== 'false' &&
+  process.env.NODE_ENV !== 'test' &&
+  process.env.APP_ENV !== 'test';
+
 @Module({
-  imports: [NotificationsModule],
+  imports: [
+    NotificationsModule,
+    BullModule.registerQueueAsync({
+      name: PAYMENTS_QUEUE,
+      imports: [ConfigModule],
+      useFactory: () => ({}),
+    }),
+  ],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,
+    PaymentExpirationScheduler,
+    ...(workersEnabled ? [PaymentExpirationProcessor] : []),
     {
       provide: MERCADOPAGO_CLIENT,
       useClass:

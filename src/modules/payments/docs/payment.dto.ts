@@ -27,8 +27,17 @@ export class PaymentDetailDto {
   @ApiProperty({ example: 'pending' })
   status!: string;
 
-  @ApiProperty({ example: 1200 })
-  amountCents!: number;
+  @ApiProperty({ example: 120000 })
+  grossAmountCents!: number;
+
+  @ApiProperty({ example: 18000 })
+  platformFeeCents!: number;
+
+  @ApiProperty({ example: 138000 })
+  totalChargedCents!: number;
+
+  @ApiProperty({ example: 1500 })
+  commissionRateBps!: number;
 
   @ApiProperty({ example: 'ARS' })
   currency!: string;

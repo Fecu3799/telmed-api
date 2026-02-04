@@ -2,8 +2,10 @@
 
 ## Overview
 - Provider: Mercado Pago (Checkout Pro URL).
-- TTL: 10 minutos desde la creación del pago.
-- Unidades monetarias: `amountCents` (centavos), moneda `ARS` por defecto.
+- TTL:
+  - Appointment: si el turno empieza en <24h, vence en 10 minutos desde el intento; si empieza en >=24h, vence a las 20:00 del día anterior (hora Argentina).
+  - Emergencia: 10 minutos desde que se habilita el pago.
+- Unidades monetarias: `grossAmountCents`, `platformFeeCents`, `totalChargedCents` (centavos), moneda `ARS` por defecto.
 - Appointment: se crea en `pending_payment` y pasa a `confirmed` solo por webhook.
 - Emergencia (queue): el doctor acepta para habilitar pago; el paciente inicia el checkout; el pago debe estar `paid` antes de iniciar la consulta.
 
@@ -31,10 +33,14 @@
 
 ## Flujos
 
+### Pre-pago (quote)
+- `POST /api/v1/payments/quote`
+  - Devuelve breakdown + `paymentDeadlineAt` + `timeLeftSeconds` para mostrar countdown en UI.
+
 ### Appointment (programado)
 1) `POST /api/v1/appointments`
    - valida slot y crea `Appointment` con `pending_payment`.
-   - crea `Payment` `pending` (TTL 10 min) y devuelve `checkoutUrl`.
+   - crea `Payment` `pending` con deadline calculado (ver TTL) y devuelve `checkoutUrl`.
 2) `POST /api/v1/appointments/:id/pay` (opcional, para pagar appointment existente)
    - Crea o reutiliza `Payment` `pending` para un appointment en `pending_payment`.
    - Devuelve `checkoutUrl`. Soporta `Idempotency-Key` header.

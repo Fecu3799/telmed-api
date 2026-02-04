@@ -10,6 +10,9 @@ export class PublicSpecialtyDto {
   @ApiProperty({ example: 'cardiologia' })
   slug!: string;
 
+  @ApiProperty({ example: 1 })
+  sortOrder!: number;
+
   @ApiProperty({ example: true })
   isActive!: boolean;
 }

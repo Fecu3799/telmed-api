@@ -4,7 +4,7 @@ import { randomUUID, createHmac } from 'crypto';
 
 export type MercadoPagoPreferenceInput = {
   title: string;
-  amountCents: number;
+  totalChargedCents: number;
   currency: string;
   externalReference: string;
   metadata: Record<string, string>;
@@ -81,7 +81,7 @@ export class MercadoPagoHttpClient implements MercadoPagoClient {
         {
           title: input.title,
           quantity: 1,
-          unit_price: input.amountCents / 100,
+          unit_price: input.totalChargedCents / 100,
           currency_id: input.currency,
         },
       ],

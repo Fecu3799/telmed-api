@@ -30,6 +30,7 @@
 - Frontend API Contract (Scheduling): `docs/frontend/README.md`
 - Architecture Decisions: `docs/decisions/`
 - Payments config: set `MERCADOPAGO_MODE=sandbox` for dev/test, `MERCADOPAGO_MODE=live` for production.
+- Payments expiration job: `PAYMENTS_EXPIRATION_JOB_ENABLED` (default: true; set `false` to disable scheduled expiration).
 - Geo emergency quotas: `GEO_EMERGENCY_DAILY_LIMIT` (default 5) and `GEO_EMERGENCY_MONTHLY_LIMIT` (default 30).
 
 ## Clinical Note Format (AI Redaction)

@@ -436,7 +436,7 @@ Provider: Mercado Pago (Checkout Pro URL).
 
 TTL: 10 minutos.
 
-Dinero: amountCents (centavos), moneda ARS por defecto.
+Dinero: grossAmountCents + platformFeeCents = totalChargedCents (centavos), moneda ARS por defecto.
 
 Estados
 PaymentStatus

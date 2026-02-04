@@ -490,6 +490,7 @@ describe('Appointments (e2e)', () => {
       .expect(201);
 
     const appointmentId = createResponse.body.appointment.id as string;
+    const paymentId = createResponse.body.payment.id as string;
 
     const intruder = await registerAndLogin(app, 'patient');
     await createPatientIdentity(app, intruder.accessToken);
@@ -508,6 +509,59 @@ describe('Appointments (e2e)', () => {
 
     expect(cancelResponse.body.status).toBe('cancelled');
     expect(cancelResponse.body.patientUserId).toBe(patientUserId);
+  });
+
+  it('doctor cancellation expires pending payment in metrics', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorMe = await request(httpServer(app))
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+    const doctorUserId = doctorMe.body.id as string;
+
+    await createDoctorProfile(app, doctor.accessToken);
+    await setUtcSchedulingConfig(prisma, doctorUserId);
+
+    const { dateStr, dayOfWeek } = dateParts(2);
+    await setAvailabilityRule(app, doctor.accessToken, dayOfWeek);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const createResponse = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt: `${dateStr}T09:00:00.000Z` })
+      .expect(201);
+
+    const appointmentId = createResponse.body.appointment.id as string;
+    const paymentId = createResponse.body.payment.id as string;
+
+    await request(httpServer(app))
+      .post(`/api/v1/appointments/${appointmentId}/cancel`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({ reason: 'No disponible' })
+      .expect(201);
+
+    const paymentsResponse = await request(httpServer(app))
+      .get('/api/v1/doctors/me/payments')
+      .query({ range: '30d', page: 1, pageSize: 20 })
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+
+    const payment = paymentsResponse.body.items.find(
+      (item: { id: string }) => item.id === paymentId,
+    );
+    expect(payment).toBeDefined();
+    expect(payment.status).toBe('cancelled');
+
+    const pendingResponse = await request(httpServer(app))
+      .get('/api/v1/doctors/me/payments')
+      .query({ range: '30d', status: 'pending', page: 1, pageSize: 20 })
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+
+    expect(pendingResponse.body.items).toHaveLength(0);
   });
 
   it('patient can request payment checkout for unpaid appointment', async () => {

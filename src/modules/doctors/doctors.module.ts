@@ -3,6 +3,8 @@ import { DoctorAvailabilityModule } from './availability/doctor-availability.mod
 import { DoctorProfilesModule } from './profile/doctor-profiles.module';
 import { DoctorSearchModule } from './search/doctor-search.module';
 import { DoctorPatientsModule } from './patients/doctor-patients.module';
+import { DoctorDashboardModule } from './dashboard/doctor-dashboard.module';
+import { DoctorPaymentAccountModule } from './payment-account/doctor-payment-account.module';
 
 @Module({
   imports: [
@@ -10,6 +12,8 @@ import { DoctorPatientsModule } from './patients/doctor-patients.module';
     DoctorSearchModule,
     DoctorAvailabilityModule,
     DoctorPatientsModule,
+    DoctorDashboardModule,
+    DoctorPaymentAccountModule,
   ],
 })
 export class DoctorsModule {}

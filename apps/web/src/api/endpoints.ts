@@ -43,10 +43,20 @@ export const endpoints = {
     get: '/doctors/me/profile',
     put: '/doctors/me/profile',
     location: '/doctors/me/location',
+    specialties: '/doctors/me/specialties',
   },
   // Doctor Patients
   doctorPatients: {
     list: '/doctors/me/patients',
+  },
+  doctorDashboard: {
+    overview: '/doctors/me/dashboard/overview',
+    payments: '/doctors/me/payments',
+  },
+  doctorPaymentAccount: {
+    get: '/doctors/me/payment-account',
+    upsert: '/doctors/me/payment-account',
+    disconnect: '/doctors/me/payment-account/disconnect',
   },
   // Consultation Queue
   queue: {
@@ -93,6 +103,9 @@ export const endpoints = {
   // Doctor Search
   doctorSearch: {
     search: '/doctors/search',
+  },
+  payments: {
+    quote: '/payments/quote',
   },
   geo: {
     online: '/doctors/me/geo/online',
