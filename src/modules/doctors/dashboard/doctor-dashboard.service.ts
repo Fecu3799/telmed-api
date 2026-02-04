@@ -156,25 +156,27 @@ export class DoctorDashboardService {
     const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize);
 
     return {
-      items: items.map((item) => ({
-        id: item.id,
-        status: item.status,
-        grossAmountCents: item.grossAmountCents,
-        platformFeeCents: item.platformFeeCents,
-        totalChargedCents: item.totalChargedCents,
-        currency: item.currency,
-        createdAt: item.createdAt.toISOString(),
-        paidAt:
-          item.status === PaymentStatus.paid
-            ? item.updatedAt.toISOString()
+      items: items.map((item) => {
+        return {
+          id: item.id,
+          status: item.status,
+          grossAmountCents: item.grossAmountCents,
+          platformFeeCents: item.platformFeeCents,
+          totalChargedCents: item.totalChargedCents,
+          currency: item.currency,
+          createdAt: item.createdAt.toISOString(),
+          paidAt:
+            item.status === PaymentStatus.paid
+              ? item.updatedAt.toISOString()
+              : null,
+          kind: item.kind,
+          appointmentId: item.appointmentId ?? null,
+          queueItemId: item.queueItemId ?? null,
+          patient: item.patient
+            ? { id: item.patient.id, displayName: item.patient.displayName }
             : null,
-        kind: item.kind,
-        appointmentId: item.appointmentId ?? null,
-        queueItemId: item.queueItemId ?? null,
-        patient: item.patient
-          ? { id: item.patient.id, displayName: item.patient.displayName }
-          : null,
-      })),
+        };
+      }),
       pageInfo: {
         page,
         pageSize,

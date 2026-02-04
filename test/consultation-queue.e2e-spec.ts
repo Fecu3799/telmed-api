@@ -472,7 +472,26 @@ describe('Consultation queue (e2e)', () => {
       .expect(201);
 
     expect(rejectResponse.body.status).toBe('rejected');
-    expect(rejectResponse.body.reason).toBe('No disponible');
+    expect(rejectResponse.body.reason).toBe('Dolor agudo');
+    expect(rejectResponse.body.rejectionReason).toBe('No disponible');
+
+    const thirdQueue = await request(httpServer(app))
+      .post('/api/v1/consultations/queue')
+      .set('Authorization', `Bearer ${otherPatient.accessToken}`)
+      .send({ doctorUserId, reason: 'Fiebre alta' })
+      .expect(201);
+
+    const thirdQueueId = thirdQueue.body.id as string;
+
+    const rejectWithoutReason = await request(httpServer(app))
+      .post(`/api/v1/consultations/queue/${thirdQueueId}/reject`)
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .send({})
+      .expect(201);
+
+    expect(rejectWithoutReason.body.status).toBe('rejected');
+    expect(rejectWithoutReason.body.reason).toBe('Fiebre alta');
+    expect(rejectWithoutReason.body.rejectionReason).toBeNull();
   });
 
   it('orders queue with accepted, ontime, early, walk-ins, expired', async () => {

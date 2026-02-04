@@ -261,6 +261,16 @@ describe('Doctor Dashboard (e2e)', () => {
 
     await createPayment({
       prisma,
+      doctorUserId,
+      patientUserId,
+      status: PaymentStatus.cancelled,
+      grossAmountCents: 60000,
+      createdAt: recentDate,
+      updatedAt: recentDate,
+    });
+
+    await createPayment({
+      prisma,
       doctorUserId: otherDoctorUserId,
       patientUserId,
       status: PaymentStatus.paid,
@@ -287,5 +297,14 @@ describe('Doctor Dashboard (e2e)', () => {
 
     expect(pendingResponse.body.items).toHaveLength(1);
     expect(pendingResponse.body.items[0].status).toBe('pending');
+
+    const cancelledResponse = await request(httpServer(app))
+      .get('/api/v1/doctors/me/payments')
+      .query({ range: '30d', status: 'cancelled', page: 1, pageSize: 20 })
+      .set('Authorization', `Bearer ${doctor.accessToken}`)
+      .expect(200);
+
+    expect(cancelledResponse.body.items).toHaveLength(1);
+    expect(cancelledResponse.body.items[0].status).toBe('cancelled');
   });
 });

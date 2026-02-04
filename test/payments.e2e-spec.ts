@@ -17,6 +17,11 @@ import {
   MERCADOPAGO_CLIENT,
   signWebhookPayload,
 } from '../src/modules/payments/mercadopago.client';
+import {
+  computeAppointmentPaymentDeadline,
+  computeEmergencyPaymentDeadline,
+  computeTimeLeftSeconds,
+} from '../src/modules/payments/domain/payment-deadlines';
 import { PrismaService } from '../src/infra/prisma/prisma.service';
 import { resetDb } from './helpers/reset-db';
 import { ensureTestEnv } from './helpers/ensure-test-env';
@@ -87,6 +92,24 @@ async function createPatientIdentity(app: INestApplication, token: string) {
       phone: '+5491100000000',
     })
     .expect(200);
+}
+
+async function setSchedulingConfig(
+  prisma: PrismaService,
+  doctorUserId: string,
+  leadTimeHours: number,
+) {
+  await prisma.doctorSchedulingConfig.upsert({
+    where: { userId: doctorUserId },
+    create: {
+      userId: doctorUserId,
+      slotDurationMinutes: 20,
+      leadTimeHours,
+      horizonDays: 60,
+      timezone: 'UTC',
+    },
+    update: { leadTimeHours, timezone: 'UTC' },
+  });
 }
 
 async function setAvailabilityRules(app: INestApplication, token: string) {
@@ -165,12 +188,13 @@ describe('Payments (e2e)', () => {
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
     await setAvailabilityRules(app, doctor.accessToken);
+    await setSchedulingConfig(prisma, doctorUserId, 0);
 
     const patient = await registerAndLogin(app, 'patient');
     await createPatientIdentity(app, patient.accessToken);
 
-    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
-    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+    const from = new Date(fakeClock.now().getTime() + 2 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 4 * 60 * 60 * 1000);
 
     const availability = await request(httpServer(app))
       .get(`/api/v1/doctors/${doctorUserId}/availability`)
@@ -274,12 +298,13 @@ describe('Payments (e2e)', () => {
     const doctorUserId = await getUserId(app, doctor.accessToken);
     await createDoctorProfile(app, doctor.accessToken);
     await setAvailabilityRules(app, doctor.accessToken);
+    await setSchedulingConfig(prisma, doctorUserId, 0);
 
     const patient = await registerAndLogin(app, 'patient');
     await createPatientIdentity(app, patient.accessToken);
 
-    const from = new Date(fakeClock.now().getTime() + 25 * 60 * 60 * 1000);
-    const to = new Date(fakeClock.now().getTime() + 27 * 60 * 60 * 1000);
+    const from = new Date(fakeClock.now().getTime() + 2 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 4 * 60 * 60 * 1000);
 
     const availability = await request(httpServer(app))
       .get(`/api/v1/doctors/${doctorUserId}/availability`)
@@ -344,6 +369,12 @@ describe('Payments (e2e)', () => {
       .send({ kind: 'appointment', appointmentId })
       .expect(200);
 
+    const now: Date = fakeClock.now();
+    const expectedDeadline: Date = computeAppointmentPaymentDeadline({
+      now,
+      appointmentStartsAt: new Date(startAt),
+    });
+
     expect(quote.body).toMatchObject({
       kind: 'appointment',
       referenceId: appointmentId,
@@ -352,6 +383,8 @@ describe('Payments (e2e)', () => {
       platformFeeCents: 18000,
       totalChargedCents: 138000,
       currency: 'ARS',
+      paymentDeadlineAt: expectedDeadline.toISOString(),
+      timeLeftSeconds: computeTimeLeftSeconds(expectedDeadline, now),
     });
 
     const otherPatient = await registerAndLogin(app, 'patient');
@@ -373,6 +406,53 @@ describe('Payments (e2e)', () => {
       .set('Authorization', `Bearer ${patient.accessToken}`)
       .send({ kind: 'appointment', appointmentId })
       .expect(409);
+  });
+
+  it('quotes appointment payment deadline for <24h window', async () => {
+    const doctor = await registerAndLogin(app, 'doctor');
+    const doctorUserId = await getUserId(app, doctor.accessToken);
+    await createDoctorProfile(app, doctor.accessToken);
+    await setAvailabilityRules(app, doctor.accessToken);
+    await setSchedulingConfig(prisma, doctorUserId, 0);
+
+    const patient = await registerAndLogin(app, 'patient');
+    await createPatientIdentity(app, patient.accessToken);
+
+    const from = new Date(fakeClock.now().getTime() + 2 * 60 * 60 * 1000);
+    const to = new Date(fakeClock.now().getTime() + 4 * 60 * 60 * 1000);
+
+    const availability = await request(httpServer(app))
+      .get(`/api/v1/doctors/${doctorUserId}/availability`)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const startAt = availability.body.items[0]?.startAt as string;
+    expect(startAt).toBeTruthy();
+
+    const createAppointment = await request(httpServer(app))
+      .post('/api/v1/appointments')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ doctorUserId, startAt })
+      .expect(201);
+
+    const appointmentId = createAppointment.body.appointment.id as string;
+
+    const quote = await request(httpServer(app))
+      .post('/api/v1/payments/quote')
+      .set('Authorization', `Bearer ${patient.accessToken}`)
+      .send({ kind: 'appointment', appointmentId })
+      .expect(200);
+
+    const now: Date = fakeClock.now();
+    const expectedDeadline: Date = computeAppointmentPaymentDeadline({
+      now,
+      appointmentStartsAt: new Date(startAt),
+    });
+
+    expect(quote.body.paymentDeadlineAt).toBe(expectedDeadline.toISOString());
+    expect(quote.body.timeLeftSeconds).toBe(
+      computeTimeLeftSeconds(expectedDeadline, now),
+    );
   });
 
   it('quotes emergency payment when enabled and blocks invalid state', async () => {
@@ -408,6 +488,8 @@ describe('Payments (e2e)', () => {
       .send({ kind: 'emergency', queueItemId: queueId })
       .expect(200);
 
+    const now: Date = fakeClock.now();
+    const expectedDeadline: Date = computeEmergencyPaymentDeadline(now);
     expect(quote.body).toMatchObject({
       kind: 'emergency',
       referenceId: queueId,
@@ -416,6 +498,8 @@ describe('Payments (e2e)', () => {
       platformFeeCents: 18000,
       totalChargedCents: 138000,
       currency: 'ARS',
+      paymentDeadlineAt: expectedDeadline.toISOString(),
+      timeLeftSeconds: computeTimeLeftSeconds(expectedDeadline, now),
     });
 
     const otherPatient = await registerAndLogin(app, 'patient');

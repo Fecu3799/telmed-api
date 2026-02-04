@@ -20,6 +20,8 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
 import type { Actor } from '../../common/types/actor.type';
 import { PaymentsService } from '../payments/payments.service';
+import { buildPaymentWindowExpiredError } from '../payments/payment-errors';
+import { computeAppointmentPaymentDeadline } from '../payments/domain/payment-deadlines';
 import { PatientsIdentityService } from '../patients-identity/patients-identity.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
@@ -169,6 +171,7 @@ export class AppointmentsService {
         doctorUserId,
         patientUserId,
         appointmentId,
+        appointmentStartsAt: startAt,
         grossAmountCents: doctorProfile.priceCents,
         currency: doctorProfile.currency,
         idempotencyKey,
@@ -461,19 +464,43 @@ export class AppointmentsService {
     }
 
     // Check if payment window expired
-    if (
-      appointment.paymentExpiresAt &&
-      this.clock.now() > appointment.paymentExpiresAt
-    ) {
-      // Expire the appointment
-      await this.prisma.appointment.update({
-        where: { id: appointmentId },
-        data: {
-          status: AppointmentStatus.cancelled,
-          cancelledAt: this.clock.now(),
-        },
+    const now = this.clock.now();
+    const deadline =
+      appointment.paymentExpiresAt ??
+      computeAppointmentPaymentDeadline({
+        now,
+        appointmentStartsAt: appointment.startAt,
       });
-      throw new ConflictException('Payment window expired');
+
+    if (appointment.startAt <= now || now >= deadline) {
+      const payment = await this.prisma.payment.findFirst({
+        where: {
+          appointmentId: appointment.id,
+          kind: PaymentKind.appointment,
+        },
+        select: { id: true },
+      });
+
+      if (payment) {
+        await this.paymentsService.markPaymentExpired({
+          paymentId: payment.id,
+          traceId,
+          reason: 'payment_window_expired',
+        });
+      } else {
+        await this.prisma.appointment.update({
+          where: { id: appointmentId },
+          data: {
+            status: AppointmentStatus.cancelled,
+            cancelledAt: this.clock.now(),
+          },
+        });
+      }
+
+      throw buildPaymentWindowExpiredError({
+        paymentId: payment?.id ?? null,
+        kind: PaymentKind.appointment,
+      });
     }
 
     const doctorProfile = await this.prisma.doctorProfile.findUnique({
@@ -527,6 +554,7 @@ export class AppointmentsService {
         doctorUserId: appointment.doctorUserId,
         patientUserId: appointment.patient.userId,
         appointmentId: appointment.id,
+        appointmentStartsAt: appointment.startAt,
         grossAmountCents: doctorProfile.priceCents,
         currency: doctorProfile.currency,
         idempotencyKey,
@@ -601,13 +629,27 @@ export class AppointmentsService {
       }
     }
 
-    const updated = await this.prisma.appointment.update({
-      where: { id },
-      data: {
-        status: AppointmentStatus.cancelled,
-        cancelledAt: this.clock.now(),
-        cancellationReason: dto.reason ?? null,
-      },
+    const now = this.clock.now();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedAppointment = await tx.appointment.update({
+        where: { id },
+        data: {
+          status: AppointmentStatus.cancelled,
+          cancelledAt: now,
+          cancellationReason: dto.reason ?? null,
+        },
+      });
+
+      await tx.payment.updateMany({
+        where: {
+          appointmentId: id,
+          kind: PaymentKind.appointment,
+          status: PaymentStatus.pending,
+        },
+        data: { status: PaymentStatus.cancelled },
+      });
+
+      return updatedAppointment;
     });
 
     // Notify both doctor and patient about appointment changes.
@@ -704,11 +746,14 @@ export class AppointmentsService {
     expiresAt: Date;
     status: string;
   }) {
+    const now = this.clock.now();
+    const isExpired =
+      payment.status === PaymentStatus.pending && payment.expiresAt < now;
     return {
       id: payment.id,
       checkoutUrl: payment.checkoutUrl,
       expiresAt: payment.expiresAt,
-      status: payment.status,
+      status: isExpired ? PaymentStatus.expired : payment.status,
     };
   }
 }

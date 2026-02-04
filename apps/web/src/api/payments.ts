@@ -3,7 +3,7 @@ import { endpoints } from './endpoints';
 
 export interface PaymentStatusResponse {
   queueItemId: string;
-  paymentStatus: 'paid' | 'pending' | 'failed' | 'expired';
+  paymentStatus: 'paid' | 'pending' | 'failed' | 'expired' | 'cancelled';
   provider: string;
   mpPaymentId?: string | null;
   providerStatus?: string | null;
@@ -13,7 +13,8 @@ export interface PaymentStatusResponse {
     | 'paid'
     | 'provider_processing'
     | 'rejected_or_failed'
-    | 'expired';
+    | 'expired'
+    | 'cancelled';
   userFacingMessage: {
     title: string;
     description: string;
@@ -42,6 +43,8 @@ export interface PaymentQuoteResponse {
   totalChargedCents: number;
   currency: string;
   doctorDisplayName?: string | null;
+  paymentDeadlineAt: string;
+  timeLeftSeconds: number;
 }
 
 export async function getPaymentQuote(

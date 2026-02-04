@@ -7,6 +7,7 @@ export type PaymentStatus =
   | 'pending'
   | 'failed'
   | 'expired'
+  | 'cancelled'
   | 'refunded';
 
 export interface DoctorDashboardOverview {

@@ -49,6 +49,7 @@ export class SpecialtiesService {
         id: true,
         name: true,
         slug: true,
+        sortOrder: true,
         isActive: true,
       },
       take,

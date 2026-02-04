@@ -174,11 +174,27 @@ export class DoctorProfilesService {
       include: { specialty: true },
     });
 
+    const all = await this.prisma.specialty.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        sortOrder: true,
+        isActive: true,
+      },
+    });
+
+    const selectedIds = specialties.map((item) => item.specialty.id);
+
     return {
       specialties: specialties.map((item) => ({
         id: item.specialty.id,
         name: item.specialty.name,
       })),
+      all,
+      selectedIds,
     };
   }
 

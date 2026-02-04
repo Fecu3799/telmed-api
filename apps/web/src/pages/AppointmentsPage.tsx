@@ -29,6 +29,7 @@ import {
 } from '../api/payments';
 import { type ProblemDetails } from '../api/http';
 import { notificationsSocket } from '../api/notifications-socket';
+import { formatArgentinaDateTime } from '../lib/datetime';
 
 // Badge component matching ClinicalProfileListSection pattern
 function Badge({
@@ -138,6 +139,9 @@ export function AppointmentsPage() {
 
   const [dateRange, setDateRange] = useState(() => getDefaultDateRange());
   const [showDebug, setShowDebug] = useState(false);
+  const [activeListTab, setActiveListTab] = useState<
+    'appointments' | 'emergencies'
+  >('appointments');
   const [selectedEmergencyId, setSelectedEmergencyId] = useState<string | null>(
     null,
   );
@@ -175,6 +179,9 @@ export function AppointmentsPage() {
   );
   const [quoteError, setQuoteError] = useState<ProblemDetails | null>(null);
   const [confirmingQuote, setConfirmingQuote] = useState(false);
+  const [quoteCountdownSeconds, setQuoteCountdownSeconds] = useState<
+    number | null
+  >(null);
 
   // Emergency reject state
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -358,6 +365,26 @@ export function AppointmentsPage() {
       setQuotingId(null);
     }
   };
+
+  useEffect(() => {
+    if (!paymentQuote?.paymentDeadlineAt) {
+      setQuoteCountdownSeconds(null);
+      return;
+    }
+
+    const deadlineMs = new Date(paymentQuote.paymentDeadlineAt).getTime();
+    const tick = () => {
+      const secondsLeft = Math.max(
+        0,
+        Math.floor((deadlineMs - Date.now()) / 1000),
+      );
+      setQuoteCountdownSeconds(secondsLeft);
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [paymentQuote?.paymentDeadlineAt]);
 
   const handleConfirmQuote = async () => {
     if (!paymentQuote || !getActiveToken() || activeRole !== 'patient') {
@@ -590,6 +617,12 @@ export function AppointmentsPage() {
     return null;
   }
 
+  const quoteSecondsLeft =
+    paymentQuote && paymentQuote.paymentDeadlineAt
+      ? (quoteCountdownSeconds ?? paymentQuote.timeLeftSeconds)
+      : null;
+  const isQuoteExpired = quoteSecondsLeft !== null && quoteSecondsLeft <= 0;
+
   return (
     <div style={{ padding: '16px', maxWidth: '1200px', margin: '0 auto' }}>
       <div
@@ -646,81 +679,129 @@ export function AppointmentsPage() {
           </button>
         </div>
       </div>
-
-      {/* Date Range Selector */}
       <div
         style={{
-          marginBottom: '24px',
-          padding: '16px',
-          backgroundColor: '#f5f5f5',
-          borderRadius: '4px',
+          display: 'flex',
+          gap: '8px',
+          marginBottom: '16px',
+          flexWrap: 'wrap',
         }}
       >
-        <label
+        <button
+          onClick={() => setActiveListTab('appointments')}
           style={{
-            display: 'block',
-            marginBottom: '8px',
-            fontWeight: 'bold',
+            padding: '6px 12px',
+            borderRadius: '999px',
+            border:
+              activeListTab === 'appointments'
+                ? '1px solid #0d6efd'
+                : '1px solid #ddd',
+            backgroundColor:
+              activeListTab === 'appointments' ? '#e7f1ff' : '#fff',
+            fontWeight: activeListTab === 'appointments' ? 600 : 500,
+            cursor: 'pointer',
           }}
         >
-          Rango de Fechas
-        </label>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <input
-            type="date"
-            value={isoToLocalDate(dateRange.from)}
-            onChange={(e) => {
-              const newDate = new Date(e.target.value + 'T00:00:00');
-              setDateRange({
-                from: newDate.toISOString(),
-                to: dateRange.to,
-              });
-              setPage(1);
-            }}
-            style={{
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          />
-          <span>hasta</span>
-          <input
-            type="date"
-            value={isoToLocalDate(dateRange.to)}
-            onChange={(e) => {
-              const newDate = new Date(e.target.value + 'T23:59:59');
-              setDateRange({
-                from: dateRange.from,
-                to: newDate.toISOString(),
-              });
-              setPage(1);
-            }}
-            style={{
-              padding: '8px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-            }}
-          />
-        </div>
+          Turnos
+        </button>
+        <button
+          onClick={() => setActiveListTab('emergencies')}
+          style={{
+            padding: '6px 12px',
+            borderRadius: '999px',
+            border:
+              activeListTab === 'emergencies'
+                ? '1px solid #0d6efd'
+                : '1px solid #ddd',
+            backgroundColor:
+              activeListTab === 'emergencies' ? '#e7f1ff' : '#fff',
+            fontWeight: activeListTab === 'emergencies' ? 600 : 500,
+            cursor: 'pointer',
+          }}
+        >
+          Emergencias
+        </button>
       </div>
 
-      {/* Error state */}
-      {error && error.status !== 401 && error.status !== 403 && (
+      {/* Date Range Selector */}
+      {activeListTab === 'emergencies' && (
         <div
           style={{
-            marginBottom: '16px',
-            padding: '12px',
-            backgroundColor: '#fee',
-            border: '1px solid #fcc',
+            marginBottom: '24px',
+            padding: '16px',
+            backgroundColor: '#f5f5f5',
             borderRadius: '4px',
-            color: '#c33',
           }}
         >
-          <strong>Error {error.status}:</strong> {error.detail}
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 'bold',
+            }}
+          >
+            Rango de Fechas
+          </label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="date"
+              value={isoToLocalDate(dateRange.from)}
+              onChange={(e) => {
+                const newDate = new Date(e.target.value + 'T00:00:00');
+                setDateRange({
+                  from: newDate.toISOString(),
+                  to: dateRange.to,
+                });
+                setPage(1);
+              }}
+              style={{
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
+            />
+            <span>hasta</span>
+            <input
+              type="date"
+              value={isoToLocalDate(dateRange.to)}
+              onChange={(e) => {
+                const newDate = new Date(e.target.value + 'T23:59:59');
+                setDateRange({
+                  from: dateRange.from,
+                  to: newDate.toISOString(),
+                });
+                setPage(1);
+              }}
+              style={{
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
+            />
+          </div>
         </div>
       )}
 
-      {emergenciesError && (
+      {/* Error state */}
+      {activeListTab === 'appointments' &&
+        error &&
+        error.status !== 401 &&
+        error.status !== 403 && (
+          <div
+            style={{
+              marginBottom: '16px',
+              padding: '12px',
+              backgroundColor: '#fee',
+              border: '1px solid #fcc',
+              borderRadius: '4px',
+              color: '#c33',
+            }}
+          >
+            <strong>Error {error.status}:</strong> {error.detail}
+          </div>
+        )}
+
+      {activeListTab === 'emergencies' && emergenciesError && (
         <div
           style={{
             marginBottom: '16px',
@@ -786,654 +867,254 @@ export function AppointmentsPage() {
         </div>
       )}
 
-      <div
-        style={{
-          marginBottom: '24px',
-          padding: '16px',
-          backgroundColor: '#f5f5f5',
-          borderRadius: '4px',
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Emergencias</h2>
-        {emergenciesLoading ? (
-          <div style={{ textAlign: 'center', padding: '16px' }}>
-            Cargando emergencias...
-          </div>
-        ) : emergencies.length === 0 ? (
-          <div style={{ color: '#666' }}>No hay emergencias.</div>
-        ) : (
-          <div
-            style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
-          >
-            {emergencies.map((emergency) => {
-              // Helper functions for badges
-              const getConsultationStatusBadge = () => {
-                if (!emergency.consultation) {
-                  return <Badge label="Consulta no iniciada" tone="neutral" />;
-                }
-                if (emergency.consultation.status === 'in_progress') {
-                  return <Badge label="En curso" tone="info" />;
-                }
-                if (emergency.consultation.status === 'closed') {
-                  return <Badge label="Finalizada" tone="success" />;
-                }
-                return <Badge label="Borrador" tone="neutral" />;
-              };
-
-              const getQueueStatusBadge = () => {
-                const statusMap: Record<
-                  string,
-                  {
-                    label: string;
-                    tone: 'success' | 'warning' | 'error' | 'info' | 'neutral';
+      {activeListTab === 'emergencies' && (
+        <div
+          style={{
+            marginBottom: '24px',
+            padding: '16px',
+            backgroundColor: '#f5f5f5',
+            borderRadius: '4px',
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Emergencias</h2>
+          {emergenciesLoading ? (
+            <div style={{ textAlign: 'center', padding: '16px' }}>
+              Cargando emergencias...
+            </div>
+          ) : emergencies.length === 0 ? (
+            <div style={{ color: '#666' }}>No hay emergencias.</div>
+          ) : (
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+            >
+              {emergencies.map((emergency) => {
+                // Helper functions for badges
+                const getConsultationStatusBadge = () => {
+                  if (!emergency.consultation) {
+                    return (
+                      <Badge label="Consulta no iniciada" tone="neutral" />
+                    );
                   }
-                > = {
-                  queued: { label: 'En cola', tone: 'warning' },
-                  accepted: { label: 'Aceptada', tone: 'info' },
-                  rejected: { label: 'Rechazada', tone: 'error' },
-                  cancelled: { label: 'Cancelada', tone: 'error' },
-                  expired: { label: 'Expirada', tone: 'error' },
-                };
-                const mapped = statusMap[emergency.queueStatus] || {
-                  label: emergency.queueStatus,
-                  tone: 'neutral' as const,
-                };
-                return <Badge label={mapped.label} tone={mapped.tone} />;
-              };
-
-              const getPaymentStatusBadge = () => {
-                const statusMap: Record<
-                  string,
-                  {
-                    label: string;
-                    tone: 'success' | 'warning' | 'error' | 'info' | 'neutral';
+                  if (emergency.consultation.status === 'in_progress') {
+                    return <Badge label="En curso" tone="info" />;
                   }
-                > = {
-                  not_started: { label: 'Pago: no iniciado', tone: 'neutral' },
-                  pending: { label: 'Pago: pendiente', tone: 'warning' },
-                  paid: { label: 'Pago: OK', tone: 'success' },
-                  expired: { label: 'Pago: expirado', tone: 'error' },
-                  failed: { label: 'Pago: fallido', tone: 'error' },
+                  if (emergency.consultation.status === 'closed') {
+                    return <Badge label="Finalizada" tone="success" />;
+                  }
+                  return <Badge label="Borrador" tone="neutral" />;
                 };
-                const mapped = statusMap[emergency.paymentStatus] || {
-                  label: `Pago: ${emergency.paymentStatus}`,
-                  tone: 'neutral' as const,
-                };
-                return <Badge label={mapped.label} tone={mapped.tone} />;
-              };
 
-              return (
-                <div
-                  key={emergency.id}
-                  onClick={() => setSelectedEmergencyId(emergency.id)}
-                  style={{
-                    border: '1px solid #ddd',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    backgroundColor: 'white',
-                    cursor: 'pointer',
-                  }}
-                >
+                const getQueueStatusBadge = () => {
+                  const statusMap: Record<
+                    string,
+                    {
+                      label: string;
+                      tone:
+                        | 'success'
+                        | 'warning'
+                        | 'error'
+                        | 'info'
+                        | 'neutral';
+                    }
+                  > = {
+                    queued: { label: 'En cola', tone: 'warning' },
+                    accepted: { label: 'Aceptada', tone: 'info' },
+                    rejected: { label: 'Rechazada', tone: 'error' },
+                    cancelled: { label: 'Cancelada', tone: 'error' },
+                    expired: { label: 'Expirada', tone: 'error' },
+                  };
+                  const mapped = statusMap[emergency.queueStatus] || {
+                    label: emergency.queueStatus,
+                    tone: 'neutral' as const,
+                  };
+                  return <Badge label={mapped.label} tone={mapped.tone} />;
+                };
+
+                const getPaymentStatusBadge = () => {
+                  const statusMap: Record<
+                    string,
+                    {
+                      label: string;
+                      tone:
+                        | 'success'
+                        | 'warning'
+                        | 'error'
+                        | 'info'
+                        | 'neutral';
+                    }
+                  > = {
+                    not_started: {
+                      label: 'Pago: no iniciado',
+                      tone: 'neutral',
+                    },
+                    pending: { label: 'Pago: pendiente', tone: 'warning' },
+                    paid: { label: 'Pago: OK', tone: 'success' },
+                    expired: { label: 'Pago: expirado', tone: 'error' },
+                    cancelled: { label: 'Pago: cancelado', tone: 'error' },
+                    failed: { label: 'Pago: fallido', tone: 'error' },
+                  };
+                  const mapped = statusMap[emergency.paymentStatus] || {
+                    label: `Pago: ${emergency.paymentStatus}`,
+                    tone: 'neutral' as const,
+                  };
+                  return <Badge label={mapped.label} tone={mapped.tone} />;
+                };
+
+                return (
                   <div
+                    key={emergency.id}
+                    onClick={() => setSelectedEmergencyId(emergency.id)}
                     style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: '8px',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      backgroundColor: 'white',
+                      cursor: 'pointer',
                     }}
                   >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ marginBottom: '6px' }}>
-                        <strong>Fecha:</strong>{' '}
-                        {formatDateTime(emergency.createdAt)}
-                      </div>
-                      <div style={{ marginBottom: '6px' }}>
-                        <strong>
-                          {activeRole === 'doctor' ? 'Paciente' : 'Doctor'}:
-                        </strong>{' '}
-                        {emergency.counterparty?.displayName || 'Usuario'}
-                      </div>
-                      {emergency.reason && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '8px',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
                         <div style={{ marginBottom: '6px' }}>
-                          <strong>Motivo:</strong> {emergency.reason}
+                          <strong>Fecha:</strong>{' '}
+                          {formatDateTime(emergency.createdAt)}
                         </div>
-                      )}
-                      {emergency.specialty && (
-                        <div style={{ marginBottom: '6px', color: '#666' }}>
-                          <strong>Especialidad:</strong> {emergency.specialty}
+                        <div style={{ marginBottom: '6px' }}>
+                          <strong>
+                            {activeRole === 'doctor' ? 'Paciente' : 'Doctor'}:
+                          </strong>{' '}
+                          {emergency.counterparty?.displayName || 'Usuario'}
                         </div>
-                      )}
-                      {emergency.priceCents !== null &&
-                        emergency.priceCents !== undefined && (
+                        {emergency.reason && (
                           <div style={{ marginBottom: '6px' }}>
-                            <strong>Precio:</strong>{' '}
-                            {(emergency.priceCents / 100).toFixed(2)}
+                            <strong>Motivo:</strong> {emergency.reason}
                           </div>
                         )}
-                      {emergency.consultation?.startedAt && (
-                        <div
-                          style={{
-                            marginBottom: '6px',
-                            fontSize: '13px',
-                            color: '#666',
-                          }}
-                        >
-                          <strong>Iniciada:</strong>{' '}
-                          {formatDateTime(emergency.consultation.startedAt)}
-                        </div>
-                      )}
-                      {emergency.consultation?.closedAt && (
-                        <div
-                          style={{
-                            marginBottom: '6px',
-                            fontSize: '13px',
-                            color: '#666',
-                          }}
-                        >
-                          <strong>Cerrada:</strong>{' '}
-                          {formatDateTime(emergency.consultation.closedAt)}
-                        </div>
-                      )}
+                        {emergency.specialty && (
+                          <div style={{ marginBottom: '6px', color: '#666' }}>
+                            <strong>Especialidad:</strong> {emergency.specialty}
+                          </div>
+                        )}
+                        {emergency.priceCents !== null &&
+                          emergency.priceCents !== undefined && (
+                            <div style={{ marginBottom: '6px' }}>
+                              <strong>Precio:</strong>{' '}
+                              {(emergency.priceCents / 100).toFixed(2)}
+                            </div>
+                          )}
+                        {emergency.consultation?.startedAt && (
+                          <div
+                            style={{
+                              marginBottom: '6px',
+                              fontSize: '13px',
+                              color: '#666',
+                            }}
+                          >
+                            <strong>Iniciada:</strong>{' '}
+                            {formatDateTime(emergency.consultation.startedAt)}
+                          </div>
+                        )}
+                        {emergency.consultation?.closedAt && (
+                          <div
+                            style={{
+                              marginBottom: '6px',
+                              fontSize: '13px',
+                              color: '#666',
+                            }}
+                          >
+                            <strong>Cerrada:</strong>{' '}
+                            {formatDateTime(emergency.consultation.closedAt)}
+                          </div>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          alignItems: 'flex-end',
+                        }}
+                      >
+                        {getConsultationStatusBadge()}
+                        {getQueueStatusBadge()}
+                        {getPaymentStatusBadge()}
+                      </div>
                     </div>
                     <div
                       style={{
                         display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                        alignItems: 'flex-end',
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                        marginTop: '8px',
                       }}
                     >
-                      {getConsultationStatusBadge()}
-                      {getQueueStatusBadge()}
-                      {getPaymentStatusBadge()}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '8px',
-                      flexWrap: 'wrap',
-                      marginTop: '8px',
-                    }}
-                  >
-                    {activeRole === 'doctor' &&
-                      emergency.queueStatus === 'queued' && (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleAcceptEmergency(emergency.id);
-                            }}
-                            style={{
-                              padding: '8px 16px',
-                              backgroundColor: '#28a745',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Aceptar
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowRejectModal(emergency.id);
-                            }}
-                            style={{
-                              padding: '8px 16px',
-                              backgroundColor: '#dc3545',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Rechazar
-                          </button>
-                        </>
-                      )}
-                    {activeRole === 'doctor' && emergency.canStart && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleStartEmergency(emergency.id);
-                        }}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: '#007bff',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Start
-                      </button>
-                    )}
-                    {emergency.consultation?.status === 'in_progress' && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/room/${emergency.consultation!.id}`);
-                        }}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: '#28a745',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Entrar a consulta
-                      </button>
-                    )}
-                    {activeRole === 'patient' &&
-                      emergency.paymentStatus === 'pending' && (
+                      {activeRole === 'doctor' &&
+                        emergency.queueStatus === 'queued' && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleAcceptEmergency(emergency.id);
+                              }}
+                              style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#28a745',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Aceptar
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowRejectModal(emergency.id);
+                              }}
+                              style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#dc3545',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Rechazar
+                            </button>
+                          </>
+                        )}
+                      {activeRole === 'doctor' && emergency.canStart && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            void handleQuoteEmergency(emergency.id);
+                            void handleStartEmergency(emergency.id);
                           }}
-                          disabled={
-                            quotingId === emergency.id || confirmingQuote
-                          }
                           style={{
                             padding: '8px 16px',
                             backgroundColor: '#007bff',
                             color: 'white',
                             border: 'none',
                             borderRadius: '4px',
-                            cursor:
-                              quotingId === emergency.id
-                                ? 'not-allowed'
-                                : 'pointer',
+                            cursor: 'pointer',
                           }}
                         >
-                          {quotingId === emergency.id
-                            ? 'Calculando...'
-                            : 'Pagar'}
+                          Start
                         </button>
                       )}
-                  </div>
-                  {activeRole === 'doctor' &&
-                    showRejectModal === emergency.id && (
-                      <div
-                        style={{
-                          marginTop: '12px',
-                          padding: '12px',
-                          backgroundColor: '#f5f5f5',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        <label
-                          style={{
-                            display: 'block',
-                            marginBottom: '8px',
-                            fontWeight: 'bold',
-                          }}
-                        >
-                          Motivo de rechazo (opcional):
-                        </label>
-                        <textarea
-                          value={rejectReason}
-                          onChange={(e) => setRejectReason(e.target.value)}
-                          placeholder="Ej: No disponible"
-                          style={{
-                            width: '100%',
-                            padding: '8px',
-                            border: '1px solid #ccc',
-                            borderRadius: '4px',
-                            marginBottom: '8px',
-                          }}
-                        />
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleRejectEmergency(emergency.id);
-                            }}
-                            disabled={rejectingId === emergency.id}
-                            style={{
-                              padding: '8px 16px',
-                              backgroundColor: '#dc3545',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor:
-                                rejectingId === emergency.id
-                                  ? 'not-allowed'
-                                  : 'pointer',
-                            }}
-                          >
-                            {rejectingId === emergency.id
-                              ? 'Rechazando...'
-                              : 'Confirmar Rechazo'}
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowRejectModal(null);
-                              setRejectReason('');
-                            }}
-                            disabled={rejectingId === emergency.id}
-                            style={{
-                              padding: '8px 16px',
-                              backgroundColor: '#6c757d',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor:
-                                rejectingId === emergency.id
-                                  ? 'not-allowed'
-                                  : 'pointer',
-                            }}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {emergenciesPageInfo && emergenciesPageInfo.total > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: '12px',
-            }}
-          >
-            <button
-              onClick={() => setEmergenciesPage(emergenciesPage - 1)}
-              disabled={!emergenciesPageInfo.hasPrevPage}
-              style={{
-                padding: '6px 12px',
-                backgroundColor: emergenciesPageInfo.hasPrevPage
-                  ? '#6c757d'
-                  : '#ccc',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: emergenciesPageInfo.hasPrevPage
-                  ? 'pointer'
-                  : 'not-allowed',
-              }}
-            >
-              Anterior
-            </button>
-            <span>Página {emergenciesPageInfo.page}</span>
-            <button
-              onClick={() => setEmergenciesPage(emergenciesPage + 1)}
-              disabled={!emergenciesPageInfo.hasNextPage}
-              style={{
-                padding: '6px 12px',
-                backgroundColor: emergenciesPageInfo.hasNextPage
-                  ? '#007bff'
-                  : '#ccc',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: emergenciesPageInfo.hasNextPage
-                  ? 'pointer'
-                  : 'not-allowed',
-              }}
-            >
-              Siguiente
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Loading state */}
-      {loading && (
-        <div style={{ textAlign: 'center', padding: '24px' }}>Cargando...</div>
-      )}
-
-      {/* Empty state */}
-      {!loading && appointments.length === 0 && !error && (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '48px',
-            color: '#666',
-          }}
-        >
-          {activeRole === 'patient'
-            ? 'No tienes turnos en este rango de fechas.'
-            : 'No tenés turnos en este rango de fechas.'}
-        </div>
-      )}
-
-      {/* Appointments List */}
-      {!loading && appointments.length > 0 && (
-        <>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-              marginBottom: '24px',
-            }}
-          >
-            {appointments.map((appointment) => {
-              const isPaymentPending =
-                appointment.status === 'pending_payment' &&
-                appointment.paymentExpiresAt &&
-                new Date(appointment.paymentExpiresAt) > new Date();
-              const isPaymentExpired =
-                appointment.status === 'pending_payment' &&
-                appointment.paymentExpiresAt &&
-                new Date(appointment.paymentExpiresAt) <= new Date();
-
-              // Helper functions for badges
-              const getConsultationStatusBadge = () => {
-                if (!appointment.consultation) {
-                  return <Badge label="Consulta no iniciada" tone="neutral" />;
-                }
-                if (appointment.consultation.status === 'in_progress') {
-                  return <Badge label="En curso" tone="info" />;
-                }
-                if (appointment.consultation.status === 'closed') {
-                  return <Badge label="Finalizada" tone="success" />;
-                }
-                return <Badge label="Borrador" tone="neutral" />;
-              };
-
-              const getAppointmentStatusBadge = () => {
-                const statusMap: Record<
-                  string,
-                  {
-                    label: string;
-                    tone: 'success' | 'warning' | 'error' | 'info' | 'neutral';
-                  }
-                > = {
-                  pending_payment: {
-                    label: 'Pendiente de pago',
-                    tone: 'warning',
-                  },
-                  scheduled: { label: 'Programado', tone: 'info' },
-                  cancelled: { label: 'Cancelado', tone: 'error' },
-                };
-                const mapped = statusMap[appointment.status] || {
-                  label: appointment.status,
-                  tone: 'neutral' as const,
-                };
-                return <Badge label={mapped.label} tone={mapped.tone} />;
-              };
-
-              return (
-                <div
-                  key={appointment.id}
-                  style={{
-                    border: '1px solid #ddd',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    backgroundColor: 'white',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: '8px',
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ marginBottom: '8px' }}>
-                        <strong>Fecha:</strong>{' '}
-                        {formatDateTime(appointment.startAt)}
-                      </div>
-                      {activeRole === 'doctor' && (
-                        <div style={{ marginBottom: '8px', color: '#666' }}>
-                          <strong>Paciente ID:</strong>{' '}
-                          {appointment.patientUserId}
-                        </div>
-                      )}
-                      {appointment.consultation?.startedAt && (
-                        <div
-                          style={{
-                            marginBottom: '8px',
-                            fontSize: '13px',
-                            color: '#666',
-                          }}
-                        >
-                          <strong>Iniciada:</strong>{' '}
-                          {formatDateTime(appointment.consultation.startedAt)}
-                        </div>
-                      )}
-                      {appointment.consultation?.closedAt && (
-                        <div
-                          style={{
-                            marginBottom: '8px',
-                            fontSize: '13px',
-                            color: '#666',
-                          }}
-                        >
-                          <strong>Cerrada:</strong>{' '}
-                          {formatDateTime(appointment.consultation.closedAt)}
-                        </div>
-                      )}
-                      {appointment.cancelledAt && (
-                        <div
-                          style={{
-                            marginBottom: '8px',
-                            fontSize: '13px',
-                            color: '#666',
-                          }}
-                        >
-                          <strong>Cancelado:</strong>{' '}
-                          {formatDateTime(appointment.cancelledAt)}
-                          {appointment.cancellationReason && (
-                            <span> - {appointment.cancellationReason}</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                        alignItems: 'flex-end',
-                      }}
-                    >
-                      {getConsultationStatusBadge()}
-                      {getAppointmentStatusBadge()}
-                    </div>
-                  </div>
-                  {isPaymentPending && activeRole === 'patient' && (
-                    <div
-                      style={{
-                        marginBottom: '8px',
-                        padding: '8px',
-                        backgroundColor: '#fff3cd',
-                        border: '1px solid #ffc107',
-                        borderRadius: '4px',
-                        color: '#856404',
-                      }}
-                    >
-                      <strong>⚠️ Pago pendiente</strong>
-                      {appointment.paymentExpiresAt && (
-                        <div style={{ fontSize: '14px', marginTop: '4px' }}>
-                          Vence:{' '}
-                          {new Date(
-                            appointment.paymentExpiresAt,
-                          ).toLocaleString('es-AR')}
-                        </div>
-                      )}
-                      <div style={{ fontSize: '14px', marginTop: '4px' }}>
-                        El pago debe completarse para confirmar el turno. Si ya
-                        realizaste el pago, el estado se actualizará
-                        automáticamente.
-                      </div>
-                      {paymentError &&
-                        paymentError.status === 409 &&
-                        appointment.id === payingId && (
-                          <div
-                            style={{
-                              marginTop: '8px',
-                              padding: '8px',
-                              backgroundColor: '#f8d7da',
-                              border: '1px solid #f5c6cb',
-                              borderRadius: '4px',
-                              color: '#721c24',
-                              fontSize: '14px',
-                            }}
-                          >
-                            {paymentError.detail ||
-                              'El turno ya no es pagable o ya está pagado'}
-                          </div>
-                        )}
-                    </div>
-                  )}
-                  {isPaymentExpired && activeRole === 'patient' && (
-                    <div
-                      style={{
-                        marginBottom: '8px',
-                        padding: '8px',
-                        backgroundColor: '#f8d7da',
-                        border: '1px solid #f5c6cb',
-                        borderRadius: '4px',
-                        color: '#721c24',
-                      }}
-                    >
-                      <strong>❌ Pago expirado</strong>
-                      <div style={{ fontSize: '14px', marginTop: '4px' }}>
-                        El tiempo para realizar el pago ha expirado. El turno
-                        será cancelado automáticamente.
-                      </div>
-                    </div>
-                  )}
-                  {appointment.cancelledAt && (
-                    <div style={{ marginBottom: '8px', color: '#666' }}>
-                      Cancelado: {formatDateTime(appointment.cancelledAt)}
-                      {appointment.cancellationReason && (
-                        <span> - {appointment.cancellationReason}</span>
-                      )}
-                    </div>
-                  )}
-                  {appointment.status !== 'cancelled' && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '8px',
-                        marginTop: '8px',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      {appointment.consultation?.status === 'in_progress' && (
+                      {emergency.consultation?.status === 'in_progress' && (
                         <button
-                          onClick={() =>
-                            navigate(`/room/${appointment.consultation!.id}`)
-                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/room/${emergency.consultation!.id}`);
+                          }}
                           style={{
                             padding: '8px 16px',
                             backgroundColor: '#28a745',
@@ -1446,98 +1127,474 @@ export function AppointmentsPage() {
                           Entrar a consulta
                         </button>
                       )}
-                      {isPaymentPending &&
-                        activeRole === 'patient' &&
-                        !isPaymentExpired && (
+                      {activeRole === 'patient' &&
+                        emergency.paymentStatus === 'pending' && (
                           <button
-                            onClick={() =>
-                              void handleQuoteAppointment(appointment.id)
-                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleQuoteEmergency(emergency.id);
+                            }}
                             disabled={
-                              payingId === appointment.id ||
-                              quotingId === appointment.id ||
-                              confirmingQuote
+                              quotingId === emergency.id || confirmingQuote
                             }
                             style={{
                               padding: '8px 16px',
-                              backgroundColor:
-                                payingId === appointment.id ||
-                                quotingId === appointment.id
-                                  ? '#ccc'
-                                  : '#28a745',
+                              backgroundColor: '#007bff',
                               color: 'white',
                               border: 'none',
                               borderRadius: '4px',
                               cursor:
-                                payingId === appointment.id ||
-                                quotingId === appointment.id
+                                quotingId === emergency.id
                                   ? 'not-allowed'
                                   : 'pointer',
                             }}
                           >
-                            {quotingId === appointment.id
+                            {quotingId === emergency.id
                               ? 'Calculando...'
-                              : payingId === appointment.id
-                                ? 'Abriendo pago...'
-                                : 'Pagar'}
+                              : 'Pagar'}
                           </button>
                         )}
-                      <button
-                        onClick={() => setShowCancelModal(appointment.id)}
-                        disabled={cancellingId === appointment.id}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: '#dc3545',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor:
-                            cancellingId === appointment.id
-                              ? 'not-allowed'
-                              : 'pointer',
-                        }}
-                      >
-                        {cancellingId === appointment.id
-                          ? 'Cancelando...'
-                          : 'Cancelar'}
-                      </button>
                     </div>
-                  )}
+                    {activeRole === 'doctor' &&
+                      showRejectModal === emergency.id && (
+                        <div
+                          style={{
+                            marginTop: '12px',
+                            padding: '12px',
+                            backgroundColor: '#f5f5f5',
+                            borderRadius: '4px',
+                          }}
+                        >
+                          <label
+                            style={{
+                              display: 'block',
+                              marginBottom: '8px',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            Motivo de rechazo (opcional):
+                          </label>
+                          <textarea
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            placeholder="Ej: No disponible"
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #ccc',
+                              borderRadius: '4px',
+                              marginBottom: '8px',
+                            }}
+                          />
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleRejectEmergency(emergency.id);
+                              }}
+                              disabled={rejectingId === emergency.id}
+                              style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#dc3545',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor:
+                                  rejectingId === emergency.id
+                                    ? 'not-allowed'
+                                    : 'pointer',
+                              }}
+                            >
+                              {rejectingId === emergency.id
+                                ? 'Rechazando...'
+                                : 'Confirmar Rechazo'}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowRejectModal(null);
+                                setRejectReason('');
+                              }}
+                              disabled={rejectingId === emergency.id}
+                              style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#6c757d',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor:
+                                  rejectingId === emergency.id
+                                    ? 'not-allowed'
+                                    : 'pointer',
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-                  {/* Cancel Modal */}
-                  {showCancelModal === appointment.id && (
+          {emergenciesPageInfo && emergenciesPageInfo.total > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '12px',
+              }}
+            >
+              <button
+                onClick={() => setEmergenciesPage(emergenciesPage - 1)}
+                disabled={!emergenciesPageInfo.hasPrevPage}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: emergenciesPageInfo.hasPrevPage
+                    ? '#6c757d'
+                    : '#ccc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: emergenciesPageInfo.hasPrevPage
+                    ? 'pointer'
+                    : 'not-allowed',
+                }}
+              >
+                Anterior
+              </button>
+              <span>Página {emergenciesPageInfo.page}</span>
+              <button
+                onClick={() => setEmergenciesPage(emergenciesPage + 1)}
+                disabled={!emergenciesPageInfo.hasNextPage}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: emergenciesPageInfo.hasNextPage
+                    ? '#007bff'
+                    : '#ccc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: emergenciesPageInfo.hasNextPage
+                    ? 'pointer'
+                    : 'not-allowed',
+                }}
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Loading state */}
+      {activeListTab === 'appointments' && loading && (
+        <div style={{ textAlign: 'center', padding: '24px' }}>Cargando...</div>
+      )}
+
+      {/* Empty state */}
+      {activeListTab === 'appointments' &&
+        !loading &&
+        appointments.length === 0 &&
+        !error && (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '48px',
+              color: '#666',
+            }}
+          >
+            {activeRole === 'patient'
+              ? 'No tienes turnos en este rango de fechas.'
+              : 'No tenés turnos en este rango de fechas.'}
+          </div>
+        )}
+
+      {/* Appointments List */}
+      {activeListTab === 'appointments' &&
+        !loading &&
+        appointments.length > 0 && (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                marginBottom: '24px',
+              }}
+            >
+              {appointments.map((appointment) => {
+                const isPaymentPending =
+                  appointment.status === 'pending_payment' &&
+                  appointment.paymentExpiresAt &&
+                  new Date(appointment.paymentExpiresAt) > new Date();
+                const isPaymentExpired =
+                  appointment.status === 'pending_payment' &&
+                  appointment.paymentExpiresAt &&
+                  new Date(appointment.paymentExpiresAt) <= new Date();
+
+                // Helper functions for badges
+                const getConsultationStatusBadge = () => {
+                  if (!appointment.consultation) {
+                    return (
+                      <Badge label="Consulta no iniciada" tone="neutral" />
+                    );
+                  }
+                  if (appointment.consultation.status === 'in_progress') {
+                    return <Badge label="En curso" tone="info" />;
+                  }
+                  if (appointment.consultation.status === 'closed') {
+                    return <Badge label="Finalizada" tone="success" />;
+                  }
+                  return <Badge label="Borrador" tone="neutral" />;
+                };
+
+                const getAppointmentStatusBadge = () => {
+                  const statusMap: Record<
+                    string,
+                    {
+                      label: string;
+                      tone:
+                        | 'success'
+                        | 'warning'
+                        | 'error'
+                        | 'info'
+                        | 'neutral';
+                    }
+                  > = {
+                    pending_payment: {
+                      label: 'Pendiente de pago',
+                      tone: 'warning',
+                    },
+                    scheduled: { label: 'Programado', tone: 'info' },
+                    cancelled: { label: 'Cancelado', tone: 'error' },
+                  };
+                  const mapped = statusMap[appointment.status] || {
+                    label: appointment.status,
+                    tone: 'neutral' as const,
+                  };
+                  return <Badge label={mapped.label} tone={mapped.tone} />;
+                };
+
+                return (
+                  <div
+                    key={appointment.id}
+                    style={{
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      backgroundColor: 'white',
+                    }}
+                  >
                     <div
                       style={{
-                        marginTop: '12px',
-                        padding: '12px',
-                        backgroundColor: '#f5f5f5',
-                        borderRadius: '4px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '8px',
                       }}
                     >
-                      <label
+                      <div style={{ flex: 1 }}>
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Fecha:</strong>{' '}
+                          {formatDateTime(appointment.startAt)}
+                        </div>
+                        {activeRole === 'doctor' && (
+                          <div style={{ marginBottom: '8px', color: '#666' }}>
+                            <strong>Paciente ID:</strong>{' '}
+                            {appointment.patientUserId}
+                          </div>
+                        )}
+                        {appointment.consultation?.startedAt && (
+                          <div
+                            style={{
+                              marginBottom: '8px',
+                              fontSize: '13px',
+                              color: '#666',
+                            }}
+                          >
+                            <strong>Iniciada:</strong>{' '}
+                            {formatDateTime(appointment.consultation.startedAt)}
+                          </div>
+                        )}
+                        {appointment.consultation?.closedAt && (
+                          <div
+                            style={{
+                              marginBottom: '8px',
+                              fontSize: '13px',
+                              color: '#666',
+                            }}
+                          >
+                            <strong>Cerrada:</strong>{' '}
+                            {formatDateTime(appointment.consultation.closedAt)}
+                          </div>
+                        )}
+                        {appointment.cancelledAt && (
+                          <div
+                            style={{
+                              marginBottom: '8px',
+                              fontSize: '13px',
+                              color: '#666',
+                            }}
+                          >
+                            <strong>Cancelado:</strong>{' '}
+                            {formatDateTime(appointment.cancelledAt)}
+                            {appointment.cancellationReason && (
+                              <span> - {appointment.cancellationReason}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div
                         style={{
-                          display: 'block',
-                          marginBottom: '8px',
-                          fontWeight: 'bold',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          alignItems: 'flex-end',
                         }}
                       >
-                        Motivo de cancelación (opcional):
-                      </label>
-                      <textarea
-                        value={cancelReason}
-                        onChange={(e) => setCancelReason(e.target.value)}
-                        placeholder="Ej: Cambio de planes"
+                        {getConsultationStatusBadge()}
+                        {getAppointmentStatusBadge()}
+                      </div>
+                    </div>
+                    {isPaymentPending && activeRole === 'patient' && (
+                      <div
                         style={{
-                          width: '100%',
-                          padding: '8px',
-                          border: '1px solid #ccc',
-                          borderRadius: '4px',
                           marginBottom: '8px',
+                          padding: '8px',
+                          backgroundColor: '#fff3cd',
+                          border: '1px solid #ffc107',
+                          borderRadius: '4px',
+                          color: '#856404',
                         }}
-                      />
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      >
+                        <strong>⚠️ Pago pendiente</strong>
+                        {appointment.paymentExpiresAt && (
+                          <div style={{ fontSize: '14px', marginTop: '4px' }}>
+                            Vence:{' '}
+                            {formatArgentinaDateTime(
+                              appointment.paymentExpiresAt,
+                            )}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '14px', marginTop: '4px' }}>
+                          El pago debe completarse para confirmar el turno. Si
+                          ya realizaste el pago, el estado se actualizará
+                          automáticamente.
+                        </div>
+                        {paymentError &&
+                          paymentError.status === 409 &&
+                          appointment.id === payingId && (
+                            <div
+                              style={{
+                                marginTop: '8px',
+                                padding: '8px',
+                                backgroundColor: '#f8d7da',
+                                border: '1px solid #f5c6cb',
+                                borderRadius: '4px',
+                                color: '#721c24',
+                                fontSize: '14px',
+                              }}
+                            >
+                              {paymentError.detail ||
+                                'El turno ya no es pagable o ya está pagado'}
+                            </div>
+                          )}
+                      </div>
+                    )}
+                    {isPaymentExpired && activeRole === 'patient' && (
+                      <div
+                        style={{
+                          marginBottom: '8px',
+                          padding: '8px',
+                          backgroundColor: '#f8d7da',
+                          border: '1px solid #f5c6cb',
+                          borderRadius: '4px',
+                          color: '#721c24',
+                        }}
+                      >
+                        <strong>❌ Pago expirado</strong>
+                        <div style={{ fontSize: '14px', marginTop: '4px' }}>
+                          El tiempo para realizar el pago ha expirado. El turno
+                          será cancelado automáticamente.
+                        </div>
+                      </div>
+                    )}
+                    {appointment.cancelledAt && (
+                      <div style={{ marginBottom: '8px', color: '#666' }}>
+                        Cancelado: {formatDateTime(appointment.cancelledAt)}
+                        {appointment.cancellationReason && (
+                          <span> - {appointment.cancellationReason}</span>
+                        )}
+                      </div>
+                    )}
+                    {appointment.status !== 'cancelled' && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '8px',
+                          marginTop: '8px',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        {appointment.consultation?.status === 'in_progress' && (
+                          <button
+                            onClick={() =>
+                              navigate(`/room/${appointment.consultation!.id}`)
+                            }
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Entrar a consulta
+                          </button>
+                        )}
+                        {isPaymentPending &&
+                          activeRole === 'patient' &&
+                          !isPaymentExpired && (
+                            <button
+                              onClick={() =>
+                                void handleQuoteAppointment(appointment.id)
+                              }
+                              disabled={
+                                payingId === appointment.id ||
+                                quotingId === appointment.id ||
+                                confirmingQuote
+                              }
+                              style={{
+                                padding: '8px 16px',
+                                backgroundColor:
+                                  payingId === appointment.id ||
+                                  quotingId === appointment.id
+                                    ? '#ccc'
+                                    : '#28a745',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor:
+                                  payingId === appointment.id ||
+                                  quotingId === appointment.id
+                                    ? 'not-allowed'
+                                    : 'pointer',
+                              }}
+                            >
+                              {quotingId === appointment.id
+                                ? 'Calculando...'
+                                : payingId === appointment.id
+                                  ? 'Abriendo pago...'
+                                  : 'Pagar'}
+                            </button>
+                          )}
                         <button
-                          onClick={() => void handleCancel(appointment.id)}
+                          onClick={() => setShowCancelModal(appointment.id)}
                           disabled={cancellingId === appointment.id}
                           style={{
                             padding: '8px 16px',
@@ -1553,84 +1610,138 @@ export function AppointmentsPage() {
                         >
                           {cancellingId === appointment.id
                             ? 'Cancelando...'
-                            : 'Confirmar Cancelación'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowCancelModal(null);
-                            setCancelReason('');
-                          }}
-                          disabled={cancellingId === appointment.id}
-                          style={{
-                            padding: '8px 16px',
-                            backgroundColor: '#6c757d',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor:
-                              cancellingId === appointment.id
-                                ? 'not-allowed'
-                                : 'pointer',
-                          }}
-                        >
-                          Cancelar
+                            : 'Cancelar'}
                         </button>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    )}
 
-          {/* Pagination */}
-          {pageInfo && (pageInfo.hasNextPage || pageInfo.hasPrevPage) && (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginTop: '24px',
-              }}
-            >
-              <button
-                onClick={() => setPage(page - 1)}
-                disabled={!pageInfo.hasPrevPage}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: pageInfo.hasPrevPage ? '#6c757d' : '#ccc',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: pageInfo.hasPrevPage ? 'pointer' : 'not-allowed',
-                }}
-              >
-                Anterior
-              </button>
-
-              <span style={{ color: '#666' }}>
-                Página {pageInfo.page} de{' '}
-                {Math.ceil(pageInfo.total / pageInfo.limit)}
-              </span>
-
-              <button
-                onClick={() => setPage(page + 1)}
-                disabled={!pageInfo.hasNextPage}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: pageInfo.hasNextPage ? '#007bff' : '#ccc',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: pageInfo.hasNextPage ? 'pointer' : 'not-allowed',
-                }}
-              >
-                Siguiente
-              </button>
+                    {/* Cancel Modal */}
+                    {showCancelModal === appointment.id && (
+                      <div
+                        style={{
+                          marginTop: '12px',
+                          padding: '12px',
+                          backgroundColor: '#f5f5f5',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        <label
+                          style={{
+                            display: 'block',
+                            marginBottom: '8px',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          Motivo de cancelación (opcional):
+                        </label>
+                        <textarea
+                          value={cancelReason}
+                          onChange={(e) => setCancelReason(e.target.value)}
+                          placeholder="Ej: Cambio de planes"
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                            marginBottom: '8px',
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={() => void handleCancel(appointment.id)}
+                            disabled={cancellingId === appointment.id}
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor:
+                                cancellingId === appointment.id
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                            }}
+                          >
+                            {cancellingId === appointment.id
+                              ? 'Cancelando...'
+                              : 'Confirmar Cancelación'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowCancelModal(null);
+                              setCancelReason('');
+                            }}
+                            disabled={cancellingId === appointment.id}
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#6c757d',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor:
+                                cancellingId === appointment.id
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          )}
-        </>
-      )}
+
+            {/* Pagination */}
+            {pageInfo && (pageInfo.hasNextPage || pageInfo.hasPrevPage) && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '24px',
+                }}
+              >
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={!pageInfo.hasPrevPage}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: pageInfo.hasPrevPage ? '#6c757d' : '#ccc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: pageInfo.hasPrevPage ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Anterior
+                </button>
+
+                <span style={{ color: '#666' }}>
+                  Página {pageInfo.page} de{' '}
+                  {Math.ceil(pageInfo.total / pageInfo.limit)}
+                </span>
+
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={!pageInfo.hasNextPage}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: pageInfo.hasNextPage ? '#007bff' : '#ccc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: pageInfo.hasNextPage ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
+          </>
+        )}
 
       {paymentQuote && (
         <div
@@ -1678,6 +1789,18 @@ export function AppointmentsPage() {
                 paymentQuote.currency,
               )}
             </div>
+            {paymentQuote.paymentDeadlineAt && (
+              <div style={{ marginBottom: '6px' }}>
+                <strong>Tenés tiempo hasta:</strong>{' '}
+                {formatArgentinaDateTime(paymentQuote.paymentDeadlineAt)}
+              </div>
+            )}
+            {quoteSecondsLeft !== null && (
+              <div style={{ marginBottom: '12px' }}>
+                <strong>Faltan:</strong> {formatCountdown(quoteSecondsLeft)}
+                {isQuoteExpired ? ' (Vencido)' : ''}
+              </div>
+            )}
             {quoteError && (
               <div
                 style={{
@@ -1694,17 +1817,25 @@ export function AppointmentsPage() {
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => void handleConfirmQuote()}
-                disabled={confirmingQuote}
+                disabled={confirmingQuote || isQuoteExpired}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: confirmingQuote ? '#ccc' : '#28a745',
+                  backgroundColor:
+                    confirmingQuote || isQuoteExpired ? '#ccc' : '#28a745',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: confirmingQuote ? 'not-allowed' : 'pointer',
+                  cursor:
+                    confirmingQuote || isQuoteExpired
+                      ? 'not-allowed'
+                      : 'pointer',
                 }}
               >
-                {confirmingQuote ? 'Procesando...' : 'Continuar'}
+                {isQuoteExpired
+                  ? 'Vencido'
+                  : confirmingQuote
+                    ? 'Procesando...'
+                    : 'Continuar'}
               </button>
               <button
                 onClick={() => {
@@ -1740,4 +1871,10 @@ function isoToLocalDate(iso: string): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }

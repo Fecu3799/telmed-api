@@ -16,6 +16,11 @@ import {
   type DoctorPaymentItem,
   type PaymentStatus,
 } from '../api/doctor-dashboard';
+import {
+  getDoctorSpecialties,
+  updateDoctorSpecialties,
+  type DoctorSpecialtyOption,
+} from '../api/doctor-specialties';
 import { type ProblemDetails } from '../api/http';
 import { DoctorAvailabilityPanel } from '../components/DoctorAvailabilityPanel';
 import { DoctorLocationPanel } from '../components/DoctorLocationPanel';
@@ -46,6 +51,65 @@ function formatDate(iso: string): string {
     month: '2-digit',
     day: '2-digit',
   });
+}
+
+function getPaymentStatusConfig(status: PaymentStatus): {
+  label: string;
+  background: string;
+  color: string;
+  border: string;
+} {
+  switch (status) {
+    case 'paid':
+      return {
+        label: 'Pagado',
+        background: '#d1e7dd',
+        color: '#0f5132',
+        border: '#badbcc',
+      };
+    case 'pending':
+      return {
+        label: 'Pendiente',
+        background: '#fff3cd',
+        color: '#664d03',
+        border: '#ffecb5',
+      };
+    case 'expired':
+      return {
+        label: 'Expirado',
+        background: '#e2e3e5',
+        color: '#41464b',
+        border: '#d3d6d8',
+      };
+    case 'cancelled':
+      return {
+        label: 'Cancelado',
+        background: '#f8d7da',
+        color: '#842029',
+        border: '#f5c2c7',
+      };
+    case 'failed':
+      return {
+        label: 'Fallido',
+        background: '#f8d7da',
+        color: '#842029',
+        border: '#f5c2c7',
+      };
+    case 'refunded':
+      return {
+        label: 'Reembolsado',
+        background: '#f8d7da',
+        color: '#842029',
+        border: '#f5c2c7',
+      };
+    default:
+      return {
+        label: status,
+        background: '#f1f3f5',
+        color: '#495057',
+        border: '#dee2e6',
+      };
+  }
 }
 
 export function DoctorProfileSettingsPage() {
@@ -80,6 +144,17 @@ export function DoctorProfileSettingsPage() {
   const [paymentAccountError, setPaymentAccountError] =
     useState<ProblemDetails | null>(null);
   const [devLabelInput, setDevLabelInput] = useState('');
+  const [specialtiesLoading, setSpecialtiesLoading] = useState(false);
+  const [specialtiesError, setSpecialtiesError] =
+    useState<ProblemDetails | null>(null);
+  const [specialtyOptions, setSpecialtyOptions] = useState<
+    DoctorSpecialtyOption[]
+  >([]);
+  const [selectedSpecialtyIds, setSelectedSpecialtyIds] = useState<string[]>(
+    [],
+  );
+  const [specialtiesSaving, setSpecialtiesSaving] = useState(false);
+  const [specialtiesSaved, setSpecialtiesSaved] = useState(false);
 
   useEffect(() => {
     if (activeRole !== 'doctor') {
@@ -98,6 +173,12 @@ export function DoctorProfileSettingsPage() {
       navigate('/login');
     }
   }, [paymentAccountError, navigate]);
+
+  useEffect(() => {
+    if (specialtiesError?.status === 401) {
+      navigate('/login');
+    }
+  }, [specialtiesError, navigate]);
 
   useEffect(() => {
     if (activeTab !== 'metrics') {
@@ -194,6 +275,54 @@ export function DoctorProfileSettingsPage() {
     void loadPaymentAccount();
   }, [activeTab, getActiveToken, activeRole]);
 
+  useEffect(() => {
+    if (activeTab !== 'specialties') {
+      return;
+    }
+    if (!getActiveToken() || activeRole !== 'doctor') {
+      return;
+    }
+
+    const loadSpecialties = async () => {
+      setSpecialtiesLoading(true);
+      setSpecialtiesError(null);
+      setSpecialtiesSaved(false);
+
+      try {
+        const response = await getDoctorSpecialties();
+        const options = (response.all ?? []).slice().sort((a, b) => {
+          const orderDelta = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+          if (orderDelta !== 0) return orderDelta;
+          return a.name.localeCompare(b.name);
+        });
+        const selected =
+          response.selectedIds ?? response.specialties.map((item) => item.id);
+
+        setSpecialtyOptions(options);
+        setSelectedSpecialtyIds(selected);
+      } catch (err) {
+        const apiError = err as {
+          problemDetails?: ProblemDetails;
+          status?: number;
+        };
+        if (apiError.problemDetails) {
+          setSpecialtiesError(apiError.problemDetails);
+        } else {
+          setSpecialtiesError({
+            status: apiError.status || 500,
+            detail: 'Error al cargar especialidades',
+          });
+        }
+        setSpecialtyOptions([]);
+        setSelectedSpecialtyIds([]);
+      } finally {
+        setSpecialtiesLoading(false);
+      }
+    };
+
+    void loadSpecialties();
+  }, [activeTab, getActiveToken, activeRole]);
+
   const accountStatus: DoctorPaymentAccountStatus =
     paymentAccount?.status ?? 'not_configured';
   const accountStatusLabel: Record<DoctorPaymentAccountStatus, string> = {
@@ -264,6 +393,44 @@ export function DoctorProfileSettingsPage() {
       }
     } finally {
       setPaymentAccountSubmitting(false);
+    }
+  };
+
+  const toggleSpecialty = (id: string) => {
+    setSpecialtiesSaved(false);
+    setSelectedSpecialtyIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  };
+
+  const handleSaveSpecialties = async () => {
+    if (specialtiesSaving) {
+      return;
+    }
+
+    setSpecialtiesSaving(true);
+    setSpecialtiesError(null);
+    try {
+      const response = await updateDoctorSpecialties(selectedSpecialtyIds);
+      setSelectedSpecialtyIds(
+        response.selectedIds ?? response.specialties.map((item) => item.id),
+      );
+      setSpecialtiesSaved(true);
+    } catch (err) {
+      const apiError = err as {
+        problemDetails?: ProblemDetails;
+        status?: number;
+      };
+      if (apiError.problemDetails) {
+        setSpecialtiesError(apiError.problemDetails);
+      } else {
+        setSpecialtiesError({
+          status: apiError.status || 500,
+          detail: 'Error al guardar especialidades',
+        });
+      }
+    } finally {
+      setSpecialtiesSaving(false);
     }
   };
 
@@ -372,8 +539,94 @@ export function DoctorProfileSettingsPage() {
           >
             <h2 style={{ marginTop: 0 }}>Especialidades</h2>
             <p style={{ color: '#666' }}>
-              Próximamente vas a poder gestionar tus especialidades desde acá.
+              Seleccioná las especialidades que querés mostrar en tu perfil.
             </p>
+
+            {specialtiesError && specialtiesError.status !== 401 && (
+              <div
+                style={{
+                  border: '1px solid #f5c2c7',
+                  backgroundColor: '#f8d7da',
+                  color: '#842029',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  marginBottom: '12px',
+                  fontSize: '14px',
+                }}
+              >
+                {specialtiesError.status === 403
+                  ? 'No autorizado'
+                  : specialtiesError.detail}
+              </div>
+            )}
+
+            {specialtiesLoading ? (
+              <div style={{ color: '#666' }}>Cargando especialidades...</div>
+            ) : specialtyOptions.length === 0 ? (
+              <div style={{ color: '#666' }}>
+                No hay especialidades activas para mostrar.
+              </div>
+            ) : (
+              <>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '10px',
+                    marginBottom: '12px',
+                  }}
+                >
+                  {specialtyOptions.map((specialty) => {
+                    const checked = selectedSpecialtyIds.includes(specialty.id);
+                    return (
+                      <label
+                        key={specialty.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          border: checked
+                            ? '1px solid #0d6efd'
+                            : '1px solid #e3e6ea',
+                          backgroundColor: checked ? '#e7f1ff' : '#fff',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSpecialty(specialty.id)}
+                        />
+                        <span>{specialty.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    onClick={() => void handleSaveSpecialties()}
+                    disabled={specialtiesSaving}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid #0d6efd',
+                      backgroundColor: '#0d6efd',
+                      color: '#fff',
+                      cursor: specialtiesSaving ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {specialtiesSaving ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                  {specialtiesSaved && !specialtiesSaving && (
+                    <div style={{ color: '#198754', alignSelf: 'center' }}>
+                      Guardado
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
         {activeTab === 'payments' && (
@@ -741,9 +994,12 @@ export function DoctorProfileSettingsPage() {
                   }}
                 >
                   <option value="all">Todos</option>
-                  <option value="paid">Paid</option>
-                  <option value="pending">Pending</option>
-                  <option value="failed">Failed</option>
+                  <option value="paid">Pagado</option>
+                  <option value="pending">Pendiente</option>
+                  <option value="expired">Expirado</option>
+                  <option value="cancelled">Cancelado</option>
+                  <option value="failed">Fallido</option>
+                  <option value="refunded">Reembolsado</option>
                 </select>
               </div>
             </div>
@@ -774,13 +1030,7 @@ export function DoctorProfileSettingsPage() {
                   {payments.map((payment) => {
                     const kindLabel =
                       payment.kind === 'appointment' ? 'Turno' : 'Emergencia';
-                    const statusLabel = {
-                      paid: 'Pagado',
-                      pending: 'Pendiente',
-                      failed: 'Fallido',
-                      expired: 'Expirado',
-                      refunded: 'Reembolsado',
-                    }[payment.status];
+                    const statusConfig = getPaymentStatusConfig(payment.status);
                     return (
                       <tr
                         key={payment.id}
@@ -797,7 +1047,21 @@ export function DoctorProfileSettingsPage() {
                           )}
                         </td>
                         <td style={{ padding: '8px' }}>
-                          {statusLabel ?? payment.status}
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              border: `1px solid ${statusConfig.border}`,
+                              backgroundColor: statusConfig.background,
+                              color: statusConfig.color,
+                              fontSize: '12px',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {statusConfig.label}
+                          </span>
                         </td>
                         <td style={{ padding: '8px' }}>
                           {payment.patient?.displayName ??

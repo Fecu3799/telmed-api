@@ -431,6 +431,7 @@ model ConsultationQueueItem {
   acceptedBy       String?                        @map("accepted_by")
   cancelledBy      String?                        @map("cancelled_by")
   reason           String?
+  rejectionReason  String?                        @map("rejection_reason")
   createdAt        DateTime                       @default(now()) @map("created_at")
   updatedAt        DateTime                       @updatedAt @map("updated_at")
   rejectedBy       String?                        @map("rejected_by")
@@ -559,6 +560,7 @@ enum PaymentStatus {
   paid
   failed
   expired
+  cancelled
   refunded
 }
 
@@ -585,6 +587,7 @@ enum ConsultationQueuePaymentStatus {
   paid
   failed
   expired
+  cancelled
 }
 
 enum ChatMessageKind {

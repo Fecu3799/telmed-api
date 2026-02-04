@@ -13,6 +13,7 @@ import { getPaymentQuote, type PaymentQuoteResponse } from '../api/payments';
 import { type DoctorSearchItem } from '../api/doctor-search';
 import { type ProblemDetails } from '../api/http';
 import { PatientIdentityModal } from '../components/PatientIdentityModal';
+import { formatArgentinaDateTime } from '../lib/datetime';
 
 /**
  * Helper: Convert ISO UTC date to local date string (YYYY-MM-DD)
@@ -175,6 +176,8 @@ export function DoctorProfilePage() {
     useState<ProblemDetails | null>(null);
   const [bookingQuoteLoading, setBookingQuoteLoading] = useState(false);
   const [bookingQuoteConfirming, setBookingQuoteConfirming] = useState(false);
+  const [bookingQuoteCountdownSeconds, setBookingQuoteCountdownSeconds] =
+    useState<number | null>(null);
 
   // Patient identity modal
   const [showIdentityModal, setShowIdentityModal] = useState(false);
@@ -256,6 +259,33 @@ export function DoctorProfilePage() {
       setLoadingAvailability(false);
     }
   };
+
+  useEffect(() => {
+    if (!bookingQuote?.paymentDeadlineAt) {
+      setBookingQuoteCountdownSeconds(null);
+      return;
+    }
+
+    const deadlineMs = new Date(bookingQuote.paymentDeadlineAt).getTime();
+    const tick = () => {
+      const secondsLeft = Math.max(
+        0,
+        Math.floor((deadlineMs - Date.now()) / 1000),
+      );
+      setBookingQuoteCountdownSeconds(secondsLeft);
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [bookingQuote?.paymentDeadlineAt]);
+
+  const bookingQuoteSecondsLeft =
+    bookingQuote && bookingQuote.paymentDeadlineAt
+      ? (bookingQuoteCountdownSeconds ?? bookingQuote.timeLeftSeconds)
+      : null;
+  const isBookingQuoteExpired =
+    bookingQuoteSecondsLeft !== null && bookingQuoteSecondsLeft <= 0;
 
   // Handle slot booking
   const handleBookSlot = async (slotStartAt: string) => {
@@ -899,6 +929,19 @@ export function DoctorProfilePage() {
                 bookingQuote.currency,
               )}
             </div>
+            {bookingQuote.paymentDeadlineAt && (
+              <div style={{ marginBottom: '6px' }}>
+                <strong>Tenés tiempo hasta:</strong>{' '}
+                {formatArgentinaDateTime(bookingQuote.paymentDeadlineAt)}
+              </div>
+            )}
+            {bookingQuoteSecondsLeft !== null && (
+              <div style={{ marginBottom: '12px' }}>
+                <strong>Faltan:</strong>{' '}
+                {formatCountdown(bookingQuoteSecondsLeft)}
+                {isBookingQuoteExpired ? ' (Vencido)' : ''}
+              </div>
+            )}
             {bookingQuoteError && (
               <div
                 style={{
@@ -915,17 +958,27 @@ export function DoctorProfilePage() {
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => void handleConfirmQuote()}
-                disabled={bookingQuoteConfirming}
+                disabled={bookingQuoteConfirming || isBookingQuoteExpired}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: bookingQuoteConfirming ? '#ccc' : '#28a745',
+                  backgroundColor:
+                    bookingQuoteConfirming || isBookingQuoteExpired
+                      ? '#ccc'
+                      : '#28a745',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: bookingQuoteConfirming ? 'not-allowed' : 'pointer',
+                  cursor:
+                    bookingQuoteConfirming || isBookingQuoteExpired
+                      ? 'not-allowed'
+                      : 'pointer',
                 }}
               >
-                {bookingQuoteConfirming ? 'Procesando...' : 'Continuar'}
+                {isBookingQuoteExpired
+                  ? 'Vencido'
+                  : bookingQuoteConfirming
+                    ? 'Procesando...'
+                    : 'Continuar'}
               </button>
               <button
                 onClick={() => {
@@ -950,4 +1003,10 @@ export function DoctorProfilePage() {
       )}
     </div>
   );
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }

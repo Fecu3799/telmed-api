@@ -43,6 +43,7 @@ export const endpoints = {
     get: '/doctors/me/profile',
     put: '/doctors/me/profile',
     location: '/doctors/me/location',
+    specialties: '/doctors/me/specialties',
   },
   // Doctor Patients
   doctorPatients: {

@@ -57,6 +57,14 @@ export const envSchema = z.object({
   MERCADOPAGO_MODE: z
     .enum(['sandbox', 'live'])
     .default(isProdEnv ? 'live' : 'sandbox'),
+  PAYMENTS_EXPIRATION_JOB_ENABLED: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') {
+        return !isTestEnv;
+      }
+      return formatEnvValue(value).toLowerCase() !== 'false';
+    }, z.boolean())
+    .default(!isTestEnv),
   LIVEKIT_URL: isTestEnv
     ? z.string().default('wss://example.test')
     : z.string().min(1),

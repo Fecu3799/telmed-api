@@ -60,6 +60,9 @@ export class ConsultationQueueItemDto {
 
   @ApiPropertyOptional({ example: 'No disponible' })
   reason?: string | null;
+
+  @ApiPropertyOptional({ example: 'No disponible' })
+  rejectionReason?: string | null;
 }
 
 export class ConsultationQueueConsultationDto {

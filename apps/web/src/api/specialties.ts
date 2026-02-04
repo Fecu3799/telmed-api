@@ -4,6 +4,8 @@ import { endpoints } from './endpoints';
 export interface Specialty {
   id: string;
   name: string;
+  slug: string;
+  sortOrder?: number;
   isActive: boolean;
 }
 

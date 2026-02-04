@@ -22,7 +22,8 @@ export interface ConsultationQueueItem {
     | 'pending'
     | 'paid'
     | 'failed'
-    | 'expired';
+    | 'expired'
+    | 'cancelled';
   reason: string | null;
   queuedAt: string;
   acceptedAt: string | null;

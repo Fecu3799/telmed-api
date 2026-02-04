@@ -23,6 +23,7 @@ import type { Actor } from '../../common/types/actor.type';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { CLOCK, type Clock } from '../../common/clock/clock';
 import { PaymentsService } from '../payments/payments.service';
+import { buildPaymentWindowExpiredError } from '../payments/payment-errors';
 import type { ConsultationEventsPublisher } from '../consultations/consultation-events-publisher.interface';
 import { LiveKitService } from '../consultations/livekit.service';
 import { getTraceId } from '../../common/request-context';
@@ -274,16 +275,20 @@ export class ConsultationQueueService {
     if (!updated) {
       throw new NotFoundException('Queue not found');
     }
-    return paymentUpdated ?? updated;
+    return paymentUpdated?.queue ?? updated;
   }
 
   async acceptQueue(actor: Actor, queueItemId: string) {
     const queue = await this.getQueueById(actor, queueItemId);
     const paymentExpired = await this.expirePendingPaymentIfNeeded(queue);
+    const resolvedQueue = paymentExpired?.queue ?? queue;
     if (
-      paymentExpired?.paymentStatus === ConsultationQueuePaymentStatus.expired
+      resolvedQueue.paymentStatus === ConsultationQueuePaymentStatus.expired
     ) {
-      throw new ConflictException('Payment window expired');
+      throw buildPaymentWindowExpiredError({
+        paymentId: paymentExpired?.paymentId ?? null,
+        kind: PaymentKind.emergency,
+      });
     }
 
     if (queue.entryType !== ConsultationQueueEntryType.emergency) {
@@ -346,14 +351,39 @@ export class ConsultationQueueService {
       throw new ConflictException('Queue status invalid');
     }
 
-    return this.prisma.consultationQueueItem.update({
-      where: { id: queueItemId },
-      data: {
-        status: ConsultationQueueStatus.rejected,
-        rejectedAt: this.clock.now(),
-        rejectedBy: actor.id,
-        reason: dto.reason ?? null,
-      },
+    const now = this.clock.now();
+    const rejectionReason =
+      dto.reason && dto.reason.trim().length > 0 ? dto.reason.trim() : null;
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.consultationQueueItem.update({
+        where: { id: queueItemId },
+        data: {
+          status: ConsultationQueueStatus.rejected,
+          rejectedAt: now,
+          rejectedBy: actor.id,
+          rejectionReason,
+          ...(queue.entryType === ConsultationQueueEntryType.emergency &&
+          queue.paymentStatus === ConsultationQueuePaymentStatus.pending
+            ? { paymentStatus: ConsultationQueuePaymentStatus.cancelled }
+            : {}),
+        },
+      });
+
+      if (
+        queue.entryType === ConsultationQueueEntryType.emergency &&
+        queue.paymentStatus === ConsultationQueuePaymentStatus.pending
+      ) {
+        await tx.payment.updateMany({
+          where: {
+            queueItemId: queue.id,
+            kind: PaymentKind.emergency,
+            status: PaymentStatus.pending,
+          },
+          data: { status: PaymentStatus.cancelled },
+        });
+      }
+
+      return updated;
     });
   }
 
@@ -364,14 +394,37 @@ export class ConsultationQueueService {
       throw new ConflictException('Queue status invalid');
     }
 
-    return this.prisma.consultationQueueItem.update({
-      where: { id: queueItemId },
-      data: {
-        status: ConsultationQueueStatus.cancelled,
-        cancelledAt: this.clock.now(),
-        cancelledBy: actor.id,
-        reason: dto.reason ?? null,
-      },
+    const now = this.clock.now();
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.consultationQueueItem.update({
+        where: { id: queueItemId },
+        data: {
+          status: ConsultationQueueStatus.cancelled,
+          cancelledAt: now,
+          cancelledBy: actor.id,
+          reason: dto.reason ?? null,
+          ...(queue.entryType === ConsultationQueueEntryType.emergency &&
+          queue.paymentStatus === ConsultationQueuePaymentStatus.pending
+            ? { paymentStatus: ConsultationQueuePaymentStatus.cancelled }
+            : {}),
+        },
+      });
+
+      if (
+        queue.entryType === ConsultationQueueEntryType.emergency &&
+        queue.paymentStatus === ConsultationQueuePaymentStatus.pending
+      ) {
+        await tx.payment.updateMany({
+          where: {
+            queueItemId: queue.id,
+            kind: PaymentKind.emergency,
+            status: PaymentStatus.pending,
+          },
+          data: { status: PaymentStatus.cancelled },
+        });
+      }
+
+      return updated;
     });
   }
 
@@ -391,16 +444,30 @@ export class ConsultationQueueService {
       throw new ConflictException('Queue status invalid');
     }
 
+    if (queue.paymentStatus === ConsultationQueuePaymentStatus.expired) {
+      const payment = await this.prisma.payment.findFirst({
+        where: { queueItemId: queue.id, kind: PaymentKind.emergency },
+        select: { id: true },
+      });
+      throw buildPaymentWindowExpiredError({
+        paymentId: payment?.id ?? null,
+        kind: PaymentKind.emergency,
+      });
+    }
+
     if (queue.paymentStatus !== ConsultationQueuePaymentStatus.pending) {
       throw new ConflictException('Payment not enabled');
     }
 
-    const expired = await this.expirePendingPaymentIfNeeded(queue);
+    const expired = await this.expirePendingPaymentIfNeeded(queue, traceId);
     if (expired) {
-      queue = expired;
+      queue = expired.queue;
     }
     if (queue.paymentStatus === ConsultationQueuePaymentStatus.expired) {
-      throw new ConflictException('Payment window expired');
+      throw buildPaymentWindowExpiredError({
+        paymentId: expired?.paymentId ?? null,
+        kind: PaymentKind.emergency,
+      });
     }
 
     const doctorProfile = await this.prisma.doctorProfile.findUnique({
@@ -626,13 +693,16 @@ export class ConsultationQueueService {
       throw new ConflictException('Queue status invalid');
     }
 
-    const expired = await this.expirePendingPaymentIfNeeded(queue);
+    const expired = await this.expirePendingPaymentIfNeeded(queue, traceId);
     if (expired) {
-      queue = expired;
+      queue = expired.queue;
     }
 
     if (queue.paymentStatus === ConsultationQueuePaymentStatus.expired) {
-      throw new ConflictException('Payment window expired');
+      throw buildPaymentWindowExpiredError({
+        paymentId: expired?.paymentId ?? null,
+        kind: PaymentKind.emergency,
+      });
     }
 
     const isAppointmentEntry =
@@ -908,11 +978,14 @@ export class ConsultationQueueService {
     );
   }
 
-  private async expirePendingPaymentIfNeeded(queue: {
-    id: string;
-    paymentStatus: ConsultationQueuePaymentStatus;
-    paymentExpiresAt: Date | null;
-  }) {
+  private async expirePendingPaymentIfNeeded(
+    queue: {
+      id: string;
+      paymentStatus: ConsultationQueuePaymentStatus;
+      paymentExpiresAt: Date | null;
+    },
+    traceId?: string | null,
+  ) {
     if (
       queue.paymentStatus !== ConsultationQueuePaymentStatus.pending ||
       !queue.paymentExpiresAt
@@ -924,11 +997,29 @@ export class ConsultationQueueService {
       return null;
     }
 
-    // Lazy expiration to avoid cron usage.
-    return this.prisma.consultationQueueItem.update({
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        queueItemId: queue.id,
+        kind: PaymentKind.emergency,
+        status: PaymentStatus.pending,
+      },
+      select: { id: true },
+    });
+
+    if (payment) {
+      await this.paymentsService.markPaymentExpired({
+        paymentId: payment.id,
+        traceId,
+        reason: 'payment_window_expired',
+      });
+    }
+
+    const updatedQueue = await this.prisma.consultationQueueItem.update({
       where: { id: queue.id },
       data: { paymentStatus: ConsultationQueuePaymentStatus.expired },
     });
+
+    return { queue: updatedQueue, paymentId: payment?.id ?? null };
   }
 
   private resolvePaging(page?: number, pageSize?: number) {
@@ -1009,6 +1100,7 @@ export class ConsultationQueueService {
       patients.map((patient) => [patient.userId, patient]),
     );
 
+    const now = this.clock.now();
     const list = items.map((item) => {
       const profile = doctorProfileMap.get(item.doctorUserId);
       const specialty =
@@ -1024,17 +1116,23 @@ export class ConsultationQueueService {
         patient: patientMap.get(counterpartyId),
       });
       const consultationStatus = item.consultation?.status ?? null;
+      const resolvedPaymentStatus =
+        item.paymentStatus === ConsultationQueuePaymentStatus.pending &&
+        item.paymentExpiresAt &&
+        now > item.paymentExpiresAt
+          ? ConsultationQueuePaymentStatus.expired
+          : item.paymentStatus;
       const canStart =
         options.actor.role === UserRole.doctor &&
         item.doctorUserId === options.actor.id &&
         item.status === ConsultationQueueStatus.accepted &&
-        item.paymentStatus === ConsultationQueuePaymentStatus.paid &&
+        resolvedPaymentStatus === ConsultationQueuePaymentStatus.paid &&
         consultationStatus !== ConsultationStatus.in_progress &&
         consultationStatus !== ConsultationStatus.closed;
       return {
         id: item.id,
         queueStatus: item.status,
-        paymentStatus: item.paymentStatus,
+        paymentStatus: resolvedPaymentStatus,
         canStart,
         createdAt: item.createdAt.toISOString(),
         reason: item.reason ?? null,

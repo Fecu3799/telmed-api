@@ -25,4 +25,10 @@ export class PaymentQuoteDto {
 
   @ApiPropertyOptional({ example: 'Dra. Ana Test', nullable: true })
   doctorDisplayName?: string | null;
+
+  @ApiProperty({ example: '2025-01-04T23:00:00.000Z' })
+  paymentDeadlineAt!: string;
+
+  @ApiProperty({ example: 600 })
+  timeLeftSeconds!: number;
 }
